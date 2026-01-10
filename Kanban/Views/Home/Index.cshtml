@@ -1,0 +1,132 @@
+﻿@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    @Html.AntiForgeryToken()
+    <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h2>kanflow.online</h2>
+            <button style="background:none; border:none; color:white; font-size:24px; cursor:pointer;" onclick="toggleSidebar()">×</button>
+        </div>
+        <div style="flex:1; overflow-y:auto;">
+            <div class="sidebar-section-title">📋 My Boards</div>
+            <ul class="board-list" id="boardList"></ul>
+
+            <div class="sidebar-section-title">📋 Shared With Me</div>
+            <ul class="board-list" id="sharedBoardList"></ul>
+
+            <div style="padding: 0 20px;">
+                <button class="add-board-btn" onclick="openNewBoardModal()">
+                    + New Board
+                </button>
+            </div>
+
+        </div>
+
+        <div style="padding:20px; border-top:1px solid #eee;" id="authSection">
+            <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="openLoginModal()">Login</button>
+            <button class="btn btn-secondary" style="width:100%" onclick="openRegisterModal()">Register</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>📋 Kanban Board</h1>
+            <button class="btn btn-primary" onclick="openColumnModal()">+ New Column</button>
+        </div>
+        <div class="board" id="board">
+        </div>
+    </div>
+
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <h3>Login</h3><br>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="loginEmail" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="loginPassword" placeholder="••••••••">
+            </div>
+            <div style="text-align:right;">
+                <button class="btn btn-secondary" onclick="closeLoginModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="handleLogin()">Login</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="registerModal">
+        <div class="modal-content">
+            <h3>Register</h3><br>
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="registerFullname" placeholder="Your full name">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="registerEmail" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="registerPassword" placeholder="••••••••">
+            </div>
+            <div class="form-group">
+                <label>Confirm Password</label>
+                <input type="password" id="registerConfirmPassword" placeholder="••••••••">
+            </div>
+            <div style="text-align:right;">
+                <button class="btn btn-secondary" onclick="closeRegisterModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="handleRegister()">Register</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="columnModal">
+        <div class="modal-content">
+            <h3>Add New Column</h3><br>
+            <div class="form-group">
+                <label>Column Name</label>
+                <input type="text" id="columnName" placeholder="e.g., To Do">
+            </div>
+            <div style="text-align:right;">
+                <button class="btn btn-secondary" onclick="closeColumnModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="addColumn()">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="cardModal">
+        <div class="modal-content">
+            <h3>Add New Card</h3><br>
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="cardTitle">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="cardDescription"></textarea>
+            </div>
+            <div style="text-align:right;">
+                <button class="btn btn-secondary" onclick="closeCardModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="addCard()">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/js/site.js" asp-append-version="true"></script>
+</body>
+</html>

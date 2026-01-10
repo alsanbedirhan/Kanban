@@ -1,0 +1,72 @@
+﻿using Kanban.Entities;
+using Kanban.Models;
+using Kanban.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+
+namespace Kanban.Controllers
+{
+    public class AuthController : Controller
+    {
+        private readonly IUserService _userService;
+        public AuthController(IUserService userService)
+        {
+            _userService = userService;
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Login([FromBody] LoginViewModel model)
+        {
+            var result = await _userService.Login(model.email, model.password);
+
+            if (!result.Success)
+            {
+                return Ok(new ApiResponse { Success = false, ErrorMessage = result.ErrorMessage });
+            }
+
+            await signIn(new MyClaims { Id = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
+
+            return Ok(new LoginResultModel { FullName = result.Data.FullName, Success = true });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Register([FromBody] RegisterViewModel model)
+        {
+            var result = await _userService.Register(model);
+            if (!result.Success)
+            {
+                return Ok(new ApiResponse { Success = false, ErrorMessage = result.ErrorMessage });
+            }
+
+            await signIn(new MyClaims { Id = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
+
+            return Ok(new LoginResultModel { FullName = result.Data.FullName, Success = true });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Logout()
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return Ok(new ApiResponse { Success = true });
+        }
+
+        private async Task signIn(MyClaims claims)
+        {
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
+               new ClaimsPrincipal(new ClaimsIdentity(new List<Claim>
+           {
+                new Claim(ClaimTypes.NameIdentifier, claims.Id.ToString()),
+                new Claim(ClaimTypes.Name, claims.FullName),
+                new Claim(ClaimTypes.Email, claims.Email),
+                new Claim("SecurityStamp", claims.SecurityStamp)
+           }, CookieAuthenticationDefaults.AuthenticationScheme)));
+        }
+
+    }
+}
