@@ -1,8 +1,10 @@
 using Kanban.Entities;
 using Kanban.Repositories;
 using Kanban.Services;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -19,6 +21,11 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IKanbanRepository, KanbanRepository>();
 builder.Services.AddScoped<IKanbanService, KanbanService>();
 
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-XSRF-TOKEN";
+});
+
 builder.Services.AddHsts(options =>
 {
     options.Preload = true;
@@ -33,6 +40,10 @@ builder.Services.AddAuthentication(options =>
 })
 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+
     options.LoginPath = "/";
     options.AccessDeniedPath = "/Error/403";
 
@@ -67,7 +78,10 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+});
 
 var app = builder.Build();
 
@@ -75,6 +89,11 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
 }
+
+app.UseCors(x => x.WithOrigins("https://kanflow.online", "https://www.kanflow.online")
+               .AllowCredentials()
+               .AllowAnyMethod()
+               .AllowAnyHeader());
 
 app.UseHttpsRedirection();
 app.UseRouting();
@@ -84,12 +103,27 @@ app.UseStatusCodePagesWithReExecute("/Error/{0}");
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.Use((context, next) =>
+{
+    var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
+    var tokens = antiforgery.GetAndStoreTokens(context);
+
+    context.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken,
+        new CookieOptions
+        {
+            HttpOnly = false,
+            Secure = true,
+            SameSite = SameSiteMode.Strict
+        });
+
+    return next(context);
+});
+
 app.MapStaticAssets();
 
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
-
 
 app.Run();

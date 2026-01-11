@@ -18,7 +18,7 @@ async function fetchCurrentUser() {
 
         if (res.success) {
             IS_AUTHENTICATED = true;
-            CURRENT_USER = res.user;
+            CURRENT_USER = res.data;
         } else {
             IS_AUTHENTICATED = false;
             CURRENT_USER = null;
@@ -31,20 +31,26 @@ async function fetchCurrentUser() {
     updateAuthUI();
 }
 
-function getAntiForgeryToken() {
-    const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
-    return tokenInput ? tokenInput.value : '';
+function getXsrfToken() {
+    const name = "XSRF-TOKEN=";
+    const decodedCookie = decodeURIComponent(document.cookie);
+    const ca = decodedCookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i].trim();
+        if (c.indexOf(name) == 0) return c.substring(name.length, c.length);
+    }
+    return "";
 }
 
 async function apiRequest(endpoint, options = {}) {
     showLoading();
     try {
-        const token = getAntiForgeryToken();
+        const token = getXsrfToken();
 
         const response = await fetch(endpoint, {
             headers: {
                 'Content-Type': 'application/json',
-                'RequestVerificationToken': token,
+                'X-XSRF-TOKEN': token,
                 ...options.headers
             },
             ...options
@@ -63,14 +69,8 @@ async function apiRequest(endpoint, options = {}) {
 
         const contentType = response.headers.get('content-type');
         if (contentType?.includes('application/json')) {
-            const json = await response.json();
-            if (json.success === false) {
-                throw new Error(`API error: ${json.errorMessage}`);
-            }
-            return json;
+            return await response.json();
         }
-
-        throw new Error('Unexpected');
     } catch (error) {
         console.error('Error:', error);
         throw error;
@@ -81,21 +81,21 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 function checkAuth() {
-    if (!IS_AUTHENTICATED) {
-        Swal.fire({
-            title: 'Unauthorized Action',
-            text: 'Please login to perform this action.',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Login',
-            cancelButtonText: 'Cancel',
-            confirmButtonColor: '#667eea'
-        }).then((result) => {
-            if (result.isConfirmed) openLoginModal();
-        });
-        return false;
+    if (IS_AUTHENTICATED && CURRENT_USER) {
+        return true;
     }
-    return true;
+    Swal.fire({
+        title: 'Unauthorized Action',
+        text: 'Please login to perform this action.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Login',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#667eea'
+    }).then((result) => {
+        if (result.isConfirmed) openLoginModal();
+    });
+    return false;
 }
 
 function updateAuthUI() {
@@ -249,7 +249,8 @@ function toggleSidebar() {
 
 async function loadBoards() {
     try {
-        boards = await apiRequest('/Kanban/GetBoards');
+        const res = await apiRequest('/Kanban/GetBoards');
+        boards = res.data;
         renderBoardList();
         if (boards.length > 0 && !currentBoardId) selectBoard(boards[0].id);
     } catch (e) {
@@ -272,9 +273,7 @@ function renderBoardList() {
     `;
 
     list.innerHTML = myBoards.map(boardHtml).join('');
-    sharedList.innerHTML = sharedBoards.length > 0
-        ? sharedBoards.map(boardHtml).join('')
-        : '<p style="padding:10px 20px; font-size:12px; color:#999;">No shared boards</p>';
+    sharedList.innerHTML = sharedBoards.map(boardHtml).join('');
 }
 
 async function selectBoard(id) {
@@ -285,17 +284,17 @@ async function selectBoard(id) {
 
 async function openNewBoardModal() {
     if (!checkAuth()) return;
-    const { value: name } = await Swal.fire({
+    const { value: title } = await Swal.fire({
         title: 'New Board Name',
         input: 'text',
         inputPlaceholder: 'Enter board name...',
         showCancelButton: true
     });
-    if (name) {
+    if (title) {
         try {
             await apiRequest('/Kanban/CreateBoard', {
                 method: 'POST',
-                body: JSON.stringify({ name })
+                body: JSON.stringify({ title })
             });
             Swal.fire('Success', 'Board created successfully', 'success');
             loadBoards();
@@ -307,12 +306,10 @@ async function openNewBoardModal() {
 
 async function loadBoardData() {
     if (!currentBoardId) return;
-    const boardDiv = document.getElementById('board');
-    boardDiv.innerHTML = '<p style="color:white">Loading...</p>';
 
     try {
-        const columns = await apiRequest(`/Kanban/GetBoard/${currentBoardId}`);
-        renderColumns(columns);
+        const columns = await apiRequest(`/Kanban/GetBoard?boardId=${currentBoardId}`);
+        renderColumns(columns.data);
     } catch {
         Swal.fire('Error', 'Data could not be loaded', 'error');
     }
@@ -379,13 +376,13 @@ async function deleteBoard(boardId) {
         }
     }
 }
-
+// <b>${card.title}</b>
 function renderColumns(columns) {
     const boardDiv = document.getElementById('board');
     boardDiv.innerHTML = columns.map(col => `
         <div class="column">
             <div class="column-header">
-                <span class="column-title">${col.name}</span>
+                <span class="column-title">${col.title}</span>
                 <span class="card-count">${col.cards.length}</span>
                 <button class="btn btn-danger" onclick="deleteColumn(${col.id})">🗑️</button>
             </div>
@@ -393,10 +390,9 @@ function renderColumns(columns) {
                 ${col.cards.map((card) => `
                     <div class="card" data-card-id="${card.id}">
                         <div style="display:flex; justify-content:space-between;">
-                            <b>${card.title}</b>
                             <span style="cursor:pointer" onclick="deleteCard(${card.id})">×</span>
                         </div>
-                        <p style="font-size:12px; color:#666; margin-top:5px;">${card.description || ''}</p>
+                        <p style="font-size:12px; color:#666; margin-top:5px;">${card.desc || ''}</p>
                     </div>
                 `).join('')}
             </div>
@@ -515,5 +511,5 @@ async function deleteCard(id) {
 
 window.addEventListener('DOMContentLoaded', async () => {
     await fetchCurrentUser();
-    if (IS_AUTHENTICATED) loadBoards();
+    if (IS_AUTHENTICATED && CURRENT_USER) loadBoards();
 });

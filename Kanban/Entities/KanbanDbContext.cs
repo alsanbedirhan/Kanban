@@ -69,7 +69,7 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
-            entity.Property(e => e.Title).HasColumnName("title");
+            entity.Property(e => e.Desc).HasColumnName("desc");
 
             entity.HasOne(d => d.BoardColumn).WithMany(p => p.BoardCards)
                 .HasForeignKey(d => d.BoardColumnId)

@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
-    @Html.AntiForgeryToken()
+
     <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
@@ -89,8 +89,8 @@
                 <input type="password" id="registerConfirmPassword" placeholder="••••••••">
             </div>
             <div style="text-align:right;">
-                <button class="btn btn-secondary" onclick="closeRegisterModal()">Cancel</button>
-                <button class="btn btn-primary">Register</button>
+                <button type="button" class="btn btn-secondary" onclick="closeRegisterModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Register</button>
             </div>
         </div>
     </form>
@@ -112,7 +112,7 @@
     <form onsubmit="addCard(); return false;" class="modal" id="cardModal">
         <div class="modal-content">
             <h3>Add New Card</h3><br>
-           @*  <div class="form-group">
+            @*  <div class="form-group">
                 <label>Title</label>
                 <input type="text" id="cardTitle">
             </div> *@

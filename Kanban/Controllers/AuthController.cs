@@ -19,7 +19,6 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
-        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Login([FromBody] LoginViewModel model)
         {
             var result = await _userService.Login(model.email, model.password);
@@ -35,7 +34,6 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
-        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Register([FromBody] RegisterViewModel model)
         {
             var result = await _userService.Register(model);
@@ -53,7 +51,7 @@ namespace Kanban.Controllers
         public async Task<IActionResult> Logout()
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Ok(ServiceResult.Ok);
+            return Ok(ServiceResult.Ok());
         }
 
         private async Task signIn(MyClaims claims)
