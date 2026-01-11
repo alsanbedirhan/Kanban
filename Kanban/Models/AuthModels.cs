@@ -1,12 +1,10 @@
 ﻿
 namespace Kanban.Models
 {
-    public class MyClaims
+    public class MyClaims : UserResultModel
     {
         public long Id { get; set; }
-        public string FullName { get; set; }
-        public string Email { get; set; }
-        public string SecurityStamp { get; set; }
+        public string? SecurityStamp { get; set; }
     }
     public class LoginViewModel
     {
@@ -16,9 +14,5 @@ namespace Kanban.Models
     public class RegisterViewModel : LoginViewModel
     {
         public string fullname { get; set; }
-    }
-    public class LoginResultModel : Services.ApiResponse
-    {
-        public string FullName { get; set; }
     }
 }

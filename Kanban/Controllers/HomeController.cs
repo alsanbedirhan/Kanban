@@ -1,4 +1,5 @@
 using Kanban.Models;
+using Kanban.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kanban.Controllers
@@ -11,11 +12,11 @@ namespace Kanban.Controllers
         }
         public IActionResult Fetch()
         {
-            return Ok(new LoginResultModel
+            if (User.Identity?.IsAuthenticated ?? false)
             {
-                Success = User.Identity?.IsAuthenticated ?? false,
-                FullName = User.Identity?.Name ?? ""
-            });
+                return Ok(ServiceResult.Fail(""));
+            }
+            return Ok(ServiceResult<UserResultModel>.Ok(new UserResultModel { FullName = User.Identity?.Name ?? "", Email = User.GetEmail() }));
         }
     }
 }

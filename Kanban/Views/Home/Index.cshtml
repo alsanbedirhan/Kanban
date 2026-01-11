@@ -51,7 +51,7 @@
         </div>
     </div>
 
-    <div class="modal" id="loginModal">
+    <form onsubmit="handleLogin(); return false;" class="modal" id="loginModal">
         <div class="modal-content">
             <h3>Login</h3><br>
             <div class="form-group">
@@ -63,13 +63,13 @@
                 <input type="password" id="loginPassword" placeholder="••••••••">
             </div>
             <div style="text-align:right;">
-                <button class="btn btn-secondary" onclick="closeLoginModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="handleLogin()">Login</button>
+                <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Login</button>
             </div>
         </div>
-    </div>
+    </form>
 
-    <div class="modal" id="registerModal">
+    <form onsubmit="handleRegister(); return false;" class="modal" id="registerModal">
         <div class="modal-content">
             <h3>Register</h3><br>
             <div class="form-group">
@@ -90,12 +90,12 @@
             </div>
             <div style="text-align:right;">
                 <button class="btn btn-secondary" onclick="closeRegisterModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="handleRegister()">Register</button>
+                <button class="btn btn-primary">Register</button>
             </div>
         </div>
-    </div>
+    </form>
 
-    <div class="modal" id="columnModal">
+    <form onsubmit="addColumn(); return false;" class="modal" id="columnModal">
         <div class="modal-content">
             <h3>Add New Column</h3><br>
             <div class="form-group">
@@ -103,30 +103,47 @@
                 <input type="text" id="columnName" placeholder="e.g., To Do">
             </div>
             <div style="text-align:right;">
-                <button class="btn btn-secondary" onclick="closeColumnModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="addColumn()">Add</button>
+                <button type="button" class="btn btn-secondary" onclick="closeColumnModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add</button>
             </div>
         </div>
-    </div>
+    </form>
 
-    <div class="modal" id="cardModal">
+    <form onsubmit="addCard(); return false;" class="modal" id="cardModal">
         <div class="modal-content">
             <h3>Add New Card</h3><br>
-            <div class="form-group">
+           @*  <div class="form-group">
                 <label>Title</label>
                 <input type="text" id="cardTitle">
-            </div>
+            </div> *@
             <div class="form-group">
-                <label>Description</label>
+                @* <label>Description</label> *@
                 <textarea id="cardDescription"></textarea>
             </div>
             <div style="text-align:right;">
-                <button class="btn btn-secondary" onclick="closeCardModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="addCard()">Add</button>
+                <button type="button" class="btn btn-secondary" onclick="closeCardModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add</button>
             </div>
         </div>
+    </form>
+
+    <div id="loadingOverlay" style="
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:rgba(0,0,0,0.5);
+    color:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:22px;
+    display:none;
+    z-index:9999;
+">
+        Just a moment...
     </div>
 
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </body>
 </html>

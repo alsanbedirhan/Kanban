@@ -1,4 +1,5 @@
-﻿using Kanban.Services;
+﻿using Kanban.Models;
+using Kanban.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -22,10 +23,20 @@ namespace Kanban.Controllers
             var r = await _kanbanService.GetBoards(userId);
             if (!r.Success)
             {
-                return Ok(new ApiResponse { Success = false, ErrorMessage = r.ErrorMessage });
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
-            return Ok();
-            //return Ok(new ApiResponse { Success = true, r.Data.Select(x => new { id = x.Id, isOwner = x.UserId == userId }) });
+            return Ok(ServiceResult<List<BoardResultModel>>.Ok(r.Data.Select(x => new BoardResultModel { IsOwner = x.UserId == userId }).ToList()));
         }
+        //[Authorize]
+        //public async Task<IActionResult> CreateBoard([FromBody] BoardInputModel model)
+        //{
+        //    var userId = User.GetUserId();
+        //    var r = await _kanbanService.GetBoards(userId);
+        //    if (!r.Success)
+        //    {
+        //        return Ok(ServiceResult.Fail(r.ErrorMessage));
+        //    }
+        //    return Ok(ServiceResult<List<BoardResultModel>>.Ok(r.Data.Select(x => new BoardResultModel { IsOwner = x.UserId == userId }).ToList()));
+        //}
     }
 }

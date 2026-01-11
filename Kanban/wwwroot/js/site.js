@@ -2,9 +2,15 @@
 let CURRENT_USER = null;
 let currentBoardId = null;
 let currentColumnId = null;
-let draggedCard = null;
-let draggedOverCard = null;
 let boards = [];
+
+function showLoading() {
+    document.getElementById('loadingOverlay').style.display = 'flex';
+}
+
+function hideLoading() {
+    document.getElementById('loadingOverlay').style.display = 'none';
+}
 
 async function fetchCurrentUser() {
     try {
@@ -12,12 +18,12 @@ async function fetchCurrentUser() {
 
         if (res.success) {
             IS_AUTHENTICATED = true;
-            CURRENT_USER = res.User;
+            CURRENT_USER = res.user;
         } else {
             IS_AUTHENTICATED = false;
             CURRENT_USER = null;
         }
-    } catch (e) {
+    } catch {
         IS_AUTHENTICATED = false;
         CURRENT_USER = null;
     }
@@ -31,6 +37,7 @@ function getAntiForgeryToken() {
 }
 
 async function apiRequest(endpoint, options = {}) {
+    showLoading();
     try {
         const token = getAntiForgeryToken();
 
@@ -68,6 +75,9 @@ async function apiRequest(endpoint, options = {}) {
         console.error('Error:', error);
         throw error;
     }
+    finally {
+        hideLoading();
+    }
 }
 
 function checkAuth() {
@@ -92,7 +102,7 @@ function updateAuthUI() {
     const authSection = document.getElementById('authSection');
     if (IS_AUTHENTICATED && CURRENT_USER) {
         authSection.innerHTML = `
-            <p style="font-size:14px; margin-bottom:10px;">Welcome, <b>${CURRENT_USER.fullName}</b></p>
+            <button class="btn btn-primary" style="width:100%; margin-bottom:10px;">${CURRENT_USER.fullName}</button>
             <button class="btn btn-secondary" style="width:100%" onclick="handleLogout()">Logout</button>
         `;
     } else {
@@ -132,7 +142,7 @@ async function handleLogin() {
             closeLoginModal();
             Swal.fire({
                 title: 'Welcome Back!',
-                text: `Hello ${response.fullName}`,
+                text: `Hello ${CURRENT_USER.fullName}`,
                 icon: 'success',
                 timer: 1500,
                 showConfirmButton: false
@@ -170,11 +180,14 @@ async function handleRegister() {
         return Swal.fire('Error', 'Please fill all fields', 'error');
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (email !== "" && !emailRegex.test(email))
+    if (!emailRegex.test(email))
         return Swal.fire('Error', 'Invalid email address', 'error');
 
     if (password.length < 6)
         return Swal.fire('Error', 'Password must be at least 6 characters', 'error');
+
+    if (password !== confirmPassword)
+        return Swal.fire('Error', 'Passwords do not match', 'error');
 
     if (!/[A-Z]/.test(password))
         return Swal.fire('Error', 'Password must contain at least one uppercase letter (A-Z)', 'error');
@@ -188,9 +201,6 @@ async function handleRegister() {
     if (!/[!@#$%^&*(),.?:{}|<>]/.test(password))
         return Swal.fire('Error', 'Password must contain at least one special character (!, @, #, $, %, etc.)', 'error');
 
-    if (password !== confirmPassword)
-        return Swal.fire('Error', 'Passwords do not match', 'error');
-
     try {
         const response = await apiRequest('/Auth/Register', {
             method: 'POST',
@@ -202,7 +212,7 @@ async function handleRegister() {
             closeRegisterModal();
             Swal.fire({
                 title: 'Welcome!',
-                text: `Registration successful! Welcome ${response.fullName}`,
+                text: `Registration successful! Welcome ${CURRENT_USER.fullName}`,
                 icon: 'success',
                 timer: 2000,
                 showConfirmButton: false
@@ -220,10 +230,11 @@ async function handleLogout() {
     try {
         await apiRequest('/Auth/Logout', { method: 'POST' });
         await fetchCurrentUser();
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar.classList.contains('open')) toggleSidebar();
         boards = [];
         currentBoardId = null;
         renderBoardList();
-        document.getElementById('board').innerHTML = '<p style="color:white">Please login to view boards</p>';
         Swal.fire('Success', 'Logged out successfully', 'success');
     } catch {
         Swal.fire('Error', 'Logout failed', 'error');
@@ -235,7 +246,6 @@ function toggleSidebar() {
     document.getElementById('sidebarOverlay').classList.toggle('active');
     if (window.innerWidth > 768) document.body.classList.toggle('sidebar-open');
 }
-
 
 async function loadBoards() {
     try {
@@ -251,13 +261,13 @@ function renderBoardList() {
     const list = document.getElementById('boardList');
     const sharedList = document.getElementById('sharedBoardList');
 
-    const myBoards = boards.filter(b => b.isOwner !== false);
+    const myBoards = boards.filter(b => b.isOwner === true);
     const sharedBoards = boards.filter(b => b.isOwner === false);
 
     const boardHtml = (b) => `
         <li class="board-item ${b.id === currentBoardId ? 'active' : ''}" onclick="selectBoard(${b.id})">
-            <span>📊 ${b.name}</span>
-            <div class="board-actions-btn" onclick="event.stopPropagation(); showBoardMenu(${b.id}, '${b.name}')">⋮</div>
+            <span>📊 ${b.title}</span>
+            <div class="board-actions-btn" onclick="event.stopPropagation(); showBoardMenu(${b.id}, '${b.title}')">⋮</div>
         </li>
     `;
 
@@ -379,12 +389,9 @@ function renderColumns(columns) {
                 <span class="card-count">${col.cards.length}</span>
                 <button class="btn btn-danger" onclick="deleteColumn(${col.id})">🗑️</button>
             </div>
-            <div class="cards-container" data-column-id="${col.id}" ondrop="drop(event)" ondragover="allowDrop(event)">
-                ${col.cards.map((card, idx) => `
-                    <div class="card" draggable="true"
-                         ondragstart="dragCard(event)" ondragend="dragEnd(event)"
-                         ondragover="dragOverCard(event)" ondragleave="dragLeaveCard(event)"
-                         data-card-id="${card.id}" data-order="${idx}">
+            <div class="cards-container" data-column-id="${col.id}">
+                ${col.cards.map((card) => `
+                    <div class="card" data-card-id="${card.id}">
                         <div style="display:flex; justify-content:space-between;">
                             <b>${card.title}</b>
                             <span style="cursor:pointer" onclick="deleteCard(${card.id})">×</span>
@@ -396,6 +403,33 @@ function renderColumns(columns) {
             <button class="btn btn-success" style="width:100%" onclick="openCardModal(${col.id})">+ Add Card</button>
         </div>
     `).join('');
+
+    initSortable();
+}
+
+function initSortable() {
+    document.querySelectorAll('.cards-container').forEach(container => {
+        Sortable.create(container, {
+            group: 'kanban',
+            animation: 150,
+            onEnd: async function (evt) {
+                const cardId = evt.item.dataset.cardId;
+                const newColumnId = evt.to.dataset.columnId;
+                const newOrder = evt.newIndex;
+
+                try {
+                    await apiRequest('/Kanban/MoveCard', {
+                        method: 'POST',
+                        body: JSON.stringify({ cardId, newColumnId, newOrder })
+                    });
+                } catch {
+                    Swal.fire('Error', 'Card could not be moved', 'error');
+                }
+
+                loadBoardData();
+            }
+        });
+    });
 }
 
 function openColumnModal() {
@@ -454,14 +488,13 @@ function closeCardModal() {
 }
 
 async function addCard() {
-    const title = document.getElementById('cardTitle').value.trim();
     const description = document.getElementById('cardDescription').value.trim();
-    if (!title) return Swal.fire('Error', 'Title is required', 'error');
+    if (!description) return Swal.fire('Error', 'Description is required', 'error');
 
     try {
         await apiRequest('/Kanban/AddCard', {
             method: 'POST',
-            body: JSON.stringify({ columnId: currentColumnId, title, description })
+            body: JSON.stringify({ columnId: currentColumnId, title: description, description })
         });
         closeCardModal();
         loadBoardData();
@@ -477,56 +510,6 @@ async function deleteCard(id) {
         loadBoardData();
     } catch {
         Swal.fire('Error', 'Failed to delete card', 'error');
-    }
-}
-
-function dragCard(e) {
-    if (!checkAuth()) return e.preventDefault();
-    draggedCard = e.target;
-    e.target.classList.add('dragging');
-}
-
-function dragEnd(e) {
-    e.target.classList.remove('dragging');
-    if (draggedOverCard) draggedOverCard.classList.remove('drag-over');
-}
-
-function dragOverCard(e) {
-    e.preventDefault();
-    const card = e.target.closest('.card');
-    if (card && card !== draggedCard) {
-        if (draggedOverCard) draggedOverCard.classList.remove('drag-over');
-        draggedOverCard = card;
-        card.classList.add('drag-over');
-    }
-}
-
-function dragLeaveCard(e) {
-    const card = e.target.closest('.card');
-    if (card) card.classList.remove('drag-over');
-}
-
-function allowDrop(e) {
-    e.preventDefault();
-}
-
-async function drop(e) {
-    e.preventDefault();
-    const container = e.target.closest('.cards-container');
-    if (!container || !draggedCard) return;
-
-    const cardId = draggedCard.dataset.cardId;
-    const newColumnId = container.dataset.columnId;
-    let newOrder = draggedOverCard ? draggedOverCard.dataset.order : 0;
-
-    try {
-        await apiRequest('/Kanban/MoveCard', {
-            method: 'POST',
-            body: JSON.stringify({ cardId, newColumnId, newOrder })
-        });
-        loadBoardData();
-    } catch {
-        Swal.fire('Error', 'Card could not be moved', 'error');
     }
 }
 

@@ -26,12 +26,12 @@ namespace Kanban.Controllers
 
             if (!result.Success)
             {
-                return Ok(new ApiResponse { Success = false, ErrorMessage = result.ErrorMessage });
+                return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
 
             await signIn(new MyClaims { Id = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
 
-            return Ok(new LoginResultModel { FullName = result.Data.FullName, Success = true });
+            return Ok(ServiceResult.Ok());
         }
 
         [HttpPost]
@@ -41,19 +41,19 @@ namespace Kanban.Controllers
             var result = await _userService.Register(model);
             if (!result.Success)
             {
-                return Ok(new ApiResponse { Success = false, ErrorMessage = result.ErrorMessage });
+                return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
 
             await signIn(new MyClaims { Id = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
 
-            return Ok(new LoginResultModel { FullName = result.Data.FullName, Success = true });
+            return Ok(ServiceResult.Ok());
         }
 
-        [HttpGet]
+        [HttpPost]
         public async Task<IActionResult> Logout()
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Ok(new ApiResponse { Success = true });
+            return Ok(ServiceResult.Ok);
         }
 
         private async Task signIn(MyClaims claims)
