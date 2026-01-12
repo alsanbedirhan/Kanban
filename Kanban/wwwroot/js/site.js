@@ -12,6 +12,20 @@ function hideLoading() {
     document.getElementById('loadingOverlay').style.display = 'none';
 }
 
+document.querySelectorAll(".toggle-password").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const input = document.getElementById(btn.dataset.target);
+
+        if (input.type === "password") {
+            input.type = "text";
+            btn.textContent = "🙊";
+        } else {
+            input.type = "password";
+            btn.textContent = "🙈";
+        }
+    });
+});
+
 async function fetchCurrentUser() {
     try {
         const res = await apiRequest('/Home/Fetch');
@@ -100,18 +114,32 @@ function checkAuth() {
 
 function updateAuthUI() {
     const authSection = document.getElementById('authSection');
+    const area = document.getElementById("authHeaderArea");
     if (IS_AUTHENTICATED && CURRENT_USER) {
+        area.innerHTML = `<button class="btn btn-secondary" onclick="confirmLogout()">🔓</button>`;
         authSection.innerHTML = `
             <button class="btn btn-primary" style="width:100%; margin-bottom:10px;">${CURRENT_USER.fullName}</button>
-            <button class="btn btn-secondary" style="width:100%" onclick="handleLogout()">Logout</button>
+            <button class="btn btn-secondary" style="width:100%" onclick="confirmLogout()">Logout</button>
         `;
     } else {
+        area.innerHTML = `<button class="btn btn-primary" onclick="openLoginModal()">🔐</button>`;
         authSection.innerHTML = `
             <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="openLoginModal()">Login</button>
             <button class="btn btn-secondary" style="width:100%" onclick="openRegisterModal()">Register</button>
         `;
     }
 }
+
+function switchToRegister() {
+    closeLoginModal();
+    openRegisterModal();
+}
+
+function switchToLogin() {
+    closeRegisterModal();
+    openLoginModal();
+}
+
 
 function openLoginModal() {
     const sidebar = document.getElementById('sidebar');
@@ -226,6 +254,22 @@ async function handleRegister() {
     }
 }
 
+function confirmLogout() {
+    Swal.fire({
+        title: "Logout",
+        text: "Are you sure you want to logout?",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Yes, logout",
+        cancelButtonText: "Cancel",
+        confirmButtonColor: "#d33"
+    }).then(result => {
+        if (result.isConfirmed) {
+            handleLogout();
+        }
+    });
+}
+
 async function handleLogout() {
     try {
         await apiRequest('/Auth/Logout', { method: 'POST' });
@@ -288,6 +332,7 @@ async function openNewBoardModal() {
         title: 'New Board Name',
         input: 'text',
         inputPlaceholder: 'Enter board name...',
+        confirmButtonText: 'Create',
         showCancelButton: true
     });
     if (title) {
