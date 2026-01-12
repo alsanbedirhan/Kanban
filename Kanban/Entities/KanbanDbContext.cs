@@ -61,23 +61,19 @@ public partial class KanbanDbContext : DbContext
                 .UseIdentityAlwaysColumn()
                 .HasColumnName("id");
             entity.Property(e => e.BoardColumnId).HasColumnName("board_column_id");
-            entity.Property(e => e.BoardId).HasColumnName("board_id");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.Desc).HasColumnName("desc");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
-            entity.Property(e => e.Desc).HasColumnName("desc");
+            entity.Property(e => e.OrderNo).HasColumnName("order_no");
 
             entity.HasOne(d => d.BoardColumn).WithMany(p => p.BoardCards)
                 .HasForeignKey(d => d.BoardColumnId)
                 .HasConstraintName("board_cards_board_columns_fk");
-
-            entity.HasOne(d => d.Board).WithMany(p => p.BoardCards)
-                .HasForeignKey(d => d.BoardId)
-                .HasConstraintName("board_cards_boards_fk");
 
             entity.HasOne(d => d.CreatedByNavigation).WithMany(p => p.BoardCards)
                 .HasForeignKey(d => d.CreatedBy)

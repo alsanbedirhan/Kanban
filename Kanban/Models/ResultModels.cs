@@ -18,6 +18,23 @@
     {
         public string? Title { get; set; }
     }
+    public class BoardCardInputModel
+    {
+        public long ColumnId { get; set; }
+        public string Description { get; set; }
+    }
+    public class BoardCardMoveInputModel
+    {
+        public long BoardId { get; set; }
+        public long CardId { get; set; }
+        public long NewColumnId { get; set; }
+        public int NewOrder { get; set; }
+    }
+    public class BoardColumnInputModel
+    {
+        public long BoardId { get; set; }
+        public string? Title { get; set; }
+    }
     public class BoardColumnResultModel 
     {
         public long Id { get; set; }

@@ -46,10 +46,10 @@
         <div class="header">
             <h1>📋 kanflow</h1>
             <div id="authHeaderArea"></div>
-           @*  <button class="btn btn-primary" id="headerLogin" onclick="openLoginModal()">🔐</button> *@
         </div>
-        <div class="header" id="boardHeader" style="display:none; margin-top:10px;">
-            📋 <span id="boardHeaderTitle"></span>
+        <div class="header secondary-header" id="boardHeader" style="margin-top:10px;display:none;">
+            <h1 id="boardHeaderTitle"></h1>
+            <button class="btn btn-primary" onclick="openNewColumnModal()">+ New Column</button>
         </div>
         <div class="board" id="board">
         </div>
@@ -117,38 +117,6 @@
             <div style="margin-top:20px; text-align:center; font-size:14px;">
                 Already have an account?
                 <button type="button" class="btn-link" onclick="switchToLogin()">Login</button>
-            </div>
-        </div>
-    </form>
-
-    <form onsubmit="addColumn(); return false;" class="modal" id="columnModal">
-        <div class="modal-content">
-            <h3>Add New Column</h3><br>
-            <div class="form-group">
-                <label>Column Name</label>
-                <input type="text" id="columnName" placeholder="e.g., To Do">
-            </div>
-            <div style="text-align:right;">
-                <button type="button" class="btn btn-secondary" onclick="closeColumnModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary">Add</button>
-            </div>
-        </div>
-    </form>
-
-    <form onsubmit="addCard(); return false;" class="modal" id="cardModal">
-        <div class="modal-content">
-            <h3>Add New Card</h3><br>
-            @*  <div class="form-group">
-                <label>Title</label>
-                <input type="text" id="cardTitle">
-            </div> *@
-            <div class="form-group">
-                @* <label>Description</label> *@
-                <textarea id="cardDescription"></textarea>
-            </div>
-            <div style="text-align:right;">
-                <button type="button" class="btn btn-secondary" onclick="closeCardModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary">Add</button>
             </div>
         </div>
     </form>

@@ -63,5 +63,71 @@ namespace Kanban.Controllers
             }
             return Ok(ServiceResult.Ok());
         }
+
+        [HttpDelete]
+        public async Task<IActionResult> DeleteBoard(long boardId)
+        {
+            var r = await _kanbanService.DeleteBoard(User.GetUserId(), boardId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> AddColumn([FromBody] BoardColumnInputModel model)
+        {
+            var r = await _kanbanService.AddColumn(model.BoardId, model.Title);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpDelete]
+        public async Task<IActionResult> DeleteColumn(long columnId)
+        {
+            var r = await _kanbanService.DeleteColumn(User.GetUserId(), columnId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> AddCard([FromBody] BoardCardInputModel model)
+        {
+            var r = await _kanbanService.AddCard(User.GetUserId(), model.ColumnId, model.Description);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpDelete]
+        public async Task<IActionResult> DeleteCard(long cardId)
+        {
+            var r = await _kanbanService.DeleteCard(User.GetUserId(), cardId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> MoveCard([FromBody] BoardCardMoveInputModel model)
+        {
+            var r = await _kanbanService.MoveCard(User.GetUserId(), model.BoardId, model.CardId, model.NewColumnId, model.NewOrder);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
     }
 }

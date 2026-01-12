@@ -1,7 +1,6 @@
 ﻿let IS_AUTHENTICATED = false;
 let CURRENT_USER = null;
 let currentBoardId = null;
-let currentColumnId = null;
 let boards = [];
 
 function showLoading() {
@@ -303,6 +302,11 @@ async function loadBoards() {
 }
 
 function renderBoardList() {
+    if (!document.getElementById("boardHeader").style.display !== "none") {
+        document.getElementById("boardHeader").style.display = "none";
+        document.getElementById("boardHeaderTitle").textContent = "";
+    }
+
     const list = document.getElementById('boardList');
     const sharedList = document.getElementById('sharedBoardList');
 
@@ -321,6 +325,9 @@ function renderBoardList() {
 }
 
 async function selectBoard(id) {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar.classList.contains('open')) toggleSidebar();
+
     currentBoardId = id;
     renderBoardList();
     loadBoardData();
@@ -355,6 +362,8 @@ async function loadBoardData() {
     try {
         const columns = await apiRequest(`/Kanban/GetBoard?boardId=${currentBoardId}`);
         renderColumns(columns.data);
+        document.getElementById("boardHeader").style.display = "flex";
+        document.getElementById("boardHeaderTitle").textContent = boards.find(b => b.id === currentBoardId).title;
     } catch {
         Swal.fire('Error', 'Data could not be loaded', 'error');
     }
@@ -413,7 +422,7 @@ async function deleteBoard(boardId) {
 
     if (result.isConfirmed) {
         try {
-            await apiRequest(`/Kanban/DeleteBoard/${boardId}`, { method: 'DELETE' });
+            await apiRequest(`/Kanban/DeleteBoard?boardId=${boardId}`, { method: 'DELETE' });
             Swal.fire('Deleted!', 'Board has been deleted.', 'success');
             loadBoards();
         } catch {
@@ -434,14 +443,14 @@ function renderColumns(columns) {
             <div class="cards-container" data-column-id="${col.id}">
                 ${col.cards.map((card) => `
                     <div class="card" data-card-id="${card.id}">
-                        <div style="display:flex; justify-content:space-between;">
+                        <div style="display:flex; justify-content:end;">
                             <span style="cursor:pointer" onclick="deleteCard(${card.id})">×</span>
                         </div>
                         <p style="font-size:12px; color:#666; margin-top:5px;">${card.desc || ''}</p>
                     </div>
                 `).join('')}
             </div>
-            <button class="btn btn-success" style="width:100%" onclick="openCardModal(${col.id})">+ Add Card</button>
+            <button class="btn btn-success" style="width:100%" onclick="openNewCardModal(${col.id})">+ Add Card</button>
         </div>
     `).join('');
 
@@ -461,7 +470,7 @@ function initSortable() {
                 try {
                     await apiRequest('/Kanban/MoveCard', {
                         method: 'POST',
-                        body: JSON.stringify({ cardId, newColumnId, newOrder })
+                        body: JSON.stringify({ boardId: currentBoardId, cardId, newColumnId, newOrder })
                     });
                 } catch {
                     Swal.fire('Error', 'Card could not be moved', 'error');
@@ -473,28 +482,26 @@ function initSortable() {
     });
 }
 
-function openColumnModal() {
-    if (checkAuth()) document.getElementById('columnModal').classList.add('active');
-}
-
-function closeColumnModal() {
-    document.getElementById('columnModal').classList.remove('active');
-}
-
-async function addColumn() {
-    const name = document.getElementById('columnName').value.trim();
-    if (!name) return Swal.fire('Warning', 'Name cannot be empty', 'warning');
-
-    try {
-        await apiRequest('/Kanban/AddColumn', {
-            method: 'POST',
-            body: JSON.stringify({ boardId: currentBoardId, name })
-        });
-        closeColumnModal();
-        loadBoardData();
-        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Column added', showConfirmButton: false, timer: 1500 });
-    } catch {
-        Swal.fire('Error', 'Failed to add column', 'error');
+async function openNewColumnModal() {
+    if (!checkAuth()) return;
+    const { value: title } = await Swal.fire({
+        title: 'New Column Name',
+        input: 'text',
+        inputPlaceholder: 'Enter column name...',
+        confirmButtonText: 'Create',
+        showCancelButton: true
+    });
+    if (title) {
+        try {
+            await apiRequest('/Kanban/AddColumn', {
+                method: 'POST',
+                body: JSON.stringify({ boardId: currentBoardId, title })
+            });
+            loadBoardData();
+            Swal.fire('Success', 'Column created successfully', 'success');
+        } catch {
+            Swal.fire('Error', 'Failed to create column', 'error');
+        }
     }
 }
 
@@ -509,7 +516,8 @@ async function deleteColumn(id) {
 
     if (res.isConfirmed) {
         try {
-            await apiRequest(`/Kanban/DeleteColumn/${id}`, { method: 'DELETE' });
+            await apiRequest(`/Kanban/DeleteColumn?columnId=${id}`, { method: 'DELETE' });
+            Swal.fire('Success', 'Column deleted successfully', 'success');
             loadBoardData();
         } catch {
             Swal.fire('Error', 'Failed to delete column', 'error');
@@ -517,40 +525,44 @@ async function deleteColumn(id) {
     }
 }
 
-function openCardModal(id) {
-    if (checkAuth()) {
-        currentColumnId = id;
-        document.getElementById('cardModal').classList.add('active');
-    }
-}
-
-function closeCardModal() {
-    document.getElementById('cardModal').classList.remove('active');
-}
-
-async function addCard() {
-    const description = document.getElementById('cardDescription').value.trim();
-    if (!description) return Swal.fire('Error', 'Description is required', 'error');
-
-    try {
-        await apiRequest('/Kanban/AddCard', {
-            method: 'POST',
-            body: JSON.stringify({ columnId: currentColumnId, title: description, description })
-        });
-        closeCardModal();
-        loadBoardData();
-    } catch {
-        Swal.fire('Error', 'Failed to add card', 'error');
+async function openNewCardModal(columnId) {
+    if (!checkAuth()) return;
+    const { value: description } = await Swal.fire({
+        title: 'Description',
+        input: 'textarea',
+        inputPlaceholder: 'Enter description ...',
+        confirmButtonText: 'Add',
+        showCancelButton: true
+    });
+    if (description) {
+        try {
+            await apiRequest('/Kanban/AddCard', {
+                method: 'POST',
+                body: JSON.stringify({ columnId, description })
+            });
+            loadBoardData();
+        } catch {
+            Swal.fire('Error', 'Failed to add card', 'error');
+        }
     }
 }
 
 async function deleteCard(id) {
     if (!checkAuth()) return;
-    try {
-        await apiRequest(`/Kanban/DeleteCard/${id}`, { method: 'DELETE' });
-        loadBoardData();
-    } catch {
-        Swal.fire('Error', 'Failed to delete card', 'error');
+    const res = await Swal.fire({
+        title: 'Are you sure?',
+        text: 'Card will be deleted!',
+        icon: 'warning',
+        showCancelButton: true
+    });
+
+    if (res.isConfirmed) {
+        try {
+            await apiRequest(`/Kanban/DeleteCard?cardId=${id}`, { method: 'DELETE' });
+            loadBoardData();
+        } catch {
+            Swal.fire('Error', 'Failed to delete card', 'error');
+        }
     }
 }
 

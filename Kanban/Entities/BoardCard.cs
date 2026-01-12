@@ -7,8 +7,6 @@ public partial class BoardCard
 {
     public long Id { get; set; }
 
-    public long BoardId { get; set; }
-
     public long BoardColumnId { get; set; }
 
     public string Desc { get; set; } = null!;
@@ -19,7 +17,7 @@ public partial class BoardCard
 
     public DateTime? CreatedAt { get; set; }
 
-    public virtual Board Board { get; set; } = null!;
+    public int OrderNo { get; set; }
 
     public virtual BoardColumn BoardColumn { get; set; } = null!;
 
