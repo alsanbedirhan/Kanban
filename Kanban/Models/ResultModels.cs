@@ -1,4 +1,5 @@
-﻿namespace Kanban.Models
+﻿
+namespace Kanban.Models
 {
     public class UserResultModel
     {
@@ -8,6 +9,11 @@
     public class BoardResultModel : BoardInputModel
     {
         public long Id { get; set; }
+        public bool IsOwner { get; set; }
+    }
+    public class BoardOwnerResultModel
+    {
+        public Kanban.Entities.Board Board { get; set; }
         public bool IsOwner { get; set; }
     }
     public class BoardOutputModel: BoardInputModel
@@ -45,5 +51,6 @@
     {
         public long Id { get; set; }
         public string Desc { get; set; }
+        public int Order { get; set; }
     }
 }

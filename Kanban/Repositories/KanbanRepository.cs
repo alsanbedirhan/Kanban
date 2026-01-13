@@ -1,4 +1,5 @@
 ﻿using Kanban.Entities;
+using Kanban.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 
@@ -18,7 +19,17 @@ namespace Kanban.Repositories
             {
                 Title = title,
                 IsActive = true,
-                UserId = userId
+                UserId = userId,
+                BoardColumns = new List<BoardColumn> { new BoardColumn {
+                    IsActive = true,
+                    Title = "To Do"
+                }, new BoardColumn {
+                    IsActive = true,
+                    Title = "Progress"
+                },new BoardColumn {
+                    IsActive = true,
+                    Title = "Done"
+                }}
             };
             await _context.BoardMembers.AddAsync(new BoardMember
             {
@@ -33,13 +44,19 @@ namespace Kanban.Repositories
 
         public async Task<BoardCard> AddCard(long userId, long columnId, string desc)
         {
+            var lastOrder = await _context.BoardCards
+                .Where(c => c.BoardColumnId == columnId && c.IsActive)
+                .MaxAsync(c => (int?)c.OrderNo) ?? 0;
+
             var b = new BoardCard
             {
                 Desc = desc,
                 BoardColumnId = columnId,
                 IsActive = true,
-                CreatedBy = userId
+                CreatedBy = userId,
+                OrderNo = lastOrder + 1
             };
+
             await _context.BoardCards.AddAsync(b);
             await _context.SaveChangesAsync();
             return b;
@@ -62,21 +79,18 @@ namespace Kanban.Repositories
         {
             await _context.Boards.Where(bc => bc.Id == boardId && bc.IsActive)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
-            await _context.SaveChangesAsync();
         }
 
         public async Task DeleteCard(long cardId)
         {
             await _context.BoardCards.Where(bc => bc.Id == cardId && bc.IsActive)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
-            await _context.SaveChangesAsync();
         }
 
         public async Task DeleteColumn(long columnId)
         {
             await _context.BoardColumns.Where(bc => bc.Id == columnId && bc.IsActive)
                  .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
-            await _context.SaveChangesAsync();
         }
 
         public async Task<List<BoardColumn>> GetBoardColumns_Cards(long boardId)
@@ -87,22 +101,35 @@ namespace Kanban.Repositories
                 .ToListAsync();
         }
 
-        public async Task<List<Board>> GetBoards(long userId)
+        public async Task<List<BoardOwnerResultModel>> GetBoards(long userId)
         {
             return await _context.BoardMembers.AsNoTracking()
                 .Where(b => b.UserId == userId && b.IsActive && b.Board.IsActive)
-                .Select(b => b.Board)
+                .Select(b => new BoardOwnerResultModel { Board = b.Board, IsOwner = b.RoleCode == "OWNER" })
                 .ToListAsync();
         }
 
         public async Task MoveCard(long userId, long cardId, long newColumnId, int newOrder)
         {
-            await _context.BoardCards.Where(bc => bc.Id == cardId && bc.IsActive)
-                .ExecuteUpdateAsync(bc => bc
-                    .SetProperty(b => b.BoardColumnId, newColumnId)
-                    .SetProperty(b => b.OrderNo, newOrder)
-                    );
-            await _context.SaveChangesAsync();
+            var card = await _context.BoardCards
+                .Where(c => c.Id == cardId && c.IsActive)
+                .FirstOrDefaultAsync();
+
+            if (card == null)
+                throw new Exception("Card not found");
+
+            var oldColumnId = card.BoardColumnId;
+
+            await _context.BoardCards
+                .Where(c => c.BoardColumnId == newColumnId && c.OrderNo >= newOrder && c.IsActive)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.OrderNo, x => x.OrderNo + 1));
+
+            await _context.BoardCards
+                .Where(c => c.Id == cardId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.BoardColumnId, newColumnId)
+                    .SetProperty(x => x.OrderNo, newOrder));
+
         }
 
         public async Task<bool> ValidateBoardWithBoardId(long userId, long boardId)
@@ -112,12 +139,12 @@ namespace Kanban.Repositories
 
         public async Task<bool> ValidateBoardWithCardId(long userId, long cardId)
         {
-            var r = await _context.BoardCards.AsNoTracking().Where(x => x.Id == cardId).Select(x => new { x.BoardColumnId }).FirstOrDefaultAsync();
+            var r = await _context.BoardCards.AsNoTracking().Where(x => x.Id == cardId).Select(x => new { x.BoardColumn.BoardId }).FirstOrDefaultAsync();
             if (r == null)
             {
                 return false;
             }
-            return await ValidateBoardWithCardId(userId, r.BoardColumnId);
+            return await ValidateBoardWithBoardId(userId, r.BoardId);
         }
 
         public async Task<bool> ValidateBoardWithColumnId(long userId, long columnId)

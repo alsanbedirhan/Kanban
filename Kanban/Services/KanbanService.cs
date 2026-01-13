@@ -119,15 +119,15 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult<List<Board>>> GetBoards(long userId)
+        public async Task<ServiceResult<List<Models.BoardOwnerResultModel>>> GetBoards(long userId)
         {
             try
             {
-                return ServiceResult<List<Board>>.Ok(await _kanbanRepository.GetBoards(userId));
+                return ServiceResult<List<Models.BoardOwnerResultModel>>.Ok(await _kanbanRepository.GetBoards(userId));
             }
             catch (Exception)
             {
-                return ServiceResult<List<Board>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<List<Models.BoardOwnerResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
 

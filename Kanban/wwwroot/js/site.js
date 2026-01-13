@@ -430,7 +430,6 @@ async function deleteBoard(boardId) {
         }
     }
 }
-// <b>${card.title}</b>
 function renderColumns(columns) {
     const boardDiv = document.getElementById('board');
     boardDiv.innerHTML = columns.map(col => `
@@ -465,7 +464,7 @@ function initSortable() {
             onEnd: async function (evt) {
                 const cardId = evt.item.dataset.cardId;
                 const newColumnId = evt.to.dataset.columnId;
-                const newOrder = evt.newIndex;
+                const newOrder = evt.newIndex + 1;
 
                 try {
                     await apiRequest('/Kanban/MoveCard', {

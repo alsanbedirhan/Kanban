@@ -31,8 +31,9 @@ namespace Kanban.Controllers
                 Cards = x.BoardCards.Select(c => new BoardCardResultModel
                 {
                     Id = c.Id,
-                    Desc = c.Desc
-                }).ToList()
+                    Desc = c.Desc,
+                    Order = c.OrderNo
+                }).OrderBy(y => y.Order).ToList()
             }).ToList()));
         }
 
@@ -47,10 +48,10 @@ namespace Kanban.Controllers
             }
             return Ok(ServiceResult<List<BoardResultModel>>.Ok(r.Data.Select(x => new BoardResultModel
             {
-                Id = x.Id,
-                Title = x.Title,
-                IsOwner = x.UserId == userId
-            }).ToList()));
+                Id = x.Board.Id,
+                Title = x.Board.Title,
+                IsOwner = x.IsOwner
+            }).OrderByDescending(x => x.Id).ToList()));
         }
 
         [HttpPost]

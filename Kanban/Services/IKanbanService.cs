@@ -1,12 +1,11 @@
 ﻿using Kanban.Entities;
-using Kanban.Models;
 
 namespace Kanban.Services
 {
     public interface IKanbanService
     {
         Task<ServiceResult<List<BoardColumn>>> GetBoardColumns_Cards(long userId, long boardId);
-        Task<ServiceResult<List<Board>>> GetBoards(long userId);
+        Task<ServiceResult<List<Models.BoardOwnerResultModel>>> GetBoards(long userId);
         Task<ServiceResult<Board>> CreateBoard(long userId, string title);
         Task<ServiceResult<BoardColumn>> AddColumn(long boardId, string title);
         Task<ServiceResult<BoardCard>> AddCard(long userId, long columnId, string desc);

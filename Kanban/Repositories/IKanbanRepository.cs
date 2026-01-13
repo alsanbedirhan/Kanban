@@ -5,7 +5,7 @@ namespace Kanban.Repositories
     public interface IKanbanRepository
     {
         Task<List<BoardColumn>> GetBoardColumns_Cards(long boardId);
-        Task<List<Board>> GetBoards(long userId);
+        Task<List<Models.BoardOwnerResultModel>> GetBoards(long userId);
         Task<Board> AddBoard(long userId, string title);
         Task<BoardCard> AddCard(long userId, long columnId, string desc);
         Task MoveCard(long userId, long cardId, long newColumnId, int newOrder);

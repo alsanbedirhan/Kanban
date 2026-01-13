@@ -22,17 +22,17 @@
             <button style="background:none; border:none; color:white; font-size:24px; cursor:pointer;" onclick="toggleSidebar()">×</button>
         </div>
         <div style="flex:1; overflow-y:auto;">
-            <div class="sidebar-section-title">📋 My Boards</div>
-            <ul class="board-list" id="boardList"></ul>
-
-            <div class="sidebar-section-title">📋 Shared With Me</div>
-            <ul class="board-list" id="sharedBoardList"></ul>
-
             <div style="padding: 0 20px;">
                 <button class="add-board-btn" onclick="openNewBoardModal()">
                     + New Board
                 </button>
             </div>
+
+            <div class="sidebar-section-title">📋 My Boards</div>
+            <ul class="board-list" id="boardList"></ul>
+
+            <div class="sidebar-section-title">📋 Shared With Me</div>
+            <ul class="board-list" id="sharedBoardList"></ul>
 
         </div>
 
@@ -43,7 +43,7 @@
     </div>
 
     <div class="container">
-        <div class="header">
+        <div class="header" style="margin: 0px 50px 0px 50px">
             <h1>📋 kanflow</h1>
             <div id="authHeaderArea"></div>
         </div>
