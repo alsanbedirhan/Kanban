@@ -1,3 +1,4 @@
+using Kanban;
 using Kanban.Entities;
 using Kanban.Repositories;
 using Kanban.Services;
@@ -14,12 +15,15 @@ builder.Services.AddDbContext<KanbanDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IUserSecurityService, UserSecurityService>();
+builder.Services.AddScoped<IDBDateTimeProvider, DBDateTimeProvider>();
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserService, UserService>();
 
 builder.Services.AddScoped<IKanbanRepository, KanbanRepository>();
 builder.Services.AddScoped<IKanbanService, KanbanService>();
+
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddAntiforgery(options =>
 {

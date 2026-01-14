@@ -19,6 +19,8 @@ public partial class User
 
     public DateTime CreatedAt { get; set; }
 
+    public bool IsApproved { get; set; }
+
     public virtual ICollection<BoardCard> BoardCards { get; set; } = new List<BoardCard>();
 
     public virtual ICollection<BoardMember> BoardMembers { get; set; } = new List<BoardMember>();

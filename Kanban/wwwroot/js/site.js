@@ -121,6 +121,10 @@ function updateAuthUI() {
             <button class="btn btn-secondary" style="width:100%" onclick="confirmLogout()">Logout</button>
         `;
     } else {
+        document.getElementById("boardHeader").style.display = "none";
+        document.getElementById("boardHeaderTitle").textContent = "";
+        document.getElementById("board").innerHTML = "";
+
         area.innerHTML = `<button class="btn btn-primary" onclick="openLoginModal()">🔐</button>`;
         authSection.innerHTML = `
             <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="openLoginModal()">Login</button>
@@ -278,6 +282,7 @@ async function handleLogout() {
         boards = [];
         currentBoardId = null;
         renderBoardList();
+        renderColumns([]);
         Swal.fire('Success', 'Logged out successfully', 'success');
     } catch {
         Swal.fire('Error', 'Logout failed', 'error');
@@ -399,13 +404,18 @@ async function addUserToBoard(boardId) {
 
     if (email) {
         try {
-            await apiRequest('/Kanban/AddUserToBoard', {
+            const response = await apiRequest('/Kanban/InviteUserToBoard', {
                 method: 'POST',
                 body: JSON.stringify({ boardId, email })
             });
-            Swal.fire('Success', 'User added to board!', 'success');
+            if (response.success) {
+                Swal.fire('Success', 'User invited to board!', 'success');
+            }
+            else {
+                Swal.fire('Error', response.errorMessage, 'error');
+            }
         } catch {
-            Swal.fire('Error', 'Could not add user.', 'error');
+            Swal.fire('Error', 'User could not be invited.', 'error');
         }
     }
 }
@@ -430,8 +440,18 @@ async function deleteBoard(boardId) {
         }
     }
 }
+
 function renderColumns(columns) {
     const boardDiv = document.getElementById('board');
+
+    if (!columns || columns.length === 0) {
+        boardDiv.innerHTML = '';
+        return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     boardDiv.innerHTML = columns.map(col => `
         <div class="column">
             <div class="column-header">
@@ -440,14 +460,32 @@ function renderColumns(columns) {
                 <button class="btn btn-danger" onclick="deleteColumn(${col.id})">🗑️</button>
             </div>
             <div class="cards-container" data-column-id="${col.id}">
-                ${col.cards.map((card) => `
-                    <div class="card" data-card-id="${card.id}">
-                        <div style="display:flex; justify-content:end;">
+                ${col.cards.map((card) => {
+        let cardBgColor = '#ffffff';
+
+        if (card.dueDate && card.warningDays && card.highlightColor) {
+            const dueDate = new Date(card.dueDate);
+            dueDate.setHours(0, 0, 0, 0);
+
+            const diffTime = dueDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays <= card.warningDays && diffDays >= 0) {
+                cardBgColor = card.highlightColor;
+            } else if (diffDays < 0) {
+                cardBgColor = '#fee2e2';
+            }
+        }
+
+        return `
+                    <div class="card" data-card-id="${card.id}" style="background-color: ${cardBgColor}; transition: background-color 0.3s;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString('tr-TR')}</span>
                             <span style="cursor:pointer" onclick="deleteCard(${card.id})">×</span>
                         </div>
-                        <p style="font-size:12px; color:#666; margin-top:5px;">${card.desc || ''}</p>
+                        <p style="font-size:12px; color:#333; margin-top:8px; font-weight: 500;">${card.desc}</p>
                     </div>
-                `).join('')}
+                `}).join('')}
             </div>
             <button class="btn btn-success" style="width:100%" onclick="openNewCardModal(${col.id})">+ Add Card</button>
         </div>
@@ -526,18 +564,81 @@ async function deleteColumn(id) {
 
 async function openNewCardModal(columnId) {
     if (!checkAuth()) return;
-    const { value: description } = await Swal.fire({
-        title: 'Description',
-        input: 'textarea',
-        inputPlaceholder: 'Enter description ...',
-        confirmButtonText: 'Add',
-        showCancelButton: true
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const { value: formValues } = await Swal.fire({
+        title: 'New Card',
+        html: `
+            <div style="text-align: left;">
+                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Description</label>
+                <textarea id="swal-input-desc" class="swal2-textarea" style="width: 100%; margin: 0; box-sizing: border-box; resize: vertical; min-height: 80px;" placeholder="Enter description..."></textarea>
+
+                <label style="font-weight: bold; display: block; margin-top: 15px; margin-bottom: 5px;">Due Date</label>
+                <input type="date" id="swal-input-date" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box;" value="${today}" min="${today}">
+
+                <div style="margin-top: 15px; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="swal-input-reminder" style="width: 18px; height: 18px; cursor: pointer;">
+                    <label for="swal-input-reminder" style="font-weight: bold; cursor: pointer;">Show Warning Settings</label>
+                </div>
+
+                <div id="warning-area" style="display: none; margin-top: 10px; padding: 10px; background: #fff5f5; border: 1px dashed #feb2b2; border-radius: 8px;">
+                    <p style="color: #c53030; font-size: 12px; margin-bottom: 10px;"><b>⚠️ Note:</b> The card will be highlighted based on your settings.</p>
+                    
+                    <div style="display: flex; gap: 10px; align-items: flex-end;">
+                        <div style="flex: 2;">
+                            <label style="font-size: 12px; font-weight: bold; display: block;">Reminder Days</label>
+                            <select id="swal-input-days" class="swal2-select" style="width: 100%; margin: 5px 0 0 0; font-size: 14px;">
+                                <option value="1">1 Day Remaining</option>
+                                <option value="3">3 Days Remaining</option>
+                                <option value="7">1 Week Remaining</option>
+                                <option value="14">2 Week Remaining</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 12px; font-weight: bold; display: block;">Color</label>
+                            <input type="color" id="swal-input-color" value="#ff0000" style="width: 100%; height: 38px; padding: 2px; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; margin-top: 5px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `,
+        didOpen: () => {
+            const checkbox = document.getElementById('swal-input-reminder');
+            const warningArea = document.getElementById('warning-area');
+            checkbox.addEventListener('change', (e) => {
+                warningArea.style.display = e.target.checked ? 'block' : 'none';
+            });
+        },
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Add Card',
+        preConfirm: () => {
+            const description = document.getElementById('swal-input-desc').value.trim();
+            const dueDate = document.getElementById('swal-input-date').value;
+            const hasWarning = document.getElementById('swal-input-reminder').checked;
+            const warningDays = document.getElementById('swal-input-days').value;
+            const highlightColor = document.getElementById('swal-input-color').value;
+
+            if (!description) {
+                Swal.showValidationMessage('Description is required');
+                return false;
+            }
+            return { description, dueDate, hasWarning, warningDays, highlightColor };
+        }
     });
-    if (description) {
+
+    if (formValues) {
         try {
             await apiRequest('/Kanban/AddCard', {
                 method: 'POST',
-                body: JSON.stringify({ columnId, description })
+                body: JSON.stringify({
+                    columnId,
+                    description: formValues.description,
+                    dueDate: formValues.dueDate,
+                    warningDays: formValues.hasWarning ? formValues.warningDays : 0,
+                    highlightColor: formValues.hasWarning ? formValues.highlightColor : ""
+                })
             });
             loadBoardData();
         } catch {
@@ -545,6 +646,28 @@ async function openNewCardModal(columnId) {
         }
     }
 }
+
+//async function openNewCardModal(columnId) {
+//    if (!checkAuth()) return;
+//    const { value: description } = await Swal.fire({
+//        title: 'Description',
+//        input: 'textarea',
+//        inputPlaceholder: 'Enter description ...',
+//        confirmButtonText: 'Add',
+//        showCancelButton: true
+//    });
+//    if (description) {
+//        try {
+//            await apiRequest('/Kanban/AddCard', {
+//                method: 'POST',
+//                body: JSON.stringify({ columnId, description })
+//            });
+//            loadBoardData();
+//        } catch {
+//            Swal.fire('Error', 'Failed to add card', 'error');
+//        }
+//    }
+//}
 
 async function deleteCard(id) {
     if (!checkAuth()) return;

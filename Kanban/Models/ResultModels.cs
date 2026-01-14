@@ -24,10 +24,18 @@ namespace Kanban.Models
     {
         public string? Title { get; set; }
     }
+    public class BoardUserInputModel
+    {
+        public long BoardId { get; set; }
+        public string Email { get; set; }
+    }
     public class BoardCardInputModel
     {
         public long ColumnId { get; set; }
         public string Description { get; set; }
+        public DateOnly DueDate { get; set; }
+        public int WarningDays { get; set; }
+        public string HighlightColor { get; set; }
     }
     public class BoardCardMoveInputModel
     {
@@ -52,5 +60,8 @@ namespace Kanban.Models
         public long Id { get; set; }
         public string Desc { get; set; }
         public int Order { get; set; }
+        public DateOnly DueDate { get; set; }
+        public int WarningDays { get; set; }
+        public string HighlightColor { get; set; }
     }
 }

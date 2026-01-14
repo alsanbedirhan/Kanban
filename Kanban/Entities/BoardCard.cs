@@ -19,6 +19,12 @@ public partial class BoardCard
 
     public int OrderNo { get; set; }
 
+    public DateOnly DueDate { get; set; }
+
+    public int WarningDays { get; set; }
+
+    public string? HighlightColor { get; set; }
+
     public virtual BoardColumn BoardColumn { get; set; } = null!;
 
     public virtual User CreatedByNavigation { get; set; } = null!;

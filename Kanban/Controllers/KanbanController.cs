@@ -32,7 +32,10 @@ namespace Kanban.Controllers
                 {
                     Id = c.Id,
                     Desc = c.Desc,
-                    Order = c.OrderNo
+                    Order = c.OrderNo,
+                    DueDate = c.DueDate,
+                    WarningDays = c.WarningDays,
+                    HighlightColor = c.HighlightColor ?? ""
                 }).OrderBy(y => y.Order).ToList()
             }).ToList()));
         }
@@ -101,7 +104,7 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> AddCard([FromBody] BoardCardInputModel model)
         {
-            var r = await _kanbanService.AddCard(User.GetUserId(), model.ColumnId, model.Description);
+            var r = await _kanbanService.AddCard(User.GetUserId(), model.ColumnId, model.Description, model.DueDate, model.WarningDays, model.HighlightColor);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -124,6 +127,26 @@ namespace Kanban.Controllers
         public async Task<IActionResult> MoveCard([FromBody] BoardCardMoveInputModel model)
         {
             var r = await _kanbanService.MoveCard(User.GetUserId(), model.BoardId, model.CardId, model.NewColumnId, model.NewOrder);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+        [HttpPost]
+        public async Task<IActionResult> InviteUserToBoard([FromBody] BoardUserInputModel model)
+        {
+            var r = await _kanbanService.InviteUserToBoard(User.GetUserId(), User.GetFullName(), model.BoardId, model.Email);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+        [HttpPost]
+        public async Task<IActionResult> AddUserToBoard([FromBody] BoardUserInputModel model)
+        {
+            var r = await _kanbanService.AddUserToBoard(User.GetUserId(), model.BoardId, model.Email);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));

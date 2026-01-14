@@ -21,10 +21,7 @@ public partial class KanbanDbContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-
-    }
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,10 +63,15 @@ public partial class KanbanDbContext : DbContext
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
             entity.Property(e => e.Desc).HasColumnName("desc");
+            entity.Property(e => e.DueDate).HasColumnName("due_date");
+            entity.Property(e => e.HighlightColor)
+                .HasMaxLength(10)
+                .HasColumnName("highlight_color");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
             entity.Property(e => e.OrderNo).HasColumnName("order_no");
+            entity.Property(e => e.WarningDays).HasColumnName("warning_days");
 
             entity.HasOne(d => d.BoardColumn).WithMany(p => p.BoardCards)
                 .HasForeignKey(d => d.BoardColumnId)
@@ -152,6 +154,7 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
+            entity.Property(e => e.IsApproved).HasColumnName("is_approved");
             entity.Property(e => e.SecurityStamp)
                 .HasMaxLength(255)
                 .HasDefaultValueSql("(gen_random_uuid())::text")

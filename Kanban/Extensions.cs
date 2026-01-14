@@ -1,4 +1,6 @@
-﻿using System.Security.Claims;
+﻿using Kanban.Entities;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Kanban
 {
@@ -12,6 +14,37 @@ namespace Kanban
         public static string GetEmail(this ClaimsPrincipal user)
         {
             return user.FindFirst(ClaimTypes.Email)?.Value ?? "";
+        }
+        public static string GetFullName(this ClaimsPrincipal user)
+        {
+            return user.FindFirst(ClaimTypes.Name)?.Value ?? "";
+        }
+    }
+    public interface IDBDateTimeProvider
+    {
+        Task<DateTime> Now();
+    }
+    public class DBDateTimeProvider : IDBDateTimeProvider
+    {
+        private readonly KanbanDbContext _context;
+
+        public DBDateTimeProvider(KanbanDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<DateTime> Now()
+        {
+            var connection = _context.Database.GetDbConnection();
+
+            if (connection.State != System.Data.ConnectionState.Open)
+                await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT now()";
+
+            var result = await command.ExecuteScalarAsync();
+            return (DateTime)result!;
         }
     }
 }
