@@ -68,11 +68,11 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
                 }
-                var u = await _userRepository.GetByEmail(email);
-                if (u == null || !u.IsActive || !u.IsApproved)
-                {
-                    return ServiceResult.Fail("Mail adresi ile eşleşen kullanıcı bulunamadı, lütfen mail adresini kontrol ediniz.");
-                }
+                //var u = await _userRepository.GetByEmail(email);
+                //if (u == null || !u.IsActive || !u.IsApproved)
+                //{
+                //    return ServiceResult.Fail("Mail adresi ile eşleşen kullanıcı bulunamadı, lütfen mail adresini kontrol ediniz.");
+                //}
                 var b = await _kanbanRepository.GetBoard(boardId);
                 if (b == null || !b.IsActive)
                 {

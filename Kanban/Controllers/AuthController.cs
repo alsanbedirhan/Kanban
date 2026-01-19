@@ -34,8 +34,27 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        public async Task<IActionResult> VerifyWork([FromBody] VerifyViewModel model)
+        {
+            var result = await _userService.GenerateAndSaveVerifyCode(model.email);
+
+            if (!result.Success)
+            {
+                return Ok(ServiceResult.Fail(result.ErrorMessage));
+            }
+
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpPost]
         public async Task<IActionResult> Register([FromBody] RegisterViewModel model)
         {
+            var verify = await _userService.VerifyCodeAndUpdate(model.email, model.otpCode);
+            if (!verify.Success)
+            {
+                return Ok(ServiceResult.Fail(verify.ErrorMessage));
+            }
+
             var result = await _userService.Register(model);
             if (!result.Success)
             {

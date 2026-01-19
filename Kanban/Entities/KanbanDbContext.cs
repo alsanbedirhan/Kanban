@@ -21,6 +21,8 @@ public partial class KanbanDbContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<Userverification> Userverifications { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -159,6 +161,28 @@ public partial class KanbanDbContext : DbContext
                 .HasMaxLength(255)
                 .HasDefaultValueSql("(gen_random_uuid())::text")
                 .HasColumnName("security_stamp");
+        });
+
+        modelBuilder.Entity<Userverification>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("userverifications_pk");
+
+            entity.ToTable("userverifications");
+
+            entity.Property(e => e.Id)
+                .UseIdentityAlwaysColumn()
+                .HasColumnName("id");
+            entity.Property(e => e.Code)
+                .HasMaxLength(10)
+                .HasColumnName("code");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Email)
+                .HasMaxLength(100)
+                .HasColumnName("email");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.IsUsed).HasColumnName("is_used");
         });
 
         OnModelCreatingPartial(modelBuilder);

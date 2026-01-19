@@ -1,41 +1,56 @@
-﻿using System.Net;
+﻿using Kanban.Models;
+using Kanban.Repositories;
+using Mailjet.Client;
+using Mailjet.Client.Resources;
+using Newtonsoft.Json.Linq;
+using System.Net;
 using System.Net.Mail;
 
 namespace Kanban.Services
 {
-    public class EmailService(IConfiguration config) : IEmailService
+    public class EmailService : IEmailService
     {
-        private readonly string _smtpDomain = config["Mail:Domain"];
-        private readonly string _smtpPass = config["Mail:Pass"];
-        private readonly string _smtpEmail = config["Mail:Address"];
-
+        private readonly EmailSettings? _emailSettings;
+        private readonly IUserRepository _userRepository;
+        private readonly IKanbanRepository _kanbanRepository;
+        public EmailService(IConfiguration config, IUserRepository userRepository, IKanbanRepository kanbanRepository)
+        {
+            _emailSettings = config.GetSection("EmailSettings").Get<EmailSettings>() ?? null;
+            _userRepository = userRepository;
+            _kanbanRepository = kanbanRepository;
+        }
         public async Task SendEmail(string to, string subject, string bodyHtml)
         {
-            if (string.IsNullOrEmpty(_smtpDomain) || string.IsNullOrEmpty(_smtpPass) || string.IsNullOrEmpty(_smtpEmail))
+            MailjetClient client = new MailjetClient(_emailSettings.API_Key, _emailSettings.Secret_Key);
+
+            MailjetRequest request = new MailjetRequest
             {
-                return;
+                Resource = Send.Resource,
             }
+            .Property(Send.FromEmail, _emailSettings.Address)
+            .Property(Send.FromName, "Kanflow")
+            .Property(Send.Subject, subject)
+            .Property(Send.HtmlPart, bodyHtml)
+            .Property(Send.Recipients, new JArray {
+                new JObject {
+                    {"Email", to}
+                }
+            });
 
-            var smtp = new SmtpClient(_smtpDomain, 465)
+            try
             {
-                Credentials = new NetworkCredential(_smtpEmail, _smtpPass),
-                EnableSsl = true,
-                UseDefaultCredentials = false
-            };
+                MailjetResponse response = await client.PostAsync(request);
 
-            var mail = new MailMessage()
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine(response.StatusCode + ": " + response.Content);
+                }
+            }
+            catch (Exception ex)
             {
-                From = new MailAddress(_smtpEmail, _smtpEmail),
-                Subject = subject,
-                Body = bodyHtml,
-                IsBodyHtml = true
-            };
-
-            mail.To.Add(to);
-
-            await smtp.SendMailAsync(mail);
+                Console.WriteLine(ex.Message);
+            }
         }
-
         public async Task SendVerificationCode(string to, string code)
         {
             string html = "<h3>Your verification code</h3>" +
@@ -48,10 +63,12 @@ namespace Kanban.Services
 
         public async Task SendInvite(string to, string senderFullName, string boardName)
         {
+
+
             string html = "<h3>New Board Invitation</h3>" +
                 "<p><b>" + senderFullName + "</b> has invited you to collaborate on the board <b>" + boardName + "</b>.</p>" +
                 "<p>Please log in to your Kanban account to accept or decline this invitation.</p>" +
-                "<p><a href=\"https://www." + _smtpDomain + "\" style=\"font-weight:600;\">Open Kanban</a></p>" +
+                "<p><a href=\"https://www." + _emailSettings.Domain + "?token= \" style=\"font-weight:600;\">Open Kanban</a></p>" +
                 "<p>If you did not expect this invitation, you can safely ignore this email.</p>";
 
             await SendEmail(to, "Board Invitation", html);

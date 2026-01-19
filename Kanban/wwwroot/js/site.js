@@ -84,6 +84,7 @@ async function apiRequest(endpoint, options = {}) {
         if (contentType?.includes('application/json')) {
             return await response.json();
         }
+        return await response.text();
     } catch (error) {
         console.error('Error:', error);
         throw error;
@@ -220,40 +221,117 @@ async function handleRegister() {
     if (password !== confirmPassword)
         return Swal.fire('Error', 'Passwords do not match', 'error');
 
-    if (!/[A-Z]/.test(password))
-        return Swal.fire('Error', 'Password must contain at least one uppercase letter (A-Z)', 'error');
-
-    if (!/[a-z]/.test(password))
-        return Swal.fire('Error', 'Password must contain at least one lowercase letter (a-z)', 'error');
-
-    if (!/[0-9]/.test(password))
-        return Swal.fire('Error', 'Password must contain at least one number (0-9)', 'error');
-
-    if (!/[!@#$%^&*(),.?:{}|<>]/.test(password))
-        return Swal.fire('Error', 'Password must contain at least one special character (!, @, #, $, %, etc.)', 'error');
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*(),.?:{}|<>]/.test(password)) {
+        return Swal.fire('Error', 'Password must contain uppercase, lowercase, number, and special character.', 'error');
+    }
 
     try {
-        const response = await apiRequest('/Auth/Register', {
+        const verify = await apiRequest('/Auth/VerifyWork', {
             method: 'POST',
-            body: JSON.stringify({ fullname, email, password })
+            body: JSON.stringify({ email })
         });
 
-        if (response.success) {
-            await fetchCurrentUser();
-            closeRegisterModal();
-            Swal.fire({
-                title: 'Welcome!',
-                text: `Registration successful! Welcome ${CURRENT_USER.fullName}`,
-                icon: 'success',
-                timer: 2000,
-                showConfirmButton: false
-            });
-            loadBoards();
-        } else {
-            Swal.fire('Error', response.message || 'Registration failed', 'error');
+        if (!verify.success) {
+            return Swal.fire('Error', verify.errorMessage || 'Failed to send verification code', 'error');
         }
-    } catch {
-        Swal.fire('Error', 'Registration failed.', 'error');
+
+        let isRegistered = false;
+
+        while (!isRegistered) {
+
+            const { value: otpCode, dismiss } = await Swal.fire({
+                title: 'Email Verification',
+                text: `A 6-digit code has been sent to ${email}.`,
+                html: `
+                <div id="otp-inputs" style="display: flex; justify-content: center; gap: 8px; margin-top: 20px;">
+                ${[...Array(6)].map(() => `
+                <input type="text" class="otp-field" maxlength="1" style="width: 45px; height: 55px; text-align: center;
+                font-size: 24px; font-weight: bold; border: 2px solid #ddd; border-radius: 8px; outline: none; transition: all 0.2s;"
+                onfocus="this.style.borderColor='#3085d6'; this.style.boxShadow='0 0 8px rgba(48,133,214,0.3)';"
+                onblur="this.style.borderColor='#ddd'; this.style.boxShadow='none';"
+                >`).join('')}
+                </div>`,
+                showCancelButton: true,
+                confirmButtonText: 'Verify & Register',
+                cancelButtonText: 'Cancel',
+                didOpen: () => {
+                    const container = document.getElementById('otp-inputs');
+                    const inputs = container.querySelectorAll('.otp-field');
+
+                    inputs[0].focus();
+
+                    inputs.forEach((input, index) => {
+                        input.addEventListener('input', (e) => {
+                            const value = e.target.value;
+                            if (!/^\d+$/.test(value)) {
+                                e.target.value = '';
+                                return;
+                            }
+                            if (value && index < inputs.length - 1) {
+                                inputs[index + 1].focus();
+                            }
+                        });
+
+                        input.addEventListener('keydown', (e) => {
+                            if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                                inputs[index - 1].focus();
+                            }
+                        });
+
+                        input.addEventListener('paste', (e) => {
+                            const data = e.clipboardData.getData('text').trim();
+                            if (data.length === 6 && /^\d+$/.test(data)) {
+                                const digits = data.split('');
+                                inputs.forEach((input, i) => input.value = digits[i]);
+                                inputs[5].focus();
+                            }
+                            e.preventDefault();
+                        });
+                    });
+                },
+                preConfirm: () => {
+                    const inputs = document.querySelectorAll('.otp-field');
+                    let code = "";
+                    inputs.forEach(input => code += input.value);
+
+                    if (code.length !== 6) {
+                        Swal.showValidationMessage('Please enter the complete 6-digit code');
+                        return false;
+                    }
+                    return code;
+                }
+            });
+
+
+            if (dismiss === Swal.DismissReason.cancel || dismiss === Swal.DismissReason.backdrop) {
+                return;
+            }
+
+            const response = await apiRequest('/Auth/Register', {
+                method: 'POST',
+                body: JSON.stringify({ fullname, email, password, otpCode })
+            });
+
+            if (response.success) {
+                isRegistered = true;
+                await fetchCurrentUser();
+                closeRegisterModal();
+                Swal.fire({
+                    title: 'Welcome!',
+                    text: `Registration successful! Welcome ${fullname}`,
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+                loadBoards();
+            } else {
+                await Swal.fire('Registration Failed', response.message || 'Invalid code, please try again.', 'error');
+            }
+        }
+
+    } catch (error) {
+        console.error(error);
+        Swal.fire('Error', 'An unexpected error occurred during registration.', 'error');
     }
 }
 

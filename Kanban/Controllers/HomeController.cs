@@ -6,11 +6,25 @@ namespace Kanban.Controllers
 {
     public class HomeController : Controller
     {
-        public IActionResult Index()
+        private readonly IUserService _userService;
+        public HomeController(IUserService userService)
         {
+            _userService = userService;
+        }
+        [HttpGet]
+        public async Task<IActionResult> Index(string? token)
+        {
+            if (!string.IsNullOrEmpty(token))
+            {
+                var r = _userService.VerifyActivationToken(token);
+                if (r != null)
+                {
+                    return View(r);
+                }
+            }
             return View();
         }
-
+        [HttpGet]
         public IActionResult Fetch()
         {
             if (User.Identity?.IsAuthenticated ?? false)
