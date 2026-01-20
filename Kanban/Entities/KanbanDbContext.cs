@@ -21,6 +21,8 @@ public partial class KanbanDbContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<Userinvite> Userinvites { get; set; }
+
     public virtual DbSet<Userverification> Userverifications { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
@@ -161,6 +163,35 @@ public partial class KanbanDbContext : DbContext
                 .HasMaxLength(255)
                 .HasDefaultValueSql("(gen_random_uuid())::text")
                 .HasColumnName("security_stamp");
+        });
+
+        modelBuilder.Entity<Userinvite>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("userinvites_pk");
+
+            entity.ToTable("userinvites");
+
+            entity.Property(e => e.Id)
+                .UseIdentityAlwaysColumn()
+                .HasColumnName("id");
+            entity.Property(e => e.BoardId).HasColumnName("board_id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Email)
+                .HasMaxLength(100)
+                .HasColumnName("email");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.IsAccepted).HasColumnName("is_accepted");
+            entity.Property(e => e.SenderUserId).HasColumnName("sender_user_id");
+
+            entity.HasOne(d => d.Board).WithMany(p => p.Userinvites)
+                .HasForeignKey(d => d.BoardId)
+                .HasConstraintName("userinvites_board_fk");
+
+            entity.HasOne(d => d.SenderUser).WithMany(p => p.Userinvites)
+                .HasForeignKey(d => d.SenderUserId)
+                .HasConstraintName("userinvites_users_fk");
         });
 
         modelBuilder.Entity<Userverification>(entity =>

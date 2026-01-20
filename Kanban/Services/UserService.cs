@@ -10,14 +10,12 @@ namespace Kanban.Services
 {
     public class UserService : IUserService
     {
-        private readonly JwtSettings? _jwtSettings;
         private readonly IUserRepository _userRepository;
         private readonly IEmailService _mailService;
         private readonly IDBDateTimeProvider _dbDate;
 
-        public UserService(IConfiguration config, IUserRepository userRepository, IEmailService mailService, IDBDateTimeProvider dbDate)
+        public UserService(IUserRepository userRepository, IEmailService mailService, IDBDateTimeProvider dbDate)
         {
-            _jwtSettings = config.GetSection("JwtSettingsKey").Get<JwtSettings>() ?? null;
             _userRepository = userRepository;
             _mailService = mailService;
             _dbDate = dbDate;
@@ -75,71 +73,6 @@ namespace Kanban.Services
             catch (Exception)
             {
                 return ServiceResult<User>.Fail("Hata oluştu");
-            }
-        }
-
-        public string GenerateJwt(string email, long inviteId)
-        {
-            var claims = new[]
-            {
-            new Claim(ClaimTypes.Email, email)
-        };
-
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(
-                issuer: _jwtSettings.Issuer,
-                audience: _jwtSettings.Audience,
-                claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(15),
-                signingCredentials: creds
-            );
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
-        }
-
-        public async Task<ServiceResult<BoardUserInviteModel>> VerifyActivationToken(string token)
-        {
-            try
-            {
-                var handler = new JwtSecurityTokenHandler();
-
-                var validations = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    ValidIssuer = _jwtSettings.Issuer,
-                    ValidAudience = _jwtSettings.Audience,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key))
-                };
-
-                var claims = handler.ValidateToken(token, validations, out var tokenSecure) ?? throw new Exception();
-
-                var v = new BoardUserInviteModel
-                {
-                    InviteId = long.Parse(claims.FindFirst("InviteId")!.Value),
-                    Email = claims.FindFirst(ClaimTypes.Email)!.Value,
-                    BoardTitle = claims.FindFirst("BoardTitle")!.Value,
-                    BoardId = long.Parse(claims.FindFirst("BoardId")!.Value),
-                };
-
-                var i = await _userRepository.GetInvite(v.InviteId);
-                if (i == null || i.IsUsed || v.Email != i.Email /*|| v.BoardId != i.BoardId*/)
-                {
-                    throw new Exception();
-                }
-
-                var u = await _userRepository.GetByEmail(v.Email);
-                v.IsRegistered = u != null;
-
-                return ServiceResult<BoardUserInviteModel>.Ok(v);
-            }
-            catch
-            {
-                return ServiceResult<BoardUserInviteModel>.Fail("Aktivasyon bağlantısı geçersiz veya süresi dolmuş.");
             }
         }
 

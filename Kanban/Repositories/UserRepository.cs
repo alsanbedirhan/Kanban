@@ -52,11 +52,6 @@ namespace Kanban.Repositories
             return user;
         }
 
-        public async Task<Userverification?> GetInvite(long id)
-        {
-            return await _context.Userverifications.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
-        }
-
         public async Task<int> VerifyCountToday(string email)
         {
             var now = await _dbDate.Now();

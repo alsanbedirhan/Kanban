@@ -18,4 +18,6 @@ public partial class Board
     public virtual ICollection<BoardColumn> BoardColumns { get; set; } = new List<BoardColumn>();
 
     public virtual ICollection<BoardMember> BoardMembers { get; set; } = new List<BoardMember>();
+
+    public virtual ICollection<Userinvite> Userinvites { get; set; } = new List<Userinvite>();
 }

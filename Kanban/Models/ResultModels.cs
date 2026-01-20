@@ -26,10 +26,8 @@ namespace Kanban.Models
     }
     public class BoardUserInviteModel
     {
-        public bool IsRegistered { get; set; }
         public long InviteId { get; set; }
         public long BoardId { get; set; }
-        public string BoardTitle { get; set; }
         public string Email { get; set; }
     }
     public class BoardUserInputModel

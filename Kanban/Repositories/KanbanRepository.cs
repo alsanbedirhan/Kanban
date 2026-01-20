@@ -8,9 +8,11 @@ namespace Kanban.Repositories
     public class KanbanRepository : IKanbanRepository
     {
         private readonly KanbanDbContext _context;
-        public KanbanRepository(KanbanDbContext context)
+        private readonly IDBDateTimeProvider _dbDate;
+        public KanbanRepository(KanbanDbContext context, IDBDateTimeProvider dbDate)
         {
             _context = context;
+            _dbDate = dbDate;
         }
 
         public async Task<Board> AddBoard(long userId, string title)
@@ -105,6 +107,12 @@ namespace Kanban.Repositories
             }
         }
 
+        public async Task SetAcceptedInvite(long inviteId)
+        {
+            await _context.Userinvites.Where(bc => bc.Id == inviteId)
+                .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsAccepted, true));
+        }
+
         public async Task DeleteCard(long cardId)
         {
             await _context.BoardCards.Where(bc => bc.Id == cardId && bc.IsActive)
@@ -117,7 +125,7 @@ namespace Kanban.Repositories
                  .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
         }
 
-        public async Task<Board> GetBoard(long boardId)
+        public async Task<Board?> GetBoard(long boardId)
         {
             return await _context.Boards.AsNoTracking().AsNoTracking()
                 .Where(b => b.Id == boardId && b.IsActive)
@@ -138,6 +146,14 @@ namespace Kanban.Repositories
                 .Where(b => b.UserId == userId && b.IsActive && b.Board.IsActive)
                 .Select(b => new BoardOwnerResultModel { Board = b.Board, IsOwner = b.RoleCode == "OWNER" })
                 .ToListAsync();
+        }
+
+        public async Task<string> GetBoardTitle(long boardId)
+        {
+            return await _context.Boards.AsNoTracking()
+                .Where(b => b.Id == boardId && b.IsActive)
+                .Select(b => b.Title)
+                .FirstOrDefaultAsync() ?? "";
         }
 
         public async Task MoveCard(long userId, long cardId, long newColumnId, int newOrder)
@@ -178,6 +194,11 @@ namespace Kanban.Repositories
             return await ValidateBoardWithBoardId(userId, r.BoardId);
         }
 
+        public async Task<Userinvite?> GetInvite(long id)
+        {
+            return await _context.Userinvites.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+        }
+
         public async Task<bool> ValidateBoardWithColumnId(long userId, long columnId)
         {
             var r = await _context.BoardColumns.AsNoTracking().Where(x => x.Id == columnId).Select(x => new { x.BoardId }).FirstOrDefaultAsync();
@@ -186,6 +207,23 @@ namespace Kanban.Repositories
                 return false;
             }
             return await ValidateBoardWithBoardId(userId, r.BoardId);
+        }
+
+        public async Task<Userinvite> AddInvite(long senderUserId, long boardId, string email)
+        {
+            var now = await _dbDate.Now();
+            var invite = new Userinvite
+            {
+                BoardId = boardId,
+                Email = email,
+                IsAccepted = false,
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(15),
+                SenderUserId = senderUserId
+            };
+            await _context.Userinvites.AddAsync(invite);
+            await _context.SaveChangesAsync();
+            return invite;
         }
     }
 }

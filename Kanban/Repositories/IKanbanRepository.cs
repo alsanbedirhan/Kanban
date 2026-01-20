@@ -6,7 +6,11 @@ namespace Kanban.Repositories
     {
         Task<List<BoardColumn>> GetBoardColumns_Cards(long boardId);
         Task<List<Models.BoardOwnerResultModel>> GetBoards(long userId);
-        Task<Board> GetBoard(long boardId);
+        Task<Userinvite?> GetInvite(long id);
+        Task SetAcceptedInvite(long inviteId);
+        Task<Userinvite> AddInvite(long senderUserId, long boardId, string email);
+        Task<string> GetBoardTitle(long boardId);
+        Task<Board?> GetBoard(long boardId);
         Task<Board> AddBoard(long userId, string title);
         Task<BoardCard> AddCard(long userId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor);
         Task AddUserToBoard(long userId, long boardId, string roleCode);

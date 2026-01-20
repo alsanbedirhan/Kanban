@@ -19,7 +19,7 @@ namespace Kanban.Controllers
         public async Task<IActionResult> GetBoard(int boardId)
         {
             var userId = User.GetUserId();
-            var r = await _kanbanService.GetBoardColumns_Cards(userId, boardId);
+            var r = await _kanbanService.GetBoard(userId, boardId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -136,7 +136,7 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> InviteUserToBoard([FromBody] BoardUserInputModel model)
         {
-            var r = await _kanbanService.InviteUserToBoard(User.GetUserId(), User.GetFullName(), model.BoardId, model.Email);
+            var r = await _kanbanService.InviteUserToBoard(User.GetUserId(), User.GetFullName(), User.GetEmail(), model.BoardId, model.Email);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));

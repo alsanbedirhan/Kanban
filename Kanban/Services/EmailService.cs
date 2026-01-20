@@ -11,13 +11,9 @@ namespace Kanban.Services
     public class EmailService : IEmailService
     {
         private readonly EmailSettings? _emailSettings;
-        private readonly IUserRepository _userRepository;
-        private readonly IKanbanRepository _kanbanRepository;
-        public EmailService(IConfiguration config, IUserRepository userRepository, IKanbanRepository kanbanRepository)
+        public EmailService(IConfiguration config, IKanbanService kanbanService)
         {
             _emailSettings = config.GetSection("EmailSettings").Get<EmailSettings>() ?? null;
-            _userRepository = userRepository;
-            _kanbanRepository = kanbanRepository;
         }
         public async Task SendEmail(string to, string subject, string bodyHtml)
         {
@@ -61,14 +57,12 @@ namespace Kanban.Services
             await SendEmail(to, "Verification Code", html);
         }
 
-        public async Task SendInvite(string to, string senderFullName, string boardName)
+        public async Task SendInvite(string to, string senderFullName, string senderEmail, string boardTitle, string token)
         {
-
-
             string html = "<h3>New Board Invitation</h3>" +
-                "<p><b>" + senderFullName + "</b> has invited you to collaborate on the board <b>" + boardName + "</b>.</p>" +
+                "<p><b>" + senderFullName + "</b> (" + senderEmail + ") has invited you to collaborate on the board <b>" + boardTitle + "</b>.</p>" +
                 "<p>Please log in to your Kanban account to accept or decline this invitation.</p>" +
-                "<p><a href=\"https://www." + _emailSettings.Domain + "?token= \" style=\"font-weight:600;\">Open Kanban</a></p>" +
+                "<p><a href=\"https://www." + _emailSettings.Domain + "?token= " + token + "\" style=\"font-weight:600;\">Open Kanban</a></p>" +
                 "<p>If you did not expect this invitation, you can safely ignore this email.</p>";
 
             await SendEmail(to, "Board Invitation", html);

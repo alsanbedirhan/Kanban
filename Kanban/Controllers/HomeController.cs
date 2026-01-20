@@ -6,17 +6,17 @@ namespace Kanban.Controllers
 {
     public class HomeController : Controller
     {
-        private readonly IUserService _userService;
-        public HomeController(IUserService userService)
+        private readonly IKanbanService _kanbanService;
+        public HomeController(IKanbanService kanbanService)
         {
-            _userService = userService;
+            _kanbanService = kanbanService;
         }
         [HttpGet]
         public async Task<IActionResult> Index(string? token)
         {
             if (!string.IsNullOrEmpty(token))
             {
-                var r = _userService.VerifyActivationToken(token);
+                var r = _kanbanService.VerifyActivationToken(token);
                 if (r != null)
                 {
                     return View(r);

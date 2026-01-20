@@ -276,6 +276,9 @@ async function handleRegister() {
                             if (e.key === 'Backspace' && !e.target.value && index > 0) {
                                 inputs[index - 1].focus();
                             }
+                            else if (e.key === 'Enter') {
+                                Swal.clickConfirm();
+                            }
                         });
 
                         input.addEventListener('paste', (e) => {
@@ -284,6 +287,7 @@ async function handleRegister() {
                                 const digits = data.split('');
                                 inputs.forEach((input, i) => input.value = digits[i]);
                                 inputs[5].focus();
+                                Swal.clickConfirm();
                             }
                             e.preventDefault();
                         });
