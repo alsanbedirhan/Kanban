@@ -94,5 +94,11 @@ namespace Kanban.Repositories
             return await _context.Users.AsNoTracking().Where(u => u.Email == email && u.IsActive)
                 .Select(u => (long?)u.Id).FirstOrDefaultAsync();
         }
+
+        public async Task UpdateAvatar(long userId, string avatar)
+        {
+            await _context.Users.Where(u => u.Id == userId && u.IsActive)
+                .ExecuteUpdateAsync(u => u.SetProperty(user => user.Avatar, avatar));
+        }
     }
 }

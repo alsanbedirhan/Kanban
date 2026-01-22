@@ -108,8 +108,16 @@ app.UseStatusCodePagesWithReExecute("/Error/{0}");
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.Use((context, next) =>
+app.Use(async (context, next) =>
 {
+    var allowed = new[] { "GET", "POST", "DELETE", "PUT" };
+
+    if (!allowed.Contains(context.Request.Method))
+    {
+        context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+        return;
+    }
+
     var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
     var tokens = antiforgery.GetAndStoreTokens(context);
 
@@ -121,7 +129,7 @@ app.Use((context, next) =>
             SameSite = SameSiteMode.Strict
         });
 
-    return next(context);
+    await next();
 });
 
 app.MapStaticAssets();

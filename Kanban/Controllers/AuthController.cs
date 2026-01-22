@@ -28,7 +28,14 @@ namespace Kanban.Controllers
                 return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
 
-            await signIn(new MyClaims { UserId = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
+            await signIn(new MyClaims
+            {
+                UserId = result.Data.Id,
+                FullName = result.Data.FullName,
+                Email = result.Data.Email,
+                SecurityStamp = result.Data.SecurityStamp,
+                Avatar = result.Data.Avatar
+            });
 
             return Ok(ServiceResult.Ok());
         }
@@ -61,7 +68,14 @@ namespace Kanban.Controllers
                 return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
 
-            await signIn(new MyClaims { UserId = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
+            await signIn(new MyClaims
+            {
+                UserId = result.Data.Id,
+                FullName = result.Data.FullName,
+                Email = result.Data.Email,
+                SecurityStamp = result.Data.SecurityStamp,
+                Avatar = result.Data.Avatar
+            });
 
             return Ok(ServiceResult.Ok());
         }
@@ -81,6 +95,7 @@ namespace Kanban.Controllers
                 new Claim(ClaimTypes.NameIdentifier, claims.UserId.ToString()),
                 new Claim(ClaimTypes.Name, claims.FullName),
                 new Claim(ClaimTypes.Email, claims.Email),
+                new Claim(ClaimTypes.UserData, claims.Avatar),
                 new Claim("SecurityStamp", claims.SecurityStamp)
            }, CookieAuthenticationDefaults.AuthenticationScheme)));
         }

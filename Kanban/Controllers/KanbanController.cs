@@ -61,10 +61,22 @@ namespace Kanban.Controllers
             }
             return Ok(ServiceResult.Ok());
         }
-        [HttpPost]
+
+        [HttpPut]
         public async Task<IActionResult> PromoteToOwner([FromBody] BoardMemberInputModel model)
         {
             var r = await _kanbanService.PromoteToOwner(User.GetUserId(), model.BoardId, model.UserId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> UpdateAvatar([FromBody] AvatarResultModel model)
+        {
+            var r = await _kanbanService.UpdateAvatar(User.GetUserId(), model.Avatar);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));

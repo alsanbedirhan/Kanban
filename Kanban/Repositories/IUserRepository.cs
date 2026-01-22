@@ -7,6 +7,7 @@ namespace Kanban.Repositories
         Task<User?> GetByEmail(string email);
         Task<long?> GetUserIdByEmail(string email);
         Task<User?> GetByEmailForUpdate(string email);
+        Task UpdateAvatar(long userId, string avatar);
         Task<User?> GetById(long id);
         Task<User?> GetByIdForUpdate(long id);
         Task SaveContext();

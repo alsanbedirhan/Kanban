@@ -7,6 +7,7 @@ namespace Kanban.Services
     {
         Task<ServiceResult<List<BoardColumn>>> GetBoard(long userId, long boardId);
         Task<ServiceResult<List<BoardMemberResultModel>>> GetBoardMembers(long userId, long boardId);
+        Task<ServiceResult> UpdateAvatar(long userId, string avatar);
         Task<ServiceResult> DeleteMember(long userId, long boardId, long removeUserId);
         Task<ServiceResult> PromoteToOwner(long userId, long boardId, long promoteUserId);
         Task<ServiceResult<List<BoardOwnerResultModel>>> GetBoards(long userId);

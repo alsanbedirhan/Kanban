@@ -33,7 +33,8 @@ namespace Kanban.Controllers
                 {
                     UserId = User.GetUserId(),
                     FullName = User.Identity?.Name ?? "",
-                    Email = User.GetEmail()
+                    Email = User.GetEmail(),
+                    Avatar = User.GetAvatar()
                 }));
             }
             return Ok(ServiceResult.Fail(""));

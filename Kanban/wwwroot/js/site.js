@@ -74,6 +74,12 @@ async function fetchCurrentUser() {
         if (res.success) {
             AppState.isAuthenticated = true;
             AppState.currentUser = res.data;
+
+            if (AppState.currentUser.avatar === 'def' || !AppState.currentUser.avatar) {
+                initAvatarSelector();
+                document.getElementById('avatarModal').classList.add('active');
+            }
+
         } else {
             AppState.reset();
         }
@@ -104,12 +110,30 @@ function updateAuthUI() {
     const area = document.getElementById("authHeaderArea");
 
     if (AppState.isAuthenticated && AppState.currentUser) {
+
         const safeName = escapeHtml(AppState.currentUser.fullName);
+        const avatarPath = getAvatarPath(AppState.currentUser.avatar || 'def');
+
         area.innerHTML = `<button class="btn btn-secondary" onclick="confirmLogout()">🔓</button>`;
+
         authSection.innerHTML = `
-            <button class="btn btn-primary" style="width:100%; margin-bottom:10px;">${safeName}</button>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px; padding:10px; background:rgba(255,255,255,0.1); border-radius:8px;">
+                <img src="${avatarPath}" style="width:40px; height:40px; border-radius:50%; background:white; object-fit:cover;">
+                <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis;">
+                    ${safeName}
+                </div>
+            </div>
             <button class="btn btn-secondary" style="width:100%" onclick="confirmLogout()">Logout</button>
         `;
+
+
+
+        //const safeName = escapeHtml(AppState.currentUser.fullName);
+        //area.innerHTML = `<button class="btn btn-secondary" onclick="confirmLogout()">🔓</button>`;
+        //authSection.innerHTML = `
+        //    <button class="btn btn-primary" style="width:100%; margin-bottom:10px;">${safeName}</button>
+        //    <button class="btn btn-secondary" style="width:100%" onclick="confirmLogout()">Logout</button>
+        //`;
     } else {
         document.getElementById("boardHeader").style.display = "none";
         document.getElementById("boardHeaderTitle").textContent = "";
@@ -522,7 +546,7 @@ async function promoteToOwner(boardId, userId) {
     if (confirm.isConfirmed) {
         try {
             const response = await apiRequest('/Kanban/PromoteToOwner', {
-                method: 'POST',
+                method: 'PUT',
                 body: JSON.stringify({ boardId, userId })
             });
 
@@ -868,6 +892,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await fetchCurrentUser();
 
     if (AppState.isAuthenticated && AppState.currentUser) { loadBoards(); }
+    else { toggleSidebar(); }
 
     handleInviteStatus();
 });
@@ -941,5 +966,83 @@ function handleInviteStatus() {
         case 'ERROR':
             Swal.fire('Error', escapeHtml(window.SERVER_MESSAGE) || 'An error occurred while processing the invitation.', 'error');
             break;
+    }
+}
+
+const AVATAR_OPTIONS = [
+    "Abby", "Aiden", "Aneka", "Axel", "Bear", "Bella", "Brian", "Bubba", "Caleb", "Christopher", "Coco", "Cookie",
+    "Daisy", "Easton", "Elsie", "Felix", "Finn", "Gizmo", "Hazel", "Hunter", "Jack", "Jasper", "Julia", "Lucky",
+    "Luna", "Lydia", "Mason", "Maya", "Midnight", "Molly", "Nolan", "Oscar", "Pepper", "Rocky", "Scooter", "Shadow",
+    "Sophie", "Sparky", "Willow", "Zoe"
+];
+
+let selectedAvatarTemp = "Felix";
+
+function getAvatarPath(seed) {
+    if (seed === 'def') return '/avatars/Felix.svg';
+    return `/avatars/${seed}.svg`;
+}
+
+function initAvatarSelector() {
+    const container = document.getElementById('avatarSelectionArea');
+    if (!container) return;
+
+    container.style.display = 'grid';
+    container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(60px, 1fr))';
+    container.style.gap = '15px';
+    container.style.maxHeight = '300px';
+    container.style.overflowY = 'auto';
+    container.style.padding = '10px';
+
+    container.innerHTML = AVATAR_OPTIONS.map(name => `
+        <div style="text-align:center;">
+             <img src="${getAvatarPath(name)}" 
+                 class="avatar-option" 
+                 onclick="selectAvatarTemp('${name}', this)"
+                 alt="${name}"
+                 style="width:60px; height:60px; border-radius:50%; cursor:pointer; border:4px solid transparent; transition:transform 0.2s;">
+        </div>
+    `).join('');
+}
+
+function selectAvatarTemp(name, imgElement) {
+    selectedAvatarTemp = name;
+
+    document.querySelectorAll('.avatar-option').forEach(img => {
+        img.style.borderColor = 'transparent';
+        img.style.transform = 'scale(1)';
+    });
+
+    imgElement.style.borderColor = '#667eea';
+    imgElement.style.transform = 'scale(1.1)';
+}
+
+async function saveMyAvatar() {
+    try {
+        await apiRequest('/Kanban/UpdateAvatar', {
+            method: 'PUT',
+            body: JSON.stringify({ avatar : selectedAvatarTemp })
+        });
+
+        if (AppState.currentUser) {
+            AppState.currentUser.avatar = selectedAvatarTemp;
+        }
+
+        document.getElementById('avatarModal').classList.remove('active');
+
+        updateAuthUI();
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Looks great!',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000
+        });
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', 'Could not save avatar', 'error');
     }
 }

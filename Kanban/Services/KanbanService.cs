@@ -344,5 +344,18 @@ namespace Kanban.Services
                 return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
+
+        public async Task<ServiceResult> UpdateAvatar(long userId, string avatar)
+        {
+            try
+            {
+                await _userRepository.UpdateAvatar(userId, avatar);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
     }
 }

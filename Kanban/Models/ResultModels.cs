@@ -1,11 +1,15 @@
 ﻿
 namespace Kanban.Models
 {
-    public class UserResultModel
+    public class UserResultModel : AvatarResultModel
     {
         public long UserId { get; set; }
         public string? FullName { get; set; }
         public string Email { get; set; }
+    }
+    public class AvatarResultModel
+    {
+        public string Avatar { get; set; }
     }
     public class BoardResultModel : BoardInputModel
     {
@@ -67,8 +71,11 @@ namespace Kanban.Models
         public string Title { get; set; }
         public List<BoardCardResultModel> Cards { get; set; }
     }
-    public class BoardMemberResultModel : UserResultModel
+    public class BoardMemberResultModel
     {
+        public long UserId { get; set; }
+        public string? FullName { get; set; }
+        public string Email { get; set; }
         public string RoleCode { get; set; }
     }
     public class BoardCardResultModel

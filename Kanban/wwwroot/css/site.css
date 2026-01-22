@@ -143,6 +143,10 @@ input::-ms-reveal, input::-ms-clear {
     padding-top: 20px;
 }
 
+.board-actions-btn {
+    padding: 10px;
+}
+
 .menu-toggle {
     position: fixed;
     left: 20px;
@@ -163,13 +167,17 @@ input::-ms-reveal, input::-ms-clear {
     padding: 20px;
     border-radius: 12px;
     margin-bottom: 20px;
+    margin-top: 60px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
     gap: 15px;
-    margin-top: 60px;
+}
+
+#kanflowheader {
+    margin: 0px 60px 20px 60px;
 }
 
 .board {
@@ -416,6 +424,17 @@ input::-ms-reveal, input::-ms-clear {
 
     .header {
         align-items: flex-start;
+        padding: 10px;
+        gap: 5px;
+    }
+
+    #kanflowheader {
+        margin: 0px 0px 20px 50px;
+    }
+
+    .menu-toggle {
+        left: 10px;
+        right: 10px;
     }
 
     .board {
@@ -429,6 +448,7 @@ input::-ms-reveal, input::-ms-clear {
         max-width: 70vw;
         scroll-snap-align: center;
     }
+
     .board.is-dragging {
         scroll-snap-type: none !important;
         overflow-x: auto !important;

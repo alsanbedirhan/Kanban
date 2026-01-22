@@ -143,6 +143,10 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.Id)
                 .UseIdentityAlwaysColumn()
                 .HasColumnName("id");
+            entity.Property(e => e.Avatar)
+                .HasMaxLength(20)
+                .HasDefaultValueSql("'def'::character varying")
+                .HasColumnName("avatar");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");
