@@ -669,23 +669,54 @@ function renderColumns(columns) {
 }
 
 function initSortable() {
+    const boardElement = document.getElementById('board');
+
     document.querySelectorAll('.cards-container').forEach(container => {
         Sortable.create(container, {
             group: 'kanban',
             animation: 150,
+
+            delay: 100,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 5,
+
+            scroll: true,
+            scrollSensitivity: 80,
+            scrollSpeed: 10,
+            bubbleScroll: true,
+
+            onStart: function () {
+                if (boardElement && window.innerWidth < 768) {
+                    boardElement.classList.add('is-dragging');
+                }
+            },
+
             onEnd: async function (evt) {
+                if (boardElement) {
+                    boardElement.classList.remove('is-dragging');
+                }
+
                 const cardId = evt.item.dataset.cardId;
                 const newColumnId = evt.to.dataset.columnId;
                 const newOrder = evt.newIndex + 1;
+
+                if (evt.from === evt.to && evt.oldIndex === evt.newIndex) {
+                    return;
+                }
+
                 try {
                     await apiRequest('/Kanban/MoveCard', {
                         method: 'POST',
                         body: JSON.stringify({ boardId: AppState.currentBoardId, cardId, newColumnId, newOrder })
                     });
-                } catch {
-                    Swal.fire('Error', 'Card could not be moved', 'error');
+
+                    loadBoardData();
+
+                } catch (error) {
+                    console.error(error);
+                    Swal.fire('Hata', 'Kart taşınamadı, değişiklikler geri alınıyor...', 'error');
+                    loadBoardData();
                 }
-                loadBoardData();
             }
         });
     });

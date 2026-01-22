@@ -21,9 +21,10 @@
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <h2>kanflow.online</h2>
-            <button style="background:none; border:none; color:white; font-size:24px; cursor:pointer;" onclick="toggleSidebar()">×</button>
+            <button class="close-sidebar-btn" onclick="toggleSidebar()">×</button>
         </div>
-        <div style="flex:1; overflow-y:auto;">
+
+        <div class="sidebar-content">
             <div style="padding: 0 20px;">
                 <button class="add-board-btn" onclick="openNewBoardModal()">
                     + New Board
@@ -35,15 +36,14 @@
 
             <div class="sidebar-section-title">📋 Shared With Me</div>
             <ul class="board-list" id="sharedBoardList"></ul>
-
         </div>
 
-        <div style="padding:20px; border-top:1px solid #eee;" id="authSection">
+        <div class="sidebar-footer" id="authSection">
         </div>
     </div>
 
     <div class="container">
-        <div class="header" style="margin: 0px 50px 0px 50px">
+        <div class="header" id="kanflowheader">
             <h1>📋 kanflow</h1>
             <div id="authHeaderArea"></div>
         </div>
@@ -110,18 +110,19 @@
         </div>
     </form>
 
-    <div id="loadingOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); color:white; display:none; justify-content:center; align-items:center; font-size:22px; z-index:9999;">
-        Just a moment...
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <span>Just a moment...</span>
     </div>
 
     <template id="otpTemplate">
-        <div id="otp-inputs" style="display: flex; justify-content: center; gap: 8px; margin-top: 20px;">
-            <input type="text" class="otp-field" maxlength="1" style="width: 45px; height: 55px; text-align: center; font-size: 24px; font-weight: bold; border: 2px solid #ddd; border-radius: 8px; outline: none; transition: all 0.2s;" onfocus="this.style.borderColor='#3085d6'; this.style.boxShadow='0 0 8px rgba(48,133,214,0.3)';" onblur="this.style.borderColor='#ddd'; this.style.boxShadow='none';">
-            <input type="text" class="otp-field" maxlength="1" style="width: 45px; height: 55px; text-align: center; font-size: 24px; font-weight: bold; border: 2px solid #ddd; border-radius: 8px; outline: none; transition: all 0.2s;" onfocus="this.style.borderColor='#3085d6'; this.style.boxShadow='0 0 8px rgba(48,133,214,0.3)';" onblur="this.style.borderColor='#ddd'; this.style.boxShadow='none';">
-            <input type="text" class="otp-field" maxlength="1" style="width: 45px; height: 55px; text-align: center; font-size: 24px; font-weight: bold; border: 2px solid #ddd; border-radius: 8px; outline: none; transition: all 0.2s;" onfocus="this.style.borderColor='#3085d6'; this.style.boxShadow='0 0 8px rgba(48,133,214,0.3)';" onblur="this.style.borderColor='#ddd'; this.style.boxShadow='none';">
-            <input type="text" class="otp-field" maxlength="1" style="width: 45px; height: 55px; text-align: center; font-size: 24px; font-weight: bold; border: 2px solid #ddd; border-radius: 8px; outline: none; transition: all 0.2s;" onfocus="this.style.borderColor='#3085d6'; this.style.boxShadow='0 0 8px rgba(48,133,214,0.3)';" onblur="this.style.borderColor='#ddd'; this.style.boxShadow='none';">
-            <input type="text" class="otp-field" maxlength="1" style="width: 45px; height: 55px; text-align: center; font-size: 24px; font-weight: bold; border: 2px solid #ddd; border-radius: 8px; outline: none; transition: all 0.2s;" onfocus="this.style.borderColor='#3085d6'; this.style.boxShadow='0 0 8px rgba(48,133,214,0.3)';" onblur="this.style.borderColor='#ddd'; this.style.boxShadow='none';">
-            <input type="text" class="otp-field" maxlength="1" style="width: 45px; height: 55px; text-align: center; font-size: 24px; font-weight: bold; border: 2px solid #ddd; border-radius: 8px; outline: none; transition: all 0.2s;" onfocus="this.style.borderColor='#3085d6'; this.style.boxShadow='0 0 8px rgba(48,133,214,0.3)';" onblur="this.style.borderColor='#ddd'; this.style.boxShadow='none';">
+        <div class="otp-container">
+            <input type="text" class="otp-field" maxlength="1">
+            <input type="text" class="otp-field" maxlength="1">
+            <input type="text" class="otp-field" maxlength="1">
+            <input type="text" class="otp-field" maxlength="1">
+            <input type="text" class="otp-field" maxlength="1">
+            <input type="text" class="otp-field" maxlength="1">
         </div>
     </template>
 
