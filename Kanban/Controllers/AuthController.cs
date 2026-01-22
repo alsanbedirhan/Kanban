@@ -28,7 +28,7 @@ namespace Kanban.Controllers
                 return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
 
-            await signIn(new MyClaims { Id = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
+            await signIn(new MyClaims { UserId = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
 
             return Ok(ServiceResult.Ok());
         }
@@ -61,7 +61,7 @@ namespace Kanban.Controllers
                 return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
 
-            await signIn(new MyClaims { Id = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
+            await signIn(new MyClaims { UserId = result.Data.Id, FullName = result.Data.FullName, Email = result.Data.Email, SecurityStamp = result.Data.SecurityStamp });
 
             return Ok(ServiceResult.Ok());
         }
@@ -78,7 +78,7 @@ namespace Kanban.Controllers
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
                new ClaimsPrincipal(new ClaimsIdentity(new List<Claim>
            {
-                new Claim(ClaimTypes.NameIdentifier, claims.Id.ToString()),
+                new Claim(ClaimTypes.NameIdentifier, claims.UserId.ToString()),
                 new Claim(ClaimTypes.Name, claims.FullName),
                 new Claim(ClaimTypes.Email, claims.Email),
                 new Claim("SecurityStamp", claims.SecurityStamp)

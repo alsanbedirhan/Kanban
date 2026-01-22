@@ -1,6 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Services;
+using Mailjet.Client.Resources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,7 +17,7 @@ namespace Kanban.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetBoard(int boardId)
+        public async Task<IActionResult> GetBoard(long boardId)
         {
             var userId = User.GetUserId();
             var r = await _kanbanService.GetBoard(userId, boardId);
@@ -38,6 +39,37 @@ namespace Kanban.Controllers
                     HighlightColor = c.HighlightColor ?? ""
                 }).OrderBy(y => y.Order).ToList()
             }).ToList()));
+        }
+        [HttpGet]
+        public async Task<IActionResult> GetBoardMembers(long boardId)
+        {
+            var r = await _kanbanService.GetBoardMembers(User.GetUserId(), boardId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<List<BoardMemberResultModel>>.Ok(r.Data));
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteMember([FromBody] BoardMemberInputModel model)
+        {
+            var r = await _kanbanService.DeleteMember(User.GetUserId(), model.BoardId, model.UserId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+        [HttpPost]
+        public async Task<IActionResult> PromoteToOwner([FromBody] BoardMemberInputModel model)
+        {
+            var r = await _kanbanService.PromoteToOwner(User.GetUserId(), model.BoardId, model.UserId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
         }
 
         [HttpGet]

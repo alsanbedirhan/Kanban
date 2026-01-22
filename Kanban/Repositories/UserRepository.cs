@@ -38,16 +38,30 @@ namespace Kanban.Repositories
         {
             await _context.SaveChangesAsync();
         }
-
         public async Task SetCodeUsed(long id)
         {
             await _context.Userverifications.Where(x => x.Id == id)
                 .ExecuteUpdateAsync(x => x.SetProperty(u => u.IsUsed, true));
         }
-
         public async Task<User> Create(User user)
         {
             await _context.Users.AddAsync(user);
+
+            var l = await _context.Userinvites.Where(x => x.Email == user.Email && x.IsAccepted && !x.IsUsed).ToListAsync();
+
+            if (l.Any())
+            {
+                await _context.BoardMembers.AddRangeAsync(l.Select(bid => new BoardMember
+                {
+                    BoardId = bid.BoardId,
+                    RoleCode = "MEMBER",
+                    IsActive = true,
+                    UserId = user.Id
+                }));
+
+                l.ForEach(i => i.IsUsed = true);
+            }
+
             await SaveContext();
             return user;
         }
@@ -57,7 +71,6 @@ namespace Kanban.Repositories
             var now = await _dbDate.Now();
             return await _context.Userverifications.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
         }
-
         public async Task SaveVerifyCode(string email, string code)
         {
             var now = await _dbDate.Now();
@@ -71,13 +84,11 @@ namespace Kanban.Repositories
             await _context.Userverifications.AddAsync(uv);
             await SaveContext();
         }
-
         public async Task<Userverification?> GetLastVerify(string email)
         {
             return await _context.Userverifications.AsNoTracking().Where(x => x.Email == email && !x.IsUsed)
                 .OrderByDescending(x => x.Id).FirstOrDefaultAsync();
         }
-
         public async Task<long?> GetUserIdByEmail(string email)
         {
             return await _context.Users.AsNoTracking().Where(u => u.Email == email && u.IsActive)

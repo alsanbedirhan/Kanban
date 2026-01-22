@@ -167,9 +167,6 @@ namespace Kanban.Repositories
                 .Where(c => c.Id == cardId && c.IsActive)
                 .FirstOrDefaultAsync();
 
-            if (card == null)
-                throw new Exception("Card not found");
-
             var oldColumnId = card.BoardColumnId;
 
             await _context.BoardCards
@@ -229,6 +226,32 @@ namespace Kanban.Repositories
             await _context.Userinvites.AddAsync(invite);
             await _context.SaveChangesAsync();
             return invite;
+        }
+
+        public async Task<List<BoardMemberResultModel>> GetBoardMembers(long boardId)
+        {
+            return await _context.BoardMembers.AsNoTracking()
+                .Where(bm => bm.BoardId == boardId && bm.IsActive)
+                .Select(x => new BoardMemberResultModel { UserId = x.UserId, RoleCode = x.RoleCode, FullName = x.User.FullName, Email = x.User.Email })
+                .ToListAsync();
+        }
+
+        public async Task<bool> ValidateManageBoard(long userId, long boardId)
+        {
+            return await _context.BoardMembers.AnyAsync(b => b.UserId == userId && b.BoardId == boardId &&
+            b.RoleCode == "OWNER" && b.IsActive && b.Board.IsActive);
+        }
+
+        public Task DeleteMember(long boardId, long userId)
+        {
+            return _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
+                   .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
+        }
+
+        public Task PromoteToOwner(long boardId, long userId)
+        {
+            return _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
+                   .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.RoleCode, "OWNER"));
         }
     }
 }

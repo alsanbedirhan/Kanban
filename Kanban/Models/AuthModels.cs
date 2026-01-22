@@ -3,7 +3,6 @@ namespace Kanban.Models
 {
     public class MyClaims : UserResultModel
     {
-        public long Id { get; set; }
         public string? SecurityStamp { get; set; }
     }
     public class LoginViewModel : VerifyViewModel

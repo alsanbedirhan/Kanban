@@ -29,7 +29,12 @@ namespace Kanban.Controllers
         {
             if (User.Identity?.IsAuthenticated ?? false)
             {
-                return Ok(ServiceResult<UserResultModel>.Ok(new UserResultModel { FullName = User.Identity?.Name ?? "", Email = User.GetEmail() }));
+                return Ok(ServiceResult<UserResultModel>.Ok(new UserResultModel
+                {
+                    UserId = User.GetUserId(),
+                    FullName = User.Identity?.Name ?? "",
+                    Email = User.GetEmail()
+                }));
             }
             return Ok(ServiceResult.Fail(""));
         }

@@ -185,11 +185,11 @@ namespace Kanban.Services
         {
             try
             {
-                return ServiceResult<List<Models.BoardOwnerResultModel>>.Ok(await _kanbanRepository.GetBoards(userId));
+                return ServiceResult<List<BoardOwnerResultModel>>.Ok(await _kanbanRepository.GetBoards(userId));
             }
             catch (Exception)
             {
-                return ServiceResult<List<Models.BoardOwnerResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<List<BoardOwnerResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
 
@@ -292,6 +292,56 @@ namespace Kanban.Services
             catch
             {
                 return ServiceResult<InviteStatus>.Ok(InviteStatus.ERROR);
+            }
+        }
+
+        public async Task<ServiceResult<List<BoardMemberResultModel>>> GetBoardMembers(long userId, long boardId)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult<List<BoardMemberResultModel>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                }
+                return ServiceResult<List<BoardMemberResultModel>>.Ok(await _kanbanRepository.GetBoardMembers(boardId));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<List<BoardMemberResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult> DeleteMember(long userId, long boardId, long removeUserId)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
+                {
+                    return ServiceResult.Fail("Bu board'a yönetim yetkiniz bulunmamaktadır.");
+                }
+                await _kanbanRepository.DeleteMember(boardId, removeUserId);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult> PromoteToOwner(long userId, long boardId, long promoteUserId)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
+                {
+                    return ServiceResult.Fail("Bu board'a yönetim yetkiniz bulunmamaktadır.");
+                }
+                await _kanbanRepository.PromoteToOwner(boardId, promoteUserId);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
     }

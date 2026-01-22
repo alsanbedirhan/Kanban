@@ -158,7 +158,6 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
-            entity.Property(e => e.IsApproved).HasColumnName("is_approved");
             entity.Property(e => e.SecurityStamp)
                 .HasMaxLength(255)
                 .HasDefaultValueSql("(gen_random_uuid())::text")
@@ -183,6 +182,7 @@ public partial class KanbanDbContext : DbContext
                 .HasColumnName("email");
             entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
             entity.Property(e => e.IsAccepted).HasColumnName("is_accepted");
+            entity.Property(e => e.IsUsed).HasColumnName("is_used");
             entity.Property(e => e.SenderUserId).HasColumnName("sender_user_id");
 
             entity.HasOne(d => d.Board).WithMany(p => p.Userinvites)

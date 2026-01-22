@@ -420,16 +420,157 @@ async function showBoardMenu(boardId, boardName) {
     const result = await Swal.fire({
         title: escapeHtml(boardName),
         showCancelButton: true,
-        confirmButtonText: 'Add User',
+        confirmButtonText: 'Manage Users',
         confirmButtonColor: '#48bb78',
         cancelButtonText: 'Close',
         showDenyButton: true,
         denyButtonText: 'Delete Board',
         denyButtonColor: '#f56565'
     });
-    if (result.isConfirmed) addUserToBoard(boardId);
+    if (result.isConfirmed) openManageUsersModal(boardId);
     else if (result.isDenied) deleteBoard(boardId);
 }
+
+async function openManageUsersModal(boardId) {
+    try {
+        const res = await apiRequest(`/Kanban/GetBoardMembers?boardId=${boardId}`);
+        if (!res.success) throw new Error('Failed to load members');
+        const members = res.data;
+
+        const currentUserId = AppState.currentUser.userId;
+        const me = members.find(m => m.userId === currentUserId);
+        const amIOwner = me && me.roleCode === 'OWNER';
+
+        let membersHtml = `
+            <div style="text-align:left; max-height:300px; overflow-y:auto;">
+                <table style="width:100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #eee; text-align:left;">
+                            <th style="padding:8px;">User</th>
+                            <th style="padding:8px; text-align:center;">Role</th>
+                            <th style="padding:8px; text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        members.forEach(m => {
+            const isMe = m.userId === currentUserId;
+            const isTargetOwner = m.roleCode === 'OWNER';
+
+            let roleBadge = isTargetOwner
+                ? `<span style="width:80px; height:25px; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; background-color: #805ad5; color: white;">👑 Owner</span>`
+                : `<span style="width:80px; height:25px; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; background-color: #e2e8f0; color: #4a5568; border: 1px solid #cbd5e0;">👤 Member</span>`;
+
+            let buttons = '';
+
+            if (amIOwner && !isTargetOwner) {
+                buttons += `<button style="padding: 6px 10px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; margin-left: 5px; background-color: #6b46c1;" onclick="promoteToOwner(${boardId}, ${m.userId})" title="Make Owner">👑</button>`;
+
+                buttons += `<button style="padding: 6px 10px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; margin-left: 5px; background-color: #f56565;" onclick="removeMember(${boardId}, ${m.userId})" title="Remove User">🗑️</button>`;
+            }
+            else if (isMe) {
+                buttons = `<span style="font-size:11px; color:#aaa;">(It's you)</span>`;
+            }
+
+            membersHtml += `
+                <tr style="border-bottom: 1px solid #f7fafc;">
+                    <td style="padding:10px 8px;">
+                        <div style="font-weight:bold;">${escapeHtml(m.fullName)}</div>
+                        <div style="font-size:12px; color:#718096;">${escapeHtml(m.email)}</div>
+                    </td>
+                    <td style="padding:10px 8px; text-align:center;">${roleBadge}</td>
+                    <td style="padding:10px 8px; text-align:right; white-space:nowrap;">
+                        ${buttons}
+                    </td>
+                </tr>
+            `;
+        });
+
+        membersHtml += `</tbody></table></div>`;
+
+        Swal.fire({
+            title: 'Manage Users',
+            html: membersHtml,
+            width: '650px',
+            showCancelButton: true,
+            confirmButtonText: '➕ Invite User',
+            cancelButtonText: 'Close',
+            showCloseButton: true,
+        }).then((result) => {
+            if (result.isConfirmed) {
+                addUserToBoard(boardId);
+            }
+        });
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', 'Failed to load members.', 'error');
+    }
+}
+
+async function promoteToOwner(boardId, userId) {
+    const confirm = await Swal.fire({
+        title: 'Make Owner?',
+        text: "This user will have full control over the board.",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#805ad5',
+        confirmButtonText: 'Yes, Make Owner'
+    });
+
+    if (confirm.isConfirmed) {
+        try {
+            const response = await apiRequest('/Kanban/PromoteToOwner', {
+                method: 'POST',
+                body: JSON.stringify({ boardId, userId })
+            });
+
+            if (response.success) {
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+                Toast.fire({ icon: 'success', title: 'User promoted to Owner!' });
+            }
+            else {
+                Swal.fire('Error', response.errorMessage, 'error');
+            }
+        } catch {
+            Swal.fire('Error', 'Failed to promote user', 'error');
+        }
+        openManageUsersModal(boardId);
+    }
+}
+
+async function removeMember(boardId, userId) {
+    const confirm = await Swal.fire({
+        title: 'Remove User?',
+        text: "User will be removed from this board.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, remove'
+    });
+
+    if (confirm.isConfirmed) {
+        try {
+            const response = await apiRequest('/Kanban/DeleteMember', {
+                method: 'POST',
+                body: JSON.stringify({ boardId, userId })
+            });
+            if (response.success) {
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+                Toast.fire({ icon: 'success', title: 'User removed' });
+            }
+            else {
+                Swal.fire('Error', response.errorMessage, 'error');
+            }
+        } catch (e) {
+            Swal.fire('Error', 'Failed to remove user.', 'error');
+        }
+        openManageUsersModal(boardId);
+    }
+}
+
+
 
 async function addUserToBoard(boardId) {
     const { value: email } = await Swal.fire({

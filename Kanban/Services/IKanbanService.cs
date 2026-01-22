@@ -6,6 +6,9 @@ namespace Kanban.Services
     public interface IKanbanService
     {
         Task<ServiceResult<List<BoardColumn>>> GetBoard(long userId, long boardId);
+        Task<ServiceResult<List<BoardMemberResultModel>>> GetBoardMembers(long userId, long boardId);
+        Task<ServiceResult> DeleteMember(long userId, long boardId, long removeUserId);
+        Task<ServiceResult> PromoteToOwner(long userId, long boardId, long promoteUserId);
         Task<ServiceResult<List<BoardOwnerResultModel>>> GetBoards(long userId);
         Task<ServiceResult<Board>> CreateBoard(long userId, string title);
         Task<ServiceResult<BoardColumn>> AddColumn(long boardId, string title);

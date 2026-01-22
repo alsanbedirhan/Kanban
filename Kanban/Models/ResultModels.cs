@@ -3,6 +3,7 @@ namespace Kanban.Models
 {
     public class UserResultModel
     {
+        public long UserId { get; set; }
         public string? FullName { get; set; }
         public string Email { get; set; }
     }
@@ -13,10 +14,10 @@ namespace Kanban.Models
     }
     public class BoardOwnerResultModel
     {
-        public Kanban.Entities.Board Board { get; set; }
+        public Entities.Board Board { get; set; }
         public bool IsOwner { get; set; }
     }
-    public class BoardOutputModel: BoardInputModel
+    public class BoardOutputModel : BoardInputModel
     {
         public long Id { get; set; }
     }
@@ -55,11 +56,20 @@ namespace Kanban.Models
         public long BoardId { get; set; }
         public string? Title { get; set; }
     }
-    public class BoardColumnResultModel 
+    public class BoardMemberInputModel
+    {
+        public long BoardId { get; set; }
+        public long UserId { get; set; }
+    }
+    public class BoardColumnResultModel
     {
         public long Id { get; set; }
         public string Title { get; set; }
         public List<BoardCardResultModel> Cards { get; set; }
+    }
+    public class BoardMemberResultModel : UserResultModel
+    {
+        public string RoleCode { get; set; }
     }
     public class BoardCardResultModel
     {

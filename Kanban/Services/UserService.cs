@@ -37,7 +37,6 @@ namespace Kanban.Services
                     u.FullName = model.fullname;
                     u.HashPassword = hashedPassword;
                     u.IsActive = true;
-                    u.IsApproved = false;
                     await _userRepository.SaveContext();
                     return ServiceResult<User>.Ok(u);
                 }
@@ -48,8 +47,7 @@ namespace Kanban.Services
                         FullName = model.fullname,
                         Email = model.email,
                         IsActive = true,
-                        HashPassword = hashedPassword,
-                        IsApproved = false
+                        HashPassword = hashedPassword
                     }));
                 }
             }
