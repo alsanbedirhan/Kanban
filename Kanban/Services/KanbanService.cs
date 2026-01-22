@@ -29,7 +29,8 @@ namespace Kanban.Services
         {
             try
             {
-                if (dueDate < DateOnly.FromDateTime(DateTime.Today))
+                var now = await _dbDate.Now();
+                if (dueDate < DateOnly.FromDateTime(now.Date))
                 {
                     return ServiceResult<BoardCard>.Fail("Tarih bugünden önce olamaz.");
                 }
@@ -78,11 +79,11 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
                 }
-                //var u = await _userRepository.GetByEmail(email);
-                //if (u == null || !u.IsActive || !u.IsApproved)
-                //{
-                //    return ServiceResult.Fail("Mail adresi ile eşleşen kullanıcı bulunamadı, lütfen mail adresini kontrol ediniz.");
-                //}
+                var u = await _userRepository.GetUserIdByEmail(email);
+                if (u != null && await _kanbanRepository.CheckBoardMembers(u.Value, boardId))
+                {
+                    return ServiceResult<BoardCard>.Fail("Kullanıcı zaten üye.");
+                }
 
                 var i = await _kanbanRepository.AddInvite(senderUserId, boardId, email);
 
@@ -232,7 +233,7 @@ namespace Kanban.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        public async Task<ServiceResult<string>> VerifyActivationToken(string token)
+        public async Task<ServiceResult<InviteStatus>> VerifyActivationToken(long activeUserId, string token)
         {
             try
             {
@@ -246,7 +247,8 @@ namespace Kanban.Services
                     ValidateIssuerSigningKey = true,
                     ValidIssuer = _jwtSettings.Issuer,
                     ValidAudience = _jwtSettings.Audience,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key))
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key)),
+                    ClockSkew = TimeSpan.Zero
                 };
 
                 var claims = handler.ValidateToken(token, validations, out var tokenSecure) ?? throw new Exception();
@@ -257,30 +259,39 @@ namespace Kanban.Services
                     Email = claims.FindFirst(ClaimTypes.Email)!.Value,
                     BoardId = long.Parse(claims.FindFirst("BoardId")!.Value),
                 };
-
                 var now = await _dbDate.Now();
                 var i = await _kanbanRepository.GetInvite(v.InviteId);
                 if (i == null || i.IsAccepted || v.Email != i.Email || v.BoardId != i.BoardId || i.ExpiresAt < now)
                 {
                     throw new Exception();
                 }
-                // to do enum yap daha şekil olurrr
-                var u = await _userRepository.GetByEmail(v.Email);
+                var u = await _userRepository.GetUserIdByEmail(v.Email);
                 if (u != null)
                 {
-                    await _kanbanRepository.AddUserToBoard(u.Id, v.BoardId, "MEMBER");
-                    return ServiceResult<string>.Ok("ADDED");
+                    if (await _kanbanRepository.CheckBoardMembers(u.Value, v.BoardId))
+                    {
+                        return ServiceResult<InviteStatus>.Ok(InviteStatus.ALREADY);
+                    }
+                    if (activeUserId > 0 && activeUserId != u.Value)
+                    {
+                        return ServiceResult<InviteStatus>.Ok(InviteStatus.WRONG_ACC);
+                    }
                 }
-                else
+                await _kanbanRepository.SetAcceptedInvite(v.InviteId);
+                if (u != null)
                 {
-                    await _kanbanRepository.SetAcceptedInvite(v.InviteId);
+                    await _kanbanRepository.AddUserToBoard(u.Value, v.BoardId, "MEMBER");
+                    var r = ServiceResult<InviteStatus>.Ok(InviteStatus.ADDED);
+                    r.ErrorMessage = i.Email;
+                    return r;
                 }
-
-                return ServiceResult<string>.Ok("REGISTER");
+                var res = ServiceResult<InviteStatus>.Ok(InviteStatus.REGISTER);
+                res.ErrorMessage = i.Email;
+                return res;
             }
             catch
             {
-                return ServiceResult<string>.Fail("Aktivasyon bağlantısı geçersiz veya süresi dolmuş.");
+                return ServiceResult<InviteStatus>.Ok(InviteStatus.ERROR);
             }
         }
     }

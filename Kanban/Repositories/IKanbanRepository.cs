@@ -6,6 +6,7 @@ namespace Kanban.Repositories
     {
         Task<List<BoardColumn>> GetBoardColumns_Cards(long boardId);
         Task<List<Models.BoardOwnerResultModel>> GetBoards(long userId);
+        Task<bool> CheckBoardMembers(long userId, long boardId);
         Task<Userinvite?> GetInvite(long id);
         Task SetAcceptedInvite(long inviteId);
         Task<Userinvite> AddInvite(long senderUserId, long boardId, string email);

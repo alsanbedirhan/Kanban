@@ -16,13 +16,13 @@ namespace Kanban.Controllers
         {
             if (!string.IsNullOrEmpty(token))
             {
-                var r = _kanbanService.VerifyActivationToken(token);
+                var r = await _kanbanService.VerifyActivationToken(User.GetUserId(), token);
                 if (r != null)
                 {
                     return View(r);
                 }
             }
-            return View();
+            return View(ServiceResult<InviteStatus>.Ok(InviteStatus.NONE));
         }
         [HttpGet]
         public IActionResult Fetch()

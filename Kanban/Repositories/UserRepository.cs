@@ -77,5 +77,11 @@ namespace Kanban.Repositories
             return await _context.Userverifications.AsNoTracking().Where(x => x.Email == email && !x.IsUsed)
                 .OrderByDescending(x => x.Id).FirstOrDefaultAsync();
         }
+
+        public async Task<long?> GetUserIdByEmail(string email)
+        {
+            return await _context.Users.AsNoTracking().Where(u => u.Email == email && u.IsActive)
+                .Select(u => (long?)u.Id).FirstOrDefaultAsync();
+        }
     }
 }

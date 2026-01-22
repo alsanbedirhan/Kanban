@@ -16,7 +16,7 @@ namespace Kanban.Services
         Task<ServiceResult> DeleteCard(long userId, long cardId);
         Task<ServiceResult> InviteUserToBoard(long senderUserId, string senderFullName, string senderEmail, long boardId, string email);
         Task<ServiceResult> AddUserToBoard(long userId, long boardId, string roleCode);
-        Task<ServiceResult<string>> VerifyActivationToken(string token);
+        Task<ServiceResult<InviteStatus>> VerifyActivationToken(long activeUserId, string token);
         string GenerateJwt(string email, long inviteId, long boardId);
     }
 }

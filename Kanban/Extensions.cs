@@ -20,6 +20,15 @@ namespace Kanban
             return user.FindFirst(ClaimTypes.Name)?.Value ?? "";
         }
     }
+    public enum InviteStatus
+    {
+        ALREADY,
+        ADDED,
+        REGISTER,
+        ERROR,
+        NONE,
+        WRONG_ACC,
+    }
     public interface IDBDateTimeProvider
     {
         Task<DateTime> Now();

@@ -80,6 +80,11 @@ namespace Kanban.Repositories
             return b;
         }
 
+        public async Task<bool> CheckBoardMembers(long userId, long boardId)
+        {
+            return await _context.BoardMembers.AnyAsync(x => x.BoardId == boardId && x.UserId == userId && x.IsActive);
+        }
+
         public async Task AddUserToBoard(long userId, long boardId, string roleCode)
         {
             var b = new BoardMember

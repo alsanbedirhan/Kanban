@@ -11,7 +11,7 @@ namespace Kanban.Services
     public class EmailService : IEmailService
     {
         private readonly EmailSettings? _emailSettings;
-        public EmailService(IConfiguration config, IKanbanService kanbanService)
+        public EmailService(IConfiguration config)
         {
             _emailSettings = config.GetSection("EmailSettings").Get<EmailSettings>() ?? null;
         }
@@ -62,7 +62,7 @@ namespace Kanban.Services
             string html = "<h3>New Board Invitation</h3>" +
                 "<p><b>" + senderFullName + "</b> (" + senderEmail + ") has invited you to collaborate on the board <b>" + boardTitle + "</b>.</p>" +
                 "<p>Please log in to your Kanban account to accept or decline this invitation.</p>" +
-                "<p><a href=\"https://www." + _emailSettings.Domain + "?token= " + token + "\" style=\"font-weight:600;\">Open Kanban</a></p>" +
+                "<p><a href=\"https://www." + _emailSettings.Domain + "?token=" + token + "\" style=\"font-weight:600;\">Open Kanban</a></p>" +
                 "<p>If you did not expect this invitation, you can safely ignore this email.</p>";
 
             await SendEmail(to, "Board Invitation", html);
