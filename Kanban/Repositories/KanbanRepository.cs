@@ -133,12 +133,12 @@ namespace Kanban.Repositories
             await _context.BoardCards.Where(bc => bc.Id == cardId && bc.IsActive)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
 
-            var boardId = await _context.BoardCards
+            var board = await _context.BoardCards
         .Where(c => c.Id == cardId)
-        .Select(c => c.BoardColumn.BoardId)
+        .Select(c => new { c.BoardColumn.BoardId })
         .FirstOrDefaultAsync();
 
-            await TouchBoard(boardId);
+            await TouchBoard(board.BoardId);
         }
 
         public async Task DeleteColumn(long columnId)
@@ -146,12 +146,12 @@ namespace Kanban.Repositories
             await _context.BoardColumns.Where(bc => bc.Id == columnId && bc.IsActive)
                  .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
 
-            var boardId = await _context.BoardColumns
+            var board = await _context.BoardColumns
              .Where(c => c.Id == columnId)
-             .Select(c => c.BoardId)
+             .Select(c => new { c.BoardId })
              .FirstOrDefaultAsync();
 
-            await TouchBoard(boardId);
+            await TouchBoard(board.BoardId);
         }
 
         public async Task<Board?> GetBoard(long boardId)
@@ -187,13 +187,14 @@ namespace Kanban.Repositories
 
         public async Task MoveCard(long userId, long cardId, long newColumnId, int newOrder)
         {
-            var card = await _context.BoardCards.Include(x => x.BoardColumn)
+            var card = await _context.BoardCards
                 .Where(c => c.Id == cardId && c.IsActive)
+                .Select(x => new { x.BoardColumnId, x.BoardColumn.BoardId })
                 .FirstOrDefaultAsync();
 
             var oldColumnId = card.BoardColumnId;
 
-            var boardId = card.BoardColumn.BoardId;
+            var boardId = card.BoardId;
 
             await _context.BoardCards
                 .Where(c => c.BoardColumnId == newColumnId && c.OrderNo >= newOrder && c.IsActive)
@@ -328,6 +329,7 @@ namespace Kanban.Repositories
             _cache.Remove($"Board_{boardId}_Version");
             _cache.Remove($"Board_{boardId}_Members");
         }
+
         private async Task<List<BoardMember>> GetCachedBoardMembers(long boardId)
         {
             string cacheKey = $"Board_{boardId}_Members";
