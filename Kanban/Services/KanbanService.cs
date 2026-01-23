@@ -357,5 +357,21 @@ namespace Kanban.Services
                 return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
+
+        public async Task<ServiceResult<BoardRefresResultModel>> GetBoardVersion(long userId, long boardId)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult<BoardRefresResultModel>.Fail("Bu board'a yönetim yetkiniz bulunmamaktadır.");
+                }
+                return ServiceResult<BoardRefresResultModel>.Ok(await _kanbanRepository.GetBoardVersion(boardId));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<BoardRefresResultModel>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using Kanban.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System;
 using System.Net;
 using System.Net.Mail;
@@ -9,12 +10,14 @@ namespace Kanban.Repositories
 {
     public class UserRepository : IUserRepository
     {
+        private readonly IMemoryCache _cache;
         private readonly KanbanDbContext _context;
         private readonly IDBDateTimeProvider _dbDate;
 
-        public UserRepository(KanbanDbContext context, IDBDateTimeProvider dbDate)
+        public UserRepository(KanbanDbContext context, IMemoryCache cache, IDBDateTimeProvider dbDate)
         {
             _context = context;
+            _cache = cache;
             _dbDate = dbDate;
         }
 

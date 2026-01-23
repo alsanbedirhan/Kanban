@@ -49,6 +49,9 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.Title)
                 .HasMaxLength(100)
                 .HasColumnName("title");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("updated_at");
             entity.Property(e => e.UserId).HasColumnName("user_id");
         });
 
@@ -61,6 +64,7 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.Id)
                 .UseIdentityAlwaysColumn()
                 .HasColumnName("id");
+            entity.Property(e => e.AssigneeUserId).HasColumnName("assignee_user_id");
             entity.Property(e => e.BoardColumnId).HasColumnName("board_column_id");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
@@ -77,13 +81,14 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.OrderNo).HasColumnName("order_no");
             entity.Property(e => e.WarningDays).HasColumnName("warning_days");
 
+            entity.HasOne(d => d.AssigneeUser).WithMany(p => p.BoardCards)
+                .HasForeignKey(d => d.AssigneeUserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("board_cards_users_fk");
+
             entity.HasOne(d => d.BoardColumn).WithMany(p => p.BoardCards)
                 .HasForeignKey(d => d.BoardColumnId)
                 .HasConstraintName("board_cards_board_columns_fk");
-
-            entity.HasOne(d => d.CreatedByNavigation).WithMany(p => p.BoardCards)
-                .HasForeignKey(d => d.CreatedBy)
-                .HasConstraintName("board_cards_created_fk");
         });
 
         modelBuilder.Entity<BoardColumn>(entity =>

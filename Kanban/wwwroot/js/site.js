@@ -5,12 +5,20 @@ const AppState = {
     currentUser: null,
     currentBoardId: null,
     boards: [],
+    currentColumns: [],
+
+    lastSyncTime: null,
+    syncInterval: null,
 
     reset() {
         this.isAuthenticated = false;
         this.currentUser = null;
         this.currentBoardId = null;
         this.boards = [];
+        this.currentColumns = [];
+        this.stopPolling();
+        renderBoardList();
+        renderColumns([]);
     }
 };
 
@@ -26,6 +34,7 @@ function escapeHtml(unsafe) {
 
 function showLoading() { document.getElementById('loadingOverlay').style.display = 'flex'; }
 function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
+
 function getXsrfToken() {
     const name = "XSRF-TOKEN=";
     const decodedCookie = decodeURIComponent(document.cookie);
@@ -38,12 +47,15 @@ function getXsrfToken() {
 }
 
 async function apiRequest(endpoint, options = {}) {
-    showLoading();
+    const isPolling = endpoint.includes('CheckBoardVersion');
+    if (!isPolling) showLoading();
     try {
         const token = getXsrfToken();
         const response = await fetch(endpoint, {
             headers: {
                 'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
                 'X-XSRF-TOKEN': token,
                 ...options.headers
             },
@@ -64,9 +76,38 @@ async function apiRequest(endpoint, options = {}) {
         console.error('Error:', error);
         throw error;
     } finally {
-        hideLoading();
+        if (!isPolling) hideLoading();
     }
 }
+
+AppState.startPolling = function () {
+    if (this.syncInterval) clearInterval(this.syncInterval);
+
+    this.syncInterval = setInterval(async () => {
+        if (!this.currentBoardId || !this.lastSyncTime) return;
+
+        try {
+            const res = await apiRequest(`/Kanban/CheckBoardVersion?boardId=${this.currentBoardId}`);
+            if (!res.success) return;
+            const serverTime = new Date(res.data.lastUpdate).getTime();
+            const localTime = new Date(res.data.now).getTime();
+
+            if (serverTime > localTime) {
+                console.log("New changes detected! Refreshing...");
+                loadBoardData();
+            }
+        } catch (e) {
+            console.warn("Polling error:", e);
+        }
+    }, 5000);
+};
+
+AppState.stopPolling = function () {
+    if (this.syncInterval) {
+        clearInterval(this.syncInterval);
+        this.syncInterval = null;
+    }
+};
 
 async function fetchCurrentUser() {
     try {
@@ -117,23 +158,31 @@ function updateAuthUI() {
         area.innerHTML = `<button class="btn btn-secondary" onclick="confirmLogout()">🔓</button>`;
 
         authSection.innerHTML = `
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px; padding:10px; background:rgba(255,255,255,0.1); border-radius:8px;">
-                <img src="${avatarPath}" style="width:40px; height:40px; border-radius:50%; background:white; object-fit:cover;">
-                <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis;">
-                    ${safeName}
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+                
+                <div style="position:relative; cursor:pointer;" onclick="openAvatarModal()" title="Change Avatar">
+                    <img src="${avatarPath}" 
+                         style="width:50px; height:50px; border-radius:50%; background:white; object-fit:cover; border: 3px solid #667eea; transition: transform 0.2s, box-shadow 0.2s;"
+                         onmouseover="this.style.transform='scale(1.1)'; this.style.boxShadow='0 0 10px rgba(102, 126, 234, 0.6)';"
+                         onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
+                    
+                    <div style="position:absolute; bottom:-2px; right:-2px; background:#4a5568; color:white; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:10px; border:2px solid #1a202c;">
+                        ✎
+                    </div>
+                </div>
+
+                <div style="overflow:hidden;">
+                    <div style="font-weight:bold; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">
+                        ${safeName}
+                    </div>
+                    <div style="font-size:11px; color:#a0aec0; cursor:pointer;" onclick="openAvatarModal()">
+                        Change Avatar
+                    </div>
                 </div>
             </div>
             <button class="btn btn-secondary" style="width:100%" onclick="confirmLogout()">Logout</button>
         `;
 
-
-
-        //const safeName = escapeHtml(AppState.currentUser.fullName);
-        //area.innerHTML = `<button class="btn btn-secondary" onclick="confirmLogout()">🔓</button>`;
-        //authSection.innerHTML = `
-        //    <button class="btn btn-primary" style="width:100%; margin-bottom:10px;">${safeName}</button>
-        //    <button class="btn btn-secondary" style="width:100%" onclick="confirmLogout()">Logout</button>
-        //`;
     } else {
         document.getElementById("boardHeader").style.display = "none";
         document.getElementById("boardHeaderTitle").textContent = "";
@@ -327,14 +376,12 @@ async function handleLogout() {
     try {
         await apiRequest('/Auth/Logout', { method: 'POST' });
         await fetchCurrentUser();
-        const sidebar = document.getElementById('sidebar');
+        AppState.stopPolling();
         if (sidebar.classList.contains('open')) toggleSidebar();
         renderBoardList();
         renderColumns([]);
         Swal.fire('Success', 'Logged out successfully', 'success');
-    } catch {
-        Swal.fire('Error', 'Logout failed', 'error');
-    }
+    } catch { Swal.fire('Error', 'Logout failed', 'error'); }
 }
 
 function confirmLogout() {
@@ -360,14 +407,13 @@ function toggleSidebar() {
 async function loadBoards() {
     try {
         const res = await apiRequest('/Kanban/GetBoards');
+        if (!res.success) throw new Error('Failed');
         AppState.boards = res.data;
         renderBoardList();
         if (AppState.boards.length > 0 && !AppState.currentBoardId) {
             selectBoard(AppState.boards[0].id);
         }
-    } catch (e) {
-        console.error('Failed to load boards:', e);
-    }
+    } catch (e) { console.error('Failed to load boards:', e); }
 }
 
 function renderBoardList() {
@@ -375,20 +421,16 @@ function renderBoardList() {
         document.getElementById("boardHeader").style.display = "none";
         document.getElementById("boardHeaderTitle").textContent = "";
     }
-
     const list = document.getElementById('boardList');
     const sharedList = document.getElementById('sharedBoardList');
-
     const myBoards = AppState.boards.filter(b => b.isOwner === true);
     const sharedBoards = AppState.boards.filter(b => b.isOwner === false);
-
     const boardHtml = (b) => `
         <li class="board-item ${b.id === AppState.currentBoardId ? 'active' : ''}" onclick="selectBoard(${b.id})">
             <span>📊 ${escapeHtml(b.title)}</span>
             <div class="board-actions-btn" onclick="event.stopPropagation(); showBoardMenu(${b.id}, '${escapeHtml(b.title).replace(/'/g, "\\'")}')">⋮</div>
         </li>
     `;
-
     list.innerHTML = myBoards.map(boardHtml).join('');
     sharedList.innerHTML = sharedBoards.map(boardHtml).join('');
 }
@@ -396,9 +438,15 @@ function renderBoardList() {
 async function selectBoard(id) {
     const sidebar = document.getElementById('sidebar');
     if (sidebar.classList.contains('open')) toggleSidebar();
+
+    AppState.stopPolling();
+
     AppState.currentBoardId = id;
     renderBoardList();
-    loadBoardData();
+
+    await loadBoardData();
+
+    AppState.startPolling();
 }
 
 async function openNewBoardModal() {
@@ -412,10 +460,11 @@ async function openNewBoardModal() {
     });
     if (title) {
         try {
-            await apiRequest('/Kanban/CreateBoard', {
+            let res = await apiRequest('/Kanban/CreateBoard', {
                 method: 'POST',
                 body: JSON.stringify({ title })
             });
+            if (!res.success) throw new Error('Failed to create board');
             Swal.fire('Success', 'Board created successfully', 'success');
             loadBoards();
         } catch {
@@ -428,6 +477,14 @@ async function loadBoardData() {
     if (!AppState.currentBoardId) return;
     try {
         const columns = await apiRequest(`/Kanban/GetBoard?boardId=${AppState.currentBoardId}`);
+
+        AppState.currentColumns = columns.data;
+
+        let t = await apiRequest(`/Home/Now`);
+        if (t.success) {
+            AppState.lastSyncTime = t.data;
+        }
+
         renderColumns(columns.data);
         const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
         if (currentBoard) {
@@ -483,14 +540,13 @@ async function openManageUsersModal(boardId) {
             const isTargetOwner = m.roleCode === 'OWNER';
 
             let roleBadge = isTargetOwner
-                ? `<span style="width:80px; height:25px; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; background-color: #805ad5; color: white;">👑 Owner</span>`
-                : `<span style="width:80px; height:25px; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; background-color: #e2e8f0; color: #4a5568; border: 1px solid #cbd5e0;">👤 Member</span>`;
+                ? `<span style="padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; background-color: #805ad5; color: white;">👑 Owner</span>`
+                : `<span style="padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; background-color: #e2e8f0; color: #4a5568; border: 1px solid #cbd5e0;">👤 Member</span>`;
 
             let buttons = '';
 
             if (amIOwner && !isTargetOwner) {
                 buttons += `<button style="padding: 6px 10px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; margin-left: 5px; background-color: #6b46c1;" onclick="promoteToOwner(${boardId}, ${m.userId})" title="Make Owner">👑</button>`;
-
                 buttons += `<button style="padding: 6px 10px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; margin-left: 5px; background-color: #f56565;" onclick="removeMember(${boardId}, ${m.userId})" title="Remove User">🗑️</button>`;
             }
             else if (isMe) {
@@ -594,8 +650,6 @@ async function removeMember(boardId, userId) {
     }
 }
 
-
-
 async function addUserToBoard(boardId) {
     const { value: email } = await Swal.fire({
         title: 'Invite User',
@@ -674,13 +728,23 @@ function renderColumns(columns) {
                 cardBgColor = '#fee2e2';
             }
         }
+        const avatarHtml = card.assigneeAvatar
+            ? `<img src="${getAvatarPath(card.assigneeAvatar)}" title="${escapeHtml(card.assigneeName)}" class="card-avatar-small">`
+            : `<span class="card-avatar-empty" title="Unassigned">👤</span>`;
+
         return `
-                        <div class="card" data-card-id="${card.id}" style="background-color: ${cardBgColor}; transition: background-color 0.3s;">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div class="card" data-card-id="${card.id}" style="background-color: ${cardBgColor}; transition: background-color 0.3s;" onclick="openCardDetail(${card.id})">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
                                 <span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString('tr-TR')}</span>
-                                <span style="cursor:pointer" onclick="deleteCard(${card.id})">×</span>
+                                <span style="cursor:pointer; font-weight:bold; font-size:16px;" onclick="event.stopPropagation(); deleteCard(${card.id})">×</span>
                             </div>
-                            <p style="font-size:12px; color:#333; margin-top:8px; font-weight: 500;">${escapeHtml(card.desc)}</p>
+                            <p class="card-desc-truncate">${escapeHtml(card.desc)}</p>
+                            <div class="card-footer">
+                                <div style="font-size:10px; color:#999;">
+                                   ${card.assigneeName ? escapeHtml(card.assigneeName.split(' ')[0]) : 'Unassigned'}
+                                </div>
+                                ${avatarHtml}
+                            </div>
                         </div>
                     `;
     }).join('')}
@@ -694,39 +758,21 @@ function renderColumns(columns) {
 
 function initSortable() {
     const boardElement = document.getElementById('board');
-
     document.querySelectorAll('.cards-container').forEach(container => {
         Sortable.create(container, {
             group: 'kanban',
             animation: 150,
-
-            delay: 100,
-            delayOnTouchOnly: true,
-            touchStartThreshold: 5,
-
-            scroll: true,
-            scrollSensitivity: 80,
-            scrollSpeed: 10,
-            bubbleScroll: true,
-
+            delay: 100, delayOnTouchOnly: true, touchStartThreshold: 5,
+            scroll: true, scrollSensitivity: 80, scrollSpeed: 10, bubbleScroll: true,
             onStart: function () {
-                if (boardElement && window.innerWidth < 768) {
-                    boardElement.classList.add('is-dragging');
-                }
+                if (boardElement && window.innerWidth < 768) boardElement.classList.add('is-dragging');
             },
-
             onEnd: async function (evt) {
-                if (boardElement) {
-                    boardElement.classList.remove('is-dragging');
-                }
-
+                if (boardElement) boardElement.classList.remove('is-dragging');
                 const cardId = evt.item.dataset.cardId;
                 const newColumnId = evt.to.dataset.columnId;
                 const newOrder = evt.newIndex + 1;
-
-                if (evt.from === evt.to && evt.oldIndex === evt.newIndex) {
-                    return;
-                }
+                if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
 
                 try {
                     await apiRequest('/Kanban/MoveCard', {
@@ -738,12 +784,95 @@ function initSortable() {
 
                 } catch (error) {
                     console.error(error);
-                    Swal.fire('Hata', 'Kart taşınamadı, değişiklikler geri alınıyor...', 'error');
+                    Swal.fire('Hata', 'Kart taşınamadı.', 'error');
                     loadBoardData();
                 }
             }
         });
     });
+}
+
+async function openCardDetail(cardId) {
+    let card = null;
+    let columnId = null;
+
+    outerLoop:
+    for (const col of AppState.currentColumns) {
+        for (const c of col.cards) {
+            if (c.id == cardId) {
+                card = c;
+                columnId = col.id;
+                break outerLoop;
+            }
+        }
+    }
+
+    if (!card) return;
+
+    const membersRes = await apiRequest(`/Kanban/GetBoardMembers?boardId=${AppState.currentBoardId}`);
+    const members = membersRes.data;
+
+    let membersOptions = `<option value="">-- Unassigned --</option>`;
+    members.forEach(m => {
+        const selected = (card.assigneeId && m.userId == card.assigneeId) ? 'selected' : '';
+        membersOptions += `<option value="${m.userId}" ${selected}>${escapeHtml(m.fullName)}</option>`;
+    });
+
+    const { value: formValues } = await Swal.fire({
+        title: 'Card Details',
+        width: '600px',
+        html: `
+            <div style="text-align:left;">
+                <label style="font-weight:bold; color:#718096; font-size:12px;">DESCRIPTION</label>
+                <div style="background:#f7fafc; padding:10px; border-radius:6px; margin-top:5px; margin-bottom:15px; border:1px solid #e2e8f0; white-space:pre-wrap; max-height:200px; overflow-y:auto;">${escapeHtml(card.desc)}</div>
+                
+                <div style="display:flex; gap:20px; align-items:flex-end;">
+                    <div style="flex:1;">
+                        <label style="font-weight:bold; color:#718096; font-size:12px;">ASSIGN TO</label>
+                        <select id="detail-assignee" class="swal2-select" style="width:100%; margin-top:5px; display:flex;">
+                            ${membersOptions}
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-weight:bold; color:#718096; font-size:12px;">DUE DATE</label>
+                        <input type="text" class="swal2-input" style="width:100%; margin-top:5px; height:42px; background:#f7fafc;" value="${new Date(card.dueDate).toLocaleDateString()}" disabled>
+                    </div>
+                </div>
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Save Changes',
+        showDenyButton: true,
+        denyButtonText: '🗑️ Delete Card',
+        denyButtonColor: '#f56565',
+        preConfirm: () => {
+            return {
+                assigneeId: document.getElementById('detail-assignee').value
+            };
+        }
+    });
+
+    if (formValues) {
+        const newAssigneeId = formValues.assigneeId ? parseInt(formValues.assigneeId) : null;
+
+        if (newAssigneeId != card.assigneeId) {
+            try {
+                await apiRequest('/Kanban/AssignCard', {
+                    method: 'POST',
+                    body: JSON.stringify({ cardId: card.id, userId: newAssigneeId })
+                });
+                loadBoardData();
+
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+                Toast.fire({ icon: 'success', title: 'Card updated' });
+            } catch {
+                Swal.fire('Error', 'Failed to update card', 'error');
+            }
+        }
+    }
+    else if (Swal.getDenyButton() && Swal.getDenyButton().dataset.isDenied === "true") {
+        deleteCard(card.id);
+    }
 }
 
 async function openNewColumnModal() {
@@ -934,7 +1063,6 @@ function handleInviteStatus() {
 
         case 'WRONG_ACCOUNT':
             const parts = (window.SERVER_MESSAGE || "").split('|');
-
             const currentEmail = escapeHtml(parts[0] || "Unknown");
             const targetEmail = escapeHtml(parts[1] || "Unknown");
 
@@ -983,6 +1111,25 @@ function getAvatarPath(seed) {
     return `/avatars/${seed}.svg`;
 }
 
+function openAvatarModal() {
+    initAvatarSelector();
+
+    if (AppState.currentUser && AppState.currentUser.avatar && AppState.currentUser.avatar !== 'def') {
+        selectedAvatarTemp = AppState.currentUser.avatar;
+        setTimeout(() => {
+            const allImgs = document.querySelectorAll('.avatar-option');
+            allImgs.forEach(img => {
+                if (img.alt === selectedAvatarTemp) {
+                    img.style.borderColor = '#667eea';
+                    img.style.transform = 'scale(1.1)';
+                }
+            });
+        }, 100);
+    }
+
+    document.getElementById('avatarModal').classList.add('active');
+}
+
 function initAvatarSelector() {
     const container = document.getElementById('avatarSelectionArea');
     if (!container) return;
@@ -1007,29 +1154,26 @@ function initAvatarSelector() {
 
 function selectAvatarTemp(name, imgElement) {
     selectedAvatarTemp = name;
-
     document.querySelectorAll('.avatar-option').forEach(img => {
         img.style.borderColor = 'transparent';
         img.style.transform = 'scale(1)';
     });
-
     imgElement.style.borderColor = '#667eea';
     imgElement.style.transform = 'scale(1.1)';
 }
 
 async function saveMyAvatar() {
     try {
-        await apiRequest('/Kanban/UpdateAvatar', {
+        let res = await apiRequest('/Kanban/UpdateAvatar', {
             method: 'PUT',
-            body: JSON.stringify({ avatar : selectedAvatarTemp })
+            body: JSON.stringify({ avatar: selectedAvatarTemp })
         });
+        if (!res.success) throw new Error('Could not update avatar');
 
         if (AppState.currentUser) {
             AppState.currentUser.avatar = selectedAvatarTemp;
         }
-
         document.getElementById('avatarModal').classList.remove('active');
-
         updateAuthUI();
 
         Swal.fire({

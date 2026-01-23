@@ -25,7 +25,9 @@ public partial class BoardCard
 
     public string? HighlightColor { get; set; }
 
-    public virtual BoardColumn BoardColumn { get; set; } = null!;
+    public long? AssigneeUserId { get; set; }
 
-    public virtual User CreatedByNavigation { get; set; } = null!;
+    public virtual User? AssigneeUser { get; set; }
+
+    public virtual BoardColumn BoardColumn { get; set; } = null!;
 }

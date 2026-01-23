@@ -1,15 +1,18 @@
 using Kanban.Models;
 using Kanban.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
 
 namespace Kanban.Controllers
 {
     public class HomeController : Controller
     {
         private readonly IKanbanService _kanbanService;
-        public HomeController(IKanbanService kanbanService)
+        private readonly IDBDateTimeProvider _dbDate;
+        public HomeController(IKanbanService kanbanService, IDBDateTimeProvider dbDate)
         {
             _kanbanService = kanbanService;
+            _dbDate = dbDate;
         }
         [HttpGet]
         public async Task<IActionResult> Index(string? token)
@@ -38,6 +41,11 @@ namespace Kanban.Controllers
                 }));
             }
             return Ok(ServiceResult.Fail(""));
+        }
+        [HttpGet]
+        public async Task<IActionResult> Now()
+        {
+            return Ok(ServiceResult<DateTime>.Ok(await _dbDate.Now()));
         }
     }
 }

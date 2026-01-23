@@ -56,6 +56,13 @@ builder.Services.AddAuthentication(options =>
     {
         OnValidatePrincipal = async context =>
         {
+            var acceptHeader = context.Request.Headers["Accept"].ToString();
+
+            if (!string.IsNullOrEmpty(acceptHeader) && acceptHeader.Contains("image/"))
+            {
+                return;
+            }
+
             var userIdClaim = context.Principal.FindFirst(ClaimTypes.NameIdentifier);
             var stampClaim = context.Principal.FindFirst("SecurityStamp");
 
@@ -79,6 +86,19 @@ builder.Services.AddAuthentication(options =>
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
             }
+        },
+
+        OnRedirectToLogin = async context =>
+        {
+            if ((context.Request.Headers.ContainsKey("X-Requested-With") && context.Request.Headers["X-Requested-With"].ToString() == "XMLHttpRequest") ||
+            (context.Request.Headers.ContainsKey("Accept") && context.Request.Headers["Accept"].ToString().Contains("application/json")) ||
+            (context.Request.Headers.ContainsKey("Content-Type") && context.Request.Headers["Content-Type"].ToString().Contains("application/json")))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
         }
     };
 });

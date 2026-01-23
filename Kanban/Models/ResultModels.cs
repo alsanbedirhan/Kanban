@@ -7,6 +7,11 @@ namespace Kanban.Models
         public string? FullName { get; set; }
         public string Email { get; set; }
     }
+    public class BoardRefresResultModel
+    {
+        public DateTime LastUpdate { get; set; }
+        public DateTime Now { get; set; }
+    }
     public class AvatarResultModel
     {
         public string Avatar { get; set; }
@@ -86,5 +91,7 @@ namespace Kanban.Models
         public DateOnly DueDate { get; set; }
         public int WarningDays { get; set; }
         public string HighlightColor { get; set; }
+        public string AssigneeName { get; set; }
+        public string AssigneeAvatar { get; set; }
     }
 }

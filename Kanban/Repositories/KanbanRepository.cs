@@ -1,6 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Linq;
 
 namespace Kanban.Repositories
@@ -9,19 +10,24 @@ namespace Kanban.Repositories
     {
         private readonly KanbanDbContext _context;
         private readonly IDBDateTimeProvider _dbDate;
-        public KanbanRepository(KanbanDbContext context, IDBDateTimeProvider dbDate)
+        private readonly IMemoryCache _cache;
+        public KanbanRepository(KanbanDbContext context, IMemoryCache cache, IDBDateTimeProvider dbDate)
         {
             _context = context;
+            _cache = cache;
             _dbDate = dbDate;
         }
 
         public async Task<Board> AddBoard(long userId, string title)
         {
+            var now = await _dbDate.Now();
             var b = new Board
             {
                 Title = title,
                 IsActive = true,
                 UserId = userId,
+                UpdatedAt = now,
+                CreatedAt = now,
                 BoardColumns = new List<BoardColumn> { new BoardColumn {
                     IsActive = true,
                     Title = "To Do"
@@ -64,6 +70,7 @@ namespace Kanban.Repositories
 
             await _context.BoardCards.AddAsync(b);
             await _context.SaveChangesAsync();
+            await TouchBoard(b.BoardColumn.BoardId);
             return b;
         }
 
@@ -77,6 +84,7 @@ namespace Kanban.Repositories
             };
             await _context.BoardColumns.AddAsync(b);
             await _context.SaveChangesAsync();
+            await TouchBoard(boardId);
             return b;
         }
 
@@ -110,6 +118,8 @@ namespace Kanban.Repositories
                 await _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
                    .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
             }
+
+            await TouchBoard(boardId);
         }
 
         public async Task SetAcceptedInvite(long inviteId)
@@ -122,12 +132,26 @@ namespace Kanban.Repositories
         {
             await _context.BoardCards.Where(bc => bc.Id == cardId && bc.IsActive)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
+
+            var boardId = await _context.BoardCards
+        .Where(c => c.Id == cardId)
+        .Select(c => c.BoardColumn.BoardId)
+        .FirstOrDefaultAsync();
+
+            await TouchBoard(boardId);
         }
 
         public async Task DeleteColumn(long columnId)
         {
             await _context.BoardColumns.Where(bc => bc.Id == columnId && bc.IsActive)
                  .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
+
+            var boardId = await _context.BoardColumns
+             .Where(c => c.Id == columnId)
+             .Select(c => c.BoardId)
+             .FirstOrDefaultAsync();
+
+            await TouchBoard(boardId);
         }
 
         public async Task<Board?> GetBoard(long boardId)
@@ -163,11 +187,13 @@ namespace Kanban.Repositories
 
         public async Task MoveCard(long userId, long cardId, long newColumnId, int newOrder)
         {
-            var card = await _context.BoardCards
+            var card = await _context.BoardCards.Include(x => x.BoardColumn)
                 .Where(c => c.Id == cardId && c.IsActive)
                 .FirstOrDefaultAsync();
 
             var oldColumnId = card.BoardColumnId;
+
+            var boardId = card.BoardColumn.BoardId;
 
             await _context.BoardCards
                 .Where(c => c.BoardColumnId == newColumnId && c.OrderNo >= newOrder && c.IsActive)
@@ -179,11 +205,14 @@ namespace Kanban.Repositories
                     .SetProperty(x => x.BoardColumnId, newColumnId)
                     .SetProperty(x => x.OrderNo, newOrder));
 
+            await TouchBoard(boardId);
         }
 
         public async Task<bool> ValidateBoardWithBoardId(long userId, long boardId)
         {
-            return await _context.BoardMembers.AnyAsync(b => b.UserId == userId && b.BoardId == boardId && b.IsActive && b.Board.IsActive);
+            var members = await GetCachedBoardMembers(boardId);
+
+            return members.Any(m => m.UserId == userId);
         }
 
         public async Task<bool> ValidateBoardWithCardId(long userId, long cardId)
@@ -238,20 +267,82 @@ namespace Kanban.Repositories
 
         public async Task<bool> ValidateManageBoard(long userId, long boardId)
         {
-            return await _context.BoardMembers.AnyAsync(b => b.UserId == userId && b.BoardId == boardId &&
-            b.RoleCode == "OWNER" && b.IsActive && b.Board.IsActive);
+            var members = await GetCachedBoardMembers(boardId);
+
+            return members.Any(m => m.UserId == userId && m.RoleCode == "OWNER");
         }
 
-        public Task DeleteMember(long boardId, long userId)
+        public async Task DeleteMember(long boardId, long userId)
         {
-            return _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
+            await _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
                    .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
+            await TouchBoard(boardId);
         }
 
-        public Task PromoteToOwner(long boardId, long userId)
+        public async Task PromoteToOwner(long boardId, long userId)
         {
-            return _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
+            await _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
                    .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.RoleCode, "OWNER"));
+            await TouchBoard(boardId);
+        }
+
+        public async Task<BoardRefresResultModel> GetBoardVersion(long boardId)
+        {
+            var now = await _dbDate.Now();
+            string cacheKey = $"Board_{boardId}_Version";
+
+            if (!_cache.TryGetValue(cacheKey, out DateTime lastActivity))
+            {
+                lastActivity = await _context.Boards
+                    .Where(b => b.Id == boardId)
+                    .Select(b => b.UpdatedAt)
+                    .FirstOrDefaultAsync();
+
+                _cache.Set(cacheKey, lastActivity, TimeSpan.FromHours(1));
+            }
+
+            return new BoardRefresResultModel { LastUpdate = lastActivity, Now = now };
+        }
+
+        public async Task AssignUserToCard(long cardId, long userId)
+        {
+            var card = await _context.BoardCards
+                .Where(c => c.Id == cardId)
+                .Select(c => new { c.BoardColumn.BoardId })
+                .FirstOrDefaultAsync();
+
+            await _context.BoardCards
+                .Where(c => c.Id == cardId)
+                .ExecuteUpdateAsync(c => c.SetProperty(x => x.AssigneeUserId, userId));
+
+            await TouchBoard(card.BoardId);
+        }
+
+        private async Task TouchBoard(long boardId)
+        {
+            var now = await _dbDate.Now();
+            await _context.Boards
+                .Where(b => b.Id == boardId)
+                .ExecuteUpdateAsync(x => x.SetProperty(b => b.UpdatedAt, now));
+
+            _cache.Remove($"Board_{boardId}_Version");
+            _cache.Remove($"Board_{boardId}_Members");
+        }
+        private async Task<List<BoardMember>> GetCachedBoardMembers(long boardId)
+        {
+            string cacheKey = $"Board_{boardId}_Members";
+
+            if (!_cache.TryGetValue(cacheKey, out List<BoardMember> members))
+            {
+                members = await _context.BoardMembers
+                    .AsNoTracking()
+                    .Where(b => b.BoardId == boardId && b.IsActive)
+                    .ToListAsync();
+
+                _cache.Set(cacheKey, members, TimeSpan.FromHours(1));
+            }
+
+            return members;
         }
     }
 }

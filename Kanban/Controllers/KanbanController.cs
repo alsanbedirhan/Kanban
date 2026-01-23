@@ -4,6 +4,7 @@ using Kanban.Services;
 using Mailjet.Client.Resources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Kanban.Controllers
 {
@@ -36,7 +37,9 @@ namespace Kanban.Controllers
                     Order = c.OrderNo,
                     DueDate = c.DueDate,
                     WarningDays = c.WarningDays,
-                    HighlightColor = c.HighlightColor ?? ""
+                    HighlightColor = c.HighlightColor ?? "",
+                    AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
+                    AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
                 }).OrderBy(y => y.Order).ToList()
             }).ToList()));
         }
@@ -81,7 +84,29 @@ namespace Kanban.Controllers
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
+            var identity = HttpContext.User.Identity as ClaimsIdentity;
+            if (identity != null)
+            {
+                var existingClaim = identity.FindFirst("Avatar");
+                if (existingClaim != null)
+                {
+                    identity.RemoveClaim(existingClaim);
+                }
+                identity.AddClaim(new Claim("Avatar", model.Avatar));
+            }
+
             return Ok(ServiceResult.Ok());
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> CheckBoardVersion(long boardId)
+        {
+            var r = await _kanbanService.GetBoardVersion(User.GetUserId(), boardId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<BoardRefresResultModel>.Ok(r.Data));
         }
 
         [HttpGet]

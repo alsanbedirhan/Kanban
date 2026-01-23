@@ -15,6 +15,8 @@ public partial class Board
 
     public DateTime CreatedAt { get; set; }
 
+    public DateTime UpdatedAt { get; set; }
+
     public virtual ICollection<BoardColumn> BoardColumns { get; set; } = new List<BoardColumn>();
 
     public virtual ICollection<BoardMember> BoardMembers { get; set; } = new List<BoardMember>();
