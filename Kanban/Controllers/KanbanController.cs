@@ -1,10 +1,7 @@
-﻿using Kanban.Entities;
-using Kanban.Models;
+﻿using Kanban.Models;
 using Kanban.Services;
-using Mailjet.Client.Resources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Kanban.Controllers
 {
@@ -26,23 +23,7 @@ namespace Kanban.Controllers
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
-            return Ok(ServiceResult<List<BoardColumnResultModel>>.Ok(r.Data.Select(x => new BoardColumnResultModel
-            {
-                Id = x.Id,
-                Title = x.Title,
-                Cards = x.BoardCards.Select(c => new BoardCardResultModel
-                {
-                    Id = c.Id,
-                    Desc = c.Desc,
-                    Order = c.OrderNo,
-                    DueDate = c.DueDate,
-                    WarningDays = c.WarningDays,
-                    HighlightColor = c.HighlightColor ?? "",
-                    AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
-                    AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
-                    AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
-                }).OrderBy(y => y.Order).ToList()
-            }).ToList()));
+            return Ok(ServiceResult<List<BoardColumnResultModel>>.Ok(r.Data));
         }
 
         [HttpGet]
@@ -206,6 +187,71 @@ namespace Kanban.Controllers
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
             return Ok(ServiceResult.Ok());
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetInvites()
+        {
+            var r = await _kanbanService.GetInvites(User.GetEmail());
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<List<InviteResultModel>>.Ok(r.Data));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetNotifications()
+        {
+            var r = await _kanbanService.GetNotifications(User.GetUserId());
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<List<NotificationResultModel>>.Ok(r.Data));
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> WorkInvite(long inviteId, bool isAccepted)
+        {
+            var r = await _kanbanService.WorkInvite(User.GetEmail(), User.GetUserId(), inviteId, isAccepted);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpDelete]
+        public async Task<IActionResult> DeleteNotification(long id)
+        {
+            var r = await _kanbanService.DeleteNotification(User.GetUserId(), id);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpDelete]
+        public async Task<IActionResult> DeleteNotifications()
+        {
+            var r = await _kanbanService.DeleteNotifications(User.GetUserId());
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+        [HttpGet]
+        public async Task<IActionResult> CheckUpdates()
+        {
+            var r = await _kanbanService.CheckUpdates(User.GetUserId(), User.GetEmail());
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<bool>.Ok(r.Data));
         }
     }
 }

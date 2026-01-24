@@ -12,6 +12,12 @@ namespace Kanban.Models
         public DateTime LastUpdate { get; set; }
         public DateTime Now { get; set; }
     }
+    public class InviteResultModel
+    {
+        public long Id { get; set; }
+        public string BoardName { get; set; }
+        public string InviterName { get; set; }
+    }
     public class AvatarResultModel
     {
         public string Avatar { get; set; }
@@ -84,6 +90,12 @@ namespace Kanban.Models
         public long Id { get; set; }
         public string Title { get; set; }
         public List<BoardCardResultModel> Cards { get; set; }
+    }
+    public class NotificationResultModel
+    {
+        public long Id { get; set; }
+        public string Message { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
     public class BoardMemberResultModel
     {

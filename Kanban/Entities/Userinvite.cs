@@ -7,8 +7,6 @@ public partial class Userinvite
 {
     public long Id { get; set; }
 
-    public DateTime ExpiresAt { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
     public bool IsAccepted { get; set; }

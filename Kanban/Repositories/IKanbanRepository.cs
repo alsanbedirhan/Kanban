@@ -1,18 +1,17 @@
 ﻿using Kanban.Entities;
+using Kanban.Models;
 
 namespace Kanban.Repositories
 {
     public interface IKanbanRepository
     {
-        Task<List<BoardColumn>> GetBoardColumns_Cards(long boardId);
-        Task<Models.BoardRefresResultModel> GetBoardVersion(long boardId);
-        Task<List<Models.BoardOwnerResultModel>> GetBoards(long userId);
-        Task<List<Models.BoardMemberResultModel>> GetBoardMembers(long boardId);
+        Task<List<BoardColumnResultModel>> GetBoardColumns_Cards(long boardId);
+        Task<BoardRefresResultModel> GetBoardVersion(long boardId);
+        Task<List<BoardOwnerResultModel>> GetBoards(long userId);
+        Task WorkInvite(long inviteId, long userId, long boardId, bool isAccepted);
+        Task<List<BoardMemberResultModel>> GetBoardMembers(long boardId);
         Task<bool> CheckBoardMembers(long userId, long boardId);
-        Task<Userinvite?> GetInvite(long id);
-        Task SetAcceptedInvite(long inviteId);
         Task<long?> GetCardAssignee(long cardId);
-        Task<Userinvite> AddInvite(long senderUserId, long boardId, string email);
         Task<string> GetBoardTitle(long boardId);
         Task<Board?> GetBoard(long boardId);
         Task<Board> AddBoard(long userId, string title);

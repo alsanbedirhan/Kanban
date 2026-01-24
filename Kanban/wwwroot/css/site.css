@@ -14,13 +14,14 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-body {
+html, body {
+    width: 100%;
+    height: 100%;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: var(--bg-gradient);
-    min-height: 100vh;
     color: var(--text-dark);
+    overflow: hidden;
     transition: padding-left 0.3s ease;
-    overflow-x: hidden;
 }
 
 input::-ms-reveal, input::-ms-clear {
@@ -140,7 +141,12 @@ input::-ms-reveal, input::-ms-clear {
     width: 95%;
     max-width: 1600px;
     margin: 0 auto;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
     padding-top: 20px;
+    padding-bottom: 0;
+    overflow: hidden;
 }
 
 .board-actions-btn {
@@ -167,27 +173,31 @@ input::-ms-reveal, input::-ms-clear {
     padding: 20px;
     border-radius: 12px;
     margin-bottom: 20px;
-    margin-top: 60px;
+    margin-top: 20px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
     gap: 15px;
-    align-items: center;
+    flex-shrink: 0;
 }
 
 #kanflowheader {
-    margin: 0px 60px 20px 60px;
+    margin: 0 60px 20px 60px;
+    flex-shrink: 0;
 }
 
 .board {
     display: flex;
     gap: 20px;
-    overflow-x: auto;
-    padding-bottom: 20px;
-    height: calc(100vh - 220px);
+    padding-bottom: 50px;
     align-items: flex-start;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
     .board::-webkit-scrollbar {
@@ -210,7 +220,8 @@ input::-ms-reveal, input::-ms-clear {
     background: #f8f9fa;
     border-radius: 12px;
     min-width: 300px;
-    max-width: 300px;
+    width: 300px;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     max-height: 100%;
@@ -226,6 +237,7 @@ input::-ms-reveal, input::-ms-clear {
     align-items: center;
     background: white;
     border-radius: 12px 12px 0 0;
+    flex-shrink: 0;
 }
 
 .cards-container {
@@ -252,7 +264,7 @@ input::-ms-reveal, input::-ms-clear {
 
 .card-desc-truncate {
     display: -webkit-box;
-    -webkit-line-clamp: 3; /* Max 3 satýr */
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -451,8 +463,42 @@ input::-ms-reveal, input::-ms-clear {
     font-size: 18px;
 }
 
-@media screen and (max-width: 768px) {
+.notification-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    background-color: #e53e3e;
+    border: 2px solid white;
+    border-radius: 50%;
+    display: none;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
 
+    .notification-badge.pulse {
+        animation: pulse-red 2s infinite;
+    }
+
+@keyframes pulse-red {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.7);
+    }
+
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(229, 62, 62, 0);
+    }
+
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(229, 62, 62, 0);
+    }
+}
+
+@media screen and (max-width: 768px) {
     body.sidebar-open {
         padding-left: 0 !important;
         overflow: hidden;
@@ -518,15 +564,16 @@ input::-ms-reveal, input::-ms-clear {
     }
 
     .board {
-        height: calc(100vh - 200px);
-        padding-right: 15px;
-        scroll-snap-type: x mandatory;
+        flex: 1;
+        height: auto;
+        gap: 10px;
+        /*scroll-snap-type: x mandatory;*/
     }
 
     .column {
         min-width: 70vw;
         max-width: 70vw;
-        scroll-snap-align: center;
+       /* scroll-snap-align: start;*/
     }
 
     .board.is-dragging {

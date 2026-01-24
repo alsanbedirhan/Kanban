@@ -1,4 +1,5 @@
 ﻿using Kanban.Entities;
+using Kanban.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System;
@@ -74,6 +75,13 @@ namespace Kanban.Repositories
             var now = await _dbDate.Now();
             return await _context.Userverifications.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
         }
+
+        public async Task<int> CheckInviteCountToday(string email)
+        {
+            var now = await _dbDate.Now();
+            return await _context.Userinvites.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
+        }
+
         public async Task SaveVerifyCode(string email, string code)
         {
             var now = await _dbDate.Now();
@@ -102,6 +110,106 @@ namespace Kanban.Repositories
         {
             await _context.Users.Where(u => u.Id == userId && u.IsActive)
                 .ExecuteUpdateAsync(u => u.SetProperty(user => user.Avatar, avatar));
+        }
+
+        public async Task<bool> CheckInvite(long userId, long boardId, string email)
+        {
+            return await _context.Userinvites.AsNoTracking()
+                .AnyAsync(i => i.BoardId == boardId && i.Email == email && !i.IsUsed);
+        }
+
+        public async Task<List<InviteResultModel>> GetInvites(string email)
+        {
+            return await _context.Userinvites.AsNoTracking()
+                .Where(x => x.Email == email && !x.IsUsed && !x.IsAccepted)
+                .Select(x => new InviteResultModel
+                {
+                    Id = x.Id,
+                    BoardName = x.Board.Title,
+                    InviterName = x.SenderUser.FullName
+                })
+                .ToListAsync();
+        }
+
+        public async Task<List<NotificationResultModel>> GetNotifications(long userId)
+        {
+            return await _context.Usernotifications.AsNoTracking()
+                .Where(n => n.UserId == userId && !n.IsDeleted)
+                .Select(x => new NotificationResultModel
+                {
+                    Id = x.Id,
+                    Message = x.Message,
+                    CreatedAt = x.CreatedAt
+                })
+                .OrderByDescending(n => n.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<bool> CheckNotification(long userId, long id)
+        {
+            return await _context.Usernotifications
+                .AnyAsync(n => n.UserId == userId && n.Id == id && !n.IsDeleted);
+        }
+
+        public async Task DeleteNotification(long id)
+        {
+            await _context.Usernotifications.Where(n => n.Id == id)
+                .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
+        }
+
+        public async Task DeleteNotifications(long userId)
+        {
+            await _context.Usernotifications.Where(n => n.UserId == userId && !n.IsDeleted)
+                .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
+        }
+        public async Task<Userinvite?> GetInvite(long id)
+        {
+            return await _context.Userinvites.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+        }
+
+        public async Task SetAcceptedInvite(long inviteId)
+        {
+            await _context.Userinvites.Where(bc => bc.Id == inviteId)
+                .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsAccepted, true));
+        }
+
+        public async Task<Userinvite> AddInvite(long senderUserId, long boardId, string email)
+        {
+            var now = await _dbDate.Now();
+            var invite = new Userinvite
+            {
+                BoardId = boardId,
+                Email = email,
+                IsAccepted = false,
+                CreatedAt = now,
+                SenderUserId = senderUserId
+            };
+            await _context.Userinvites.AddAsync(invite);
+            await _context.SaveChangesAsync();
+            return invite;
+        }
+
+        public async Task<bool> CheckUpdates(long userId, string email)
+        {
+            string cacheKey = $"User_HasUpdates_{userId}";
+
+            if (!_cache.TryGetValue(cacheKey, out bool hasUpdates))
+            {
+                bool hasNotif = await _context.Usernotifications.AnyAsync(x => x.UserId == userId && !x.IsDeleted);
+                if (!hasNotif)
+                {
+                    bool hasInvite = await _context.Userinvites.AnyAsync(x => x.Email == email && !x.IsUsed);
+                    hasUpdates = hasInvite;
+                }
+                else
+                {
+                    hasUpdates = true;
+                }
+
+                _cache.Set(cacheKey, hasUpdates, TimeSpan.FromHours(1));
+            }
+
+            return hasUpdates;
         }
     }
 }

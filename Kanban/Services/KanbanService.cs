@@ -3,6 +3,7 @@ using Kanban.Models;
 using Kanban.Repositories;
 using Mailjet.Client.Resources;
 using Microsoft.IdentityModel.Tokens;
+using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -72,13 +73,24 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
                 }
+
+                if (await _userRepository.CheckInvite(senderUserId, boardId, email))
+                {
+                    return ServiceResult<BoardCard>.Fail("Bu board için istek gönderilmiştir.");
+                }
+
                 var u = await _userRepository.GetUserIdByEmail(email);
                 if (u != null && await _kanbanRepository.CheckBoardMembers(u.Value, boardId))
                 {
                     return ServiceResult<BoardCard>.Fail("Kullanıcı zaten üye.");
                 }
 
-                var i = await _kanbanRepository.AddInvite(senderUserId, boardId, email);
+                if (u == null && await _userRepository.CheckInviteCountToday(email) > 0)
+                {
+                    return ServiceResult<BoardCard>.Fail("Üye olmayan kullanıcılara gönderilen davet mail sınırını aştınız");
+                }
+
+                var i = await _userRepository.AddInvite(senderUserId, boardId, email);
 
                 var b = await _kanbanRepository.GetBoardTitle(boardId);
 
@@ -157,20 +169,20 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult<List<BoardColumn>>> GetBoard(long userId, long boardId)
+        public async Task<ServiceResult<List<BoardColumnResultModel>>> GetBoard(long userId, long boardId)
         {
             try
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<List<BoardColumnResultModel>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
                 }
 
-                return ServiceResult<List<BoardColumn>>.Ok(await _kanbanRepository.GetBoardColumns_Cards(boardId));
+                return ServiceResult<List<BoardColumnResultModel>>.Ok(await _kanbanRepository.GetBoardColumns_Cards(boardId));
             }
             catch (Exception)
             {
-                return ServiceResult<List<BoardColumn>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<List<BoardColumnResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
 
@@ -261,8 +273,8 @@ namespace Kanban.Services
                     BoardId = long.Parse(claims.FindFirst("BoardId")!.Value),
                 };
                 var now = await _dbDate.Now();
-                var i = await _kanbanRepository.GetInvite(v.InviteId);
-                if (i == null || i.IsAccepted || v.Email != i.Email || v.BoardId != i.BoardId || i.ExpiresAt < now)
+                var i = await _userRepository.GetInvite(v.InviteId);
+                if (i == null || i.IsAccepted || v.Email != i.Email || v.BoardId != i.BoardId)
                 {
                     throw new Exception();
                 }
@@ -278,7 +290,7 @@ namespace Kanban.Services
                         return ServiceResult<InviteStatus>.Ok(InviteStatus.WRONG_ACC);
                     }
                 }
-                await _kanbanRepository.SetAcceptedInvite(v.InviteId);
+                await _userRepository.SetAcceptedInvite(v.InviteId);
                 if (u != null)
                 {
                     await _kanbanRepository.AddUserToBoard(u.Value, v.BoardId, "MEMBER");
@@ -376,6 +388,102 @@ namespace Kanban.Services
             catch (Exception)
             {
                 return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult<List<InviteResultModel>>> GetInvites(string email)
+        {
+            try
+            {
+                return ServiceResult<List<InviteResultModel>>.Ok(await _userRepository.GetInvites(email));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<List<InviteResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult> WorkInvite(string email, long userId, long inviteId, bool isAccepted)
+        {
+            try
+            {
+                var i = await _userRepository.GetInvite(inviteId);
+                if (i == null)
+                {
+                    return ServiceResult.Fail("Davet bulunamadı.");
+                }
+                if (i.IsUsed)
+                {
+                    return ServiceResult.Fail("Davet zaten kullanılmış.");
+                }
+                if (i.Email != email)
+                {
+                    return ServiceResult.Fail("Davet e-posta adresi ile uyuşmuyor.");
+                }
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(i.SenderUserId, i.BoardId))
+                {
+                    return ServiceResult.Fail("Davet eden kullanıcının artık yetkisi bulunmamaktadır.");
+                }
+                await _kanbanRepository.WorkInvite(inviteId, userId, i.BoardId, isAccepted);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult<List<NotificationResultModel>>> GetNotifications(long userId)
+        {
+            try
+            {
+                return ServiceResult<List<NotificationResultModel>>.Ok(await _userRepository.GetNotifications(userId));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<List<NotificationResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult> DeleteNotification(long userId, long id)
+        {
+            try
+            {
+                if (!await _userRepository.CheckNotification(userId, id))
+                {
+                    return ServiceResult.Fail("Bu bildirimi silme yetkiniz bulunmamaktadır.");
+                }
+                await _userRepository.DeleteNotification(id);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult> DeleteNotifications(long userId)
+        {
+            try
+            {
+                await _userRepository.DeleteNotifications(userId);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult<bool>> CheckUpdates(long userId, string email)
+        {
+            try
+            {
+                return ServiceResult<bool>.Ok(await _userRepository.CheckUpdates(userId, email));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<bool>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
     }

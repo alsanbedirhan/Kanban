@@ -50,6 +50,21 @@ namespace Kanban.Repositories
             return b;
         }
 
+        public async Task WorkInvite(long inviteId, long userId, long boardId, bool isAccepted)
+        {
+            await _context.Userinvites.Where(bc => bc.Id == inviteId)
+                .ExecuteUpdateAsync(bc => bc
+                .SetProperty(b => b.IsAccepted, isAccepted)
+                .SetProperty(b => b.IsUsed, true));
+
+            if (isAccepted)
+            {
+                await _context.BoardMembers.AddAsync(new BoardMember { BoardId = boardId, IsActive = true, RoleCode = "MEMBER", UserId = userId });
+                await _context.SaveChangesAsync();
+                await TouchBoard(boardId);
+            }
+        }
+
         public async Task<BoardCard> AddCard(long userId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
         {
             var lastOrder = await _context.BoardCards
@@ -123,12 +138,6 @@ namespace Kanban.Repositories
             await TouchBoard(boardId);
         }
 
-        public async Task SetAcceptedInvite(long inviteId)
-        {
-            await _context.Userinvites.Where(bc => bc.Id == inviteId)
-                .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsAccepted, true));
-        }
-
         public async Task DeleteCard(long cardId)
         {
             await _context.BoardCards.Where(bc => bc.Id == cardId && bc.IsActive)
@@ -162,13 +171,27 @@ namespace Kanban.Repositories
                 .FirstOrDefaultAsync();
         }
 
-        public async Task<List<BoardColumn>> GetBoardColumns_Cards(long boardId)
+        public async Task<List<BoardColumnResultModel>> GetBoardColumns_Cards(long boardId)
         {
             return await _context.BoardColumns.AsNoTracking()
                 .Where(bc => bc.BoardId == boardId && bc.IsActive)
-                .Include(bc => bc.BoardCards.Where(bc => bc.IsActive))
-                .ThenInclude(bc => bc.AssigneeUser)
-                .ToListAsync();
+                .Select(x => new BoardColumnResultModel
+                {
+                    Id = x.Id,
+                    Title = x.Title,
+                    Cards = x.BoardCards.Select(c => new BoardCardResultModel
+                    {
+                        Id = c.Id,
+                        Desc = c.Desc,
+                        Order = c.OrderNo,
+                        DueDate = c.DueDate,
+                        WarningDays = c.WarningDays,
+                        HighlightColor = c.HighlightColor ?? "",
+                        AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
+                        AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
+                        AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
+                    }).OrderBy(y => y.Order).ToList()
+                }).ToListAsync();
         }
 
         public async Task<List<BoardOwnerResultModel>> GetBoards(long userId)
@@ -216,28 +239,6 @@ namespace Kanban.Repositories
             var members = await GetCachedBoardMembers(boardId);
 
             return members.Any(m => m.UserId == userId);
-        }
-
-        public async Task<Userinvite?> GetInvite(long id)
-        {
-            return await _context.Userinvites.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
-        }
-
-        public async Task<Userinvite> AddInvite(long senderUserId, long boardId, string email)
-        {
-            var now = await _dbDate.Now();
-            var invite = new Userinvite
-            {
-                BoardId = boardId,
-                Email = email,
-                IsAccepted = false,
-                CreatedAt = now,
-                ExpiresAt = now.AddMinutes(15),
-                SenderUserId = senderUserId
-            };
-            await _context.Userinvites.AddAsync(invite);
-            await _context.SaveChangesAsync();
-            return invite;
         }
 
         public async Task<List<BoardMemberResultModel>> GetBoardMembers(long boardId)

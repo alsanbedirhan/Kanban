@@ -123,13 +123,16 @@ AppState.startPolling = function () {
         try {
             const res = await apiRequest(`/Kanban/CheckBoardVersion?boardId=${this.currentBoardId}`, {}, false);
 
-            const serverTime = new Date(res.data.now).getTime();
-            const localTime = new Date(res.data.lastUpdate).getTime();
+            const serverTime = new Date(res.data.lastUpdate).getTime();
+            const localTime = new Date(res.data.now).getTime();
 
             if (serverTime > localTime) {
                 console.log("New changes detected! Refreshing...");
                 loadBoardData(false);
             }
+
+            checkNewUpdates();
+
         } catch (e) {
             console.warn("Polling error (transient):", e);
         }
@@ -142,6 +145,29 @@ AppState.stopPolling = function () {
         this.syncInterval = null;
     }
 };
+
+async function checkNewUpdates() {
+    if (!AppState.isAuthenticated) return;
+
+    try {
+        const res = await apiRequest('/Kanban/CheckUpdates', {}, false);
+
+        const badge = document.getElementById('nav-badge');
+        if (!badge) return;
+
+        if (res.success && res.data) {
+            if (badge.style.display !== 'block') {
+                badge.style.display = 'block';
+                badge.classList.add('pulse');
+            }
+        } else {
+            badge.style.display = 'none';
+            badge.classList.remove('pulse');
+        }
+
+    } catch (e) {
+    }
+}
 
 async function fetchCurrentUser() {
     try {
@@ -183,12 +209,191 @@ function checkAuth() {
     return false;
 }
 
-function openNotifications() {
-    Swal.fire('Notifications', 'No new notifications.', 'info');
+async function openNotifications() {
+    try {
+        const res = await apiRequest('/Kanban/GetNotifications');
+
+        if (!res.success || !res.data || res.data.length === 0) {
+            return Swal.fire({
+                title: 'Notifications',
+                text: 'No new notifications.',
+                icon: 'info',
+                confirmButtonColor: '#667eea'
+            });
+        }
+
+        const listItemsHtml = res.data.map(n => `
+            <div id="notif-${n.id}" style="padding: 12px; border-bottom: 1px solid #eee; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; text-align: left; transition: opacity 0.3s;">
+                <div style="display: flex; gap: 10px; align-items: flex-start; flex: 1;">
+                    <div style="font-size: 20px;">📢</div>
+                    <div>
+                        <div style="font-size: 14px; color: #2d3748;">${escapeHtml(n.message)}</div>
+                        <div style="font-size: 11px; color: #a0aec0; margin-top: 4px;">
+                            ${new Date(n.createdAt).toLocaleDateString('tr-TR')} ${new Date(n.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                    </div>
+                </div>
+                <button onclick="deleteNotification(${n.id})" 
+                        title="Delete"
+                        style="background: none; border: none; color: #e53e3e; font-size: 18px; font-weight: bold; cursor: pointer; padding: 0 5px; line-height: 1;">
+                    ×
+                </button>
+            </div>
+        `).join('');
+
+        const headerHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 2px solid #f7fafc;">
+                <span style="font-weight: bold; color: #4a5568; font-size: 14px;">Recent</span>
+                <button onclick="deleteAllNotifications()" 
+                        style="background: #fff5f5; border: 1px solid #fed7d7; color: #c53030; font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.2s;"
+                        onmouseover="this.style.background='#feb2b2'; this.style.color='white'"
+                        onmouseout="this.style.background='#fff5f5'; this.style.color='#c53030'">
+                    🗑️ Delete All
+                </button>
+            </div>
+        `;
+
+        Swal.fire({
+            title: 'Notifications',
+            html: `
+                ${headerHtml}
+                <div id="notif-container" style="max-height: 300px; overflow-y: auto;">
+                    ${listItemsHtml}
+                </div>
+            `,
+            showCloseButton: true,
+            showConfirmButton: false,
+            width: 450
+        });
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', 'Could not load notifications.', 'error');
+    }
 }
 
-function openPendingInvites() {
-    Swal.fire('Invites', 'You have no pending invites.', 'info');
+async function deleteNotification(id) {
+    try {
+        const res = await apiRequest(`/Kanban/DeleteNotification?id=${id}`, { method: 'DELETE' }, false);
+
+        if (res.success) {
+            const el = document.getElementById(`notif-${id}`);
+            if (el) {
+                el.style.opacity = '0';
+                setTimeout(() => {
+                    el.remove();
+                    checkIfEmpty();
+                }, 300);
+            }
+        } else {
+            Swal.fire('Error', res.errorMessage || 'Failed to delete', 'error');
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function deleteAllNotifications() {
+    const confirm = await Swal.fire({
+        title: 'Clear all?',
+        text: "This will delete all your notifications.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#e53e3e',
+        confirmButtonText: 'Yes, delete all',
+        cancelButtonText: 'Cancel'
+    });
+
+    if (confirm.isConfirmed) {
+        try {
+            const res = await apiRequest('/Kanban/DeleteNotifications', { method: 'DELETE' });
+
+            if (res.success) {
+                Swal.fire('Deleted!', 'All notifications have been cleared.', 'success');
+            } else {
+                Swal.fire('Error', res.errorMessage || 'Failed to delete all', 'error');
+            }
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Network error.', 'error');
+        }
+    } else {
+        openNotifications();
+    }
+}
+function checkIfEmpty() {
+    const container = document.getElementById('notif-container');
+    if (container && container.children.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:#a0aec0;">No new notifications.</div>';
+    }
+}
+
+async function openPendingInvites() {
+    try {
+        const res = await apiRequest('/Kanban/GetInvites');
+
+        if (!res.success || !res.data || res.data.length === 0) {
+            return Swal.fire('Invites', 'You have no pending invites.', 'info');
+        }
+
+        const invitesHtml = res.data.map(invite => `
+            <div style="padding: 15px; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 10px; text-align: left;">
+                <div style="font-weight: bold; color: #2d3748; margin-bottom: 5px;">
+                    📂 ${escapeHtml(invite.boardName)}
+                </div>
+                <div style="font-size: 13px; color: #718096; margin-bottom: 10px;">
+                    Invited by: <b>${escapeHtml(invite.inviterName)}</b>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="handleInviteResponse(${invite.id}, true)" 
+                            style="flex: 1; padding: 8px; border: none; background: #48bb78; color: white; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                        Accept
+                    </button>
+                    <button onclick="handleInviteResponse(${invite.id}, false)" 
+                            style="flex: 1; padding: 8px; border: none; background: #f56565; color: white; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                        Decline
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        Swal.fire({
+            title: 'Pending Invites',
+            html: `<div style="max-height: 400px; overflow-y: auto;">${invitesHtml}</div>`,
+            showConfirmButton: false,
+            showCloseButton: true
+        });
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', 'Could not load invites.', 'error');
+    }
+}
+
+async function handleInviteResponse(inviteId, isAccepted) {
+    if (!checkAuth()) return;
+
+    try {
+        const res = await apiRequest(`/Kanban/WorkInvite?inviteId=${inviteId}&isAccepted=${isAccepted}`, { method: 'PUT' }, false);
+
+        if (res.success) {
+            Swal.fire({
+                icon: 'success',
+                title: isAccepted ? 'Joined Board!' : 'Invite Declined',
+                timer: 1500,
+                showConfirmButton: false
+            });
+
+            if (isAccepted) {
+                loadBoards();
+            }
+        } else {
+            Swal.fire('Error', res.errorMessage || 'Operation failed', 'error');
+        }
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', 'Network error occurred.', 'error');
+    }
 }
 
 async function openChangePasswordModal() {
@@ -232,7 +437,9 @@ async function openChangePasswordModal() {
     }
 }
 function openProfileMenu() {
-    if (!AppState.currentUser) return;
+    if (!checkAuth()) return;
+
+    if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
 
     const name = escapeHtml(AppState.currentUser.fullName);
     const email = escapeHtml(AppState.currentUser.email);
@@ -299,11 +506,13 @@ function updateAuthUI() {
                      style="width:45px; height:45px; border-radius:50%; object-fit:cover; border: 2px solid #e2e8f0; transition: transform 0.2s;"
                      onmouseover="this.style.transform='scale(1.05)'; this.style.borderColor='#667eea';"
                      onmouseout="this.style.transform='scale(1)'; this.style.borderColor='#e2e8f0';">
+
+                <span id="nav-badge" class="notification-badge"></span>
             </div>
         `;
 
         authSection.innerHTML = `
-            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+            <div style="display:flex; align-items:center; gap:12px; padding:15px; background:rgba(255,255,255,0.05); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
                 <img src="${avatarPath}" style="width:40px; height:40px; border-radius:50%; background:white;">
                 <div style="overflow:hidden;">
                     <div style="font-weight:bold; font-size:14px;">${safeName}</div>
@@ -879,6 +1088,7 @@ function renderColumns(columns) {
         return `
                         <div class="card ${lockedClass}" 
                              data-card-id="${card.id}" 
+                             oncontextmenu="return false;"
                              style="background-color: ${cardBgColor}; transition: background-color 0.3s; cursor: ${cursorStyle}; ${opacityStyle}" 
                              onclick="openCardModal(${col.id},${card.id})">
                             
@@ -960,6 +1170,20 @@ function initSortable() {
                 const newOrder = evt.newIndex + 1;
 
                 if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
+
+                const fromCol = evt.from.closest('.column');
+                if (fromCol) {
+                    const countSpan = fromCol.querySelector('.card-count');
+                    if (countSpan) countSpan.textContent = evt.from.querySelectorAll('.card').length;
+                }
+
+                if (evt.from !== evt.to) {
+                    const toCol = evt.to.closest('.column');
+                    if (toCol) {
+                        const countSpan = toCol.querySelector('.card-count');
+                        if (countSpan) countSpan.textContent = evt.to.querySelectorAll('.card').length;
+                    }
+                }
 
                 try {
                     await apiRequest('/Kanban/MoveCard', {
@@ -1381,6 +1605,7 @@ function selectAvatarTemp(name, imgElement) {
 }
 
 async function saveMyAvatar() {
+    if (!checkAuth()) return;
     try {
         await apiRequest(`/Auth/UpdateAvatar?avatar=${selectedAvatarTemp}`, { method: 'PUT' });
 

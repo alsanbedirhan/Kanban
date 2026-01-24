@@ -23,6 +23,8 @@ public partial class KanbanDbContext : DbContext
 
     public virtual DbSet<Userinvite> Userinvites { get; set; }
 
+    public virtual DbSet<Usernotification> Usernotifications { get; set; }
+
     public virtual DbSet<Userverification> Userverifications { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
@@ -189,7 +191,6 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.Email)
                 .HasMaxLength(100)
                 .HasColumnName("email");
-            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
             entity.Property(e => e.IsAccepted).HasColumnName("is_accepted");
             entity.Property(e => e.IsUsed).HasColumnName("is_used");
             entity.Property(e => e.SenderUserId).HasColumnName("sender_user_id");
@@ -201,6 +202,29 @@ public partial class KanbanDbContext : DbContext
             entity.HasOne(d => d.SenderUser).WithMany(p => p.Userinvites)
                 .HasForeignKey(d => d.SenderUserId)
                 .HasConstraintName("userinvites_users_fk");
+        });
+
+        modelBuilder.Entity<Usernotification>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("usernotifications_pk");
+
+            entity.ToTable("usernotifications");
+
+            entity.Property(e => e.Id)
+                .UseIdentityAlwaysColumn()
+                .HasColumnName("id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted");
+            entity.Property(e => e.Message)
+                .HasMaxLength(500)
+                .HasColumnName("message");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+
+            entity.HasOne(d => d.User).WithMany(p => p.Usernotifications)
+                .HasForeignKey(d => d.UserId)
+                .HasConstraintName("usernotifications_users_fk");
         });
 
         modelBuilder.Entity<Userverification>(entity =>
