@@ -1,6 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Repositories;
+using Mailjet.Client.Resources;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -25,7 +26,8 @@ namespace Kanban.Services
             _dbDate = dbDate;
         }
 
-        public async Task<ServiceResult<BoardCard>> AddCard(long userId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor)
+        public async Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate,
+            int warningDays, string highlightColor, long assigneeId)
         {
             try
             {
@@ -34,11 +36,11 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("Tarih bugünden önce olamaz.");
                 }
-                if (!await _kanbanRepository.ValidateBoardWithColumnId(userId, columnId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
                     return ServiceResult<BoardCard>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
                 }
-                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, columnId, desc, dueDate, warningDays, highlightColor));
+                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, columnId, desc, dueDate, warningDays, highlightColor, assigneeId));
             }
             catch (Exception)
             {
@@ -46,28 +48,19 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult<BoardColumn>> AddColumn(long boardId, string title)
+        public async Task<ServiceResult<BoardColumn>> AddColumn(long userId, long boardId, string title)
         {
             try
             {
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult<BoardColumn>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                }
                 return ServiceResult<BoardColumn>.Ok(await _kanbanRepository.AddColumn(boardId, title));
             }
             catch (Exception)
             {
                 return ServiceResult<BoardColumn>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
-            }
-        }
-
-        public async Task<ServiceResult> AddUserToBoard(long userId, long boardId, string roleCode)
-        {
-            try
-            {
-                await _kanbanRepository.AddUserToBoard(userId, boardId, roleCode);
-                return ServiceResult.Ok();
-            }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
 
@@ -130,11 +123,11 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult> DeleteCard(long userId, long cardId)
+        public async Task<ServiceResult> DeleteCard(long userId, long boardId, long cardId)
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithCardId(userId, cardId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
                     return ServiceResult<List<BoardColumn>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
                 }
@@ -147,11 +140,11 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult> DeleteColumn(long userId, long columnId)
+        public async Task<ServiceResult> DeleteColumn(long userId, long boardId, long columnId)
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithColumnId(userId, columnId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
                     return ServiceResult<List<BoardColumn>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
                 }
@@ -201,6 +194,14 @@ namespace Kanban.Services
                 {
                     return ServiceResult<List<BoardColumn>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
                 }
+
+                var card = await _kanbanRepository.GetCardAssignee(cardId);
+
+                if (card != null && card > 0 && userId != card)
+                {
+                    return ServiceResult<List<BoardColumn>>.Fail("Bu kartı yalnızca atanmış olan kullanıcı taşıyabilir.");
+                }
+
                 await _kanbanRepository.MoveCard(userId, cardId, newColumnId, newOrder);
                 return ServiceResult.Ok();
             }
@@ -345,19 +346,6 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult> UpdateAvatar(long userId, string avatar)
-        {
-            try
-            {
-                await _userRepository.UpdateAvatar(userId, avatar);
-                return ServiceResult.Ok();
-            }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
-            }
-        }
-
         public async Task<ServiceResult<BoardRefresResultModel>> GetBoardVersion(long userId, long boardId)
         {
             try
@@ -371,6 +359,23 @@ namespace Kanban.Services
             catch (Exception)
             {
                 return ServiceResult<BoardRefresResultModel>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+        public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult<BoardCard>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                }
+                await _kanbanRepository.UpdateCard(userId, cardId, desc, dueDate, warningDays, highlightColor, assigneeId);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
     }

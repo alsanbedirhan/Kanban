@@ -32,4 +32,9 @@ namespace Kanban.Models
     {
         public string email { get; set; }
     }
+    public class ChangePasswordViewModel
+    {
+        public string currentPassword { get; set; }
+        public string newPassword { get; set; }
+    }
 }

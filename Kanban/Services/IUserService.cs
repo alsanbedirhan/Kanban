@@ -9,5 +9,7 @@ namespace Kanban.Services
         Task<ServiceResult<User>> Login(string email, string password);
         Task<ServiceResult> GenerateAndSaveVerifyCode(string email);
         Task<ServiceResult> VerifyCodeAndUpdate(string email, string code);
+        Task<ServiceResult> UpdateAvatar(long userId, string avatar);
+        Task<ServiceResult> ChangePassword(string email, string currentPassword, string newPassword);
     }
 }

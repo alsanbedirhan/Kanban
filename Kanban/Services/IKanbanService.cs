@@ -8,19 +8,18 @@ namespace Kanban.Services
         Task<ServiceResult<List<BoardColumn>>> GetBoard(long userId, long boardId);
         Task<ServiceResult<List<BoardMemberResultModel>>> GetBoardMembers(long userId, long boardId);
         Task<ServiceResult<BoardRefresResultModel>> GetBoardVersion(long userId, long boardId);
-        Task<ServiceResult> UpdateAvatar(long userId, string avatar);
         Task<ServiceResult> DeleteMember(long userId, long boardId, long removeUserId);
         Task<ServiceResult> PromoteToOwner(long userId, long boardId, long promoteUserId);
         Task<ServiceResult<List<BoardOwnerResultModel>>> GetBoards(long userId);
         Task<ServiceResult<Board>> CreateBoard(long userId, string title);
-        Task<ServiceResult<BoardColumn>> AddColumn(long boardId, string title);
-        Task<ServiceResult<BoardCard>> AddCard(long userId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor);
+        Task<ServiceResult<BoardColumn>> AddColumn(long userId, long boardId, string title);
+        Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId);
+        Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId);
         Task<ServiceResult> MoveCard(long userId, long boardId, long cardId, long newColumnId, int newOrder);
-        Task<ServiceResult> DeleteColumn(long userId, long columnId);
+        Task<ServiceResult> DeleteColumn(long userId, long boardId, long columnId);
         Task<ServiceResult> DeleteBoard(long userId, long boardId);
-        Task<ServiceResult> DeleteCard(long userId, long cardId);
+        Task<ServiceResult> DeleteCard(long userId, long boardId, long cardId);
         Task<ServiceResult> InviteUserToBoard(long senderUserId, string senderFullName, string senderEmail, long boardId, string email);
-        Task<ServiceResult> AddUserToBoard(long userId, long boardId, string roleCode);
         Task<ServiceResult<InviteStatus>> VerifyActivationToken(long activeUserId, string token);
         string GenerateJwt(string email, long inviteId, long boardId);
     }

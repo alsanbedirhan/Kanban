@@ -115,5 +115,39 @@ namespace Kanban.Services
                 return ServiceResult<User>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
             }
         }
+
+        public async Task<ServiceResult> UpdateAvatar(long userId, string avatar)
+        {
+            try
+            {
+                await _userRepository.UpdateAvatar(userId, avatar);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+            }
+        }
+
+
+        public async Task<ServiceResult> ChangePassword(string email, string currentPassword, string newPassword)
+        {
+            try
+            {
+                var user = await _userRepository.GetByEmailForUpdate(email);
+
+                if (user == null || !user.IsActive || !BCrypt.Net.BCrypt.Verify(currentPassword, user.HashPassword))
+                    return ServiceResult<User>.Fail("Şifre hatalı.");
+
+                user.HashPassword = BCrypt.Net.BCrypt.HashPassword(newPassword);
+                await _userRepository.SaveContext();
+
+                return ServiceResult<User>.Ok(user);
+            }
+            catch (Exception)
+            {
+                return ServiceResult<User>.Fail("Hata oluştu");
+            }
+        }
     }
 }

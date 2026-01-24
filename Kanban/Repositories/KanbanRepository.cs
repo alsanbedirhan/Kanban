@@ -50,7 +50,7 @@ namespace Kanban.Repositories
             return b;
         }
 
-        public async Task<BoardCard> AddCard(long userId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor)
+        public async Task<BoardCard> AddCard(long userId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
         {
             var lastOrder = await _context.BoardCards
                 .Where(c => c.BoardColumnId == columnId && c.IsActive)
@@ -65,7 +65,8 @@ namespace Kanban.Repositories
                 OrderNo = lastOrder + 1,
                 DueDate = dueDate,
                 WarningDays = warningDays,
-                HighlightColor = highlightColor
+                HighlightColor = highlightColor,
+                AssigneeUserId = assigneeId > 0 ? assigneeId : null
             };
 
             await _context.BoardCards.AddAsync(b);
@@ -166,6 +167,7 @@ namespace Kanban.Repositories
             return await _context.BoardColumns.AsNoTracking()
                 .Where(bc => bc.BoardId == boardId && bc.IsActive)
                 .Include(bc => bc.BoardCards.Where(bc => bc.IsActive))
+                .ThenInclude(bc => bc.AssigneeUser)
                 .ToListAsync();
         }
 
@@ -216,29 +218,9 @@ namespace Kanban.Repositories
             return members.Any(m => m.UserId == userId);
         }
 
-        public async Task<bool> ValidateBoardWithCardId(long userId, long cardId)
-        {
-            var r = await _context.BoardCards.AsNoTracking().Where(x => x.Id == cardId).Select(x => new { x.BoardColumn.BoardId }).FirstOrDefaultAsync();
-            if (r == null)
-            {
-                return false;
-            }
-            return await ValidateBoardWithBoardId(userId, r.BoardId);
-        }
-
         public async Task<Userinvite?> GetInvite(long id)
         {
             return await _context.Userinvites.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
-        }
-
-        public async Task<bool> ValidateBoardWithColumnId(long userId, long columnId)
-        {
-            var r = await _context.BoardColumns.AsNoTracking().Where(x => x.Id == columnId).Select(x => new { x.BoardId }).FirstOrDefaultAsync();
-            if (r == null)
-            {
-                return false;
-            }
-            return await ValidateBoardWithBoardId(userId, r.BoardId);
         }
 
         public async Task<Userinvite> AddInvite(long senderUserId, long boardId, string email)
@@ -264,6 +246,13 @@ namespace Kanban.Repositories
                 .Where(bm => bm.BoardId == boardId && bm.IsActive)
                 .Select(x => new BoardMemberResultModel { UserId = x.UserId, RoleCode = x.RoleCode, FullName = x.User.FullName, Email = x.User.Email })
                 .ToListAsync();
+        }
+
+        public async Task<long?> GetCardAssignee(long cardId)
+        {
+            return await _context.BoardCards.AsNoTracking()
+                .Where(bc => bc.Id == cardId && bc.IsActive)
+                .Select(bc => bc.AssigneeUserId).FirstOrDefaultAsync();
         }
 
         public async Task<bool> ValidateManageBoard(long userId, long boardId)
@@ -305,20 +294,6 @@ namespace Kanban.Repositories
             return new BoardRefresResultModel { LastUpdate = lastActivity, Now = now };
         }
 
-        public async Task AssignUserToCard(long cardId, long userId)
-        {
-            var card = await _context.BoardCards
-                .Where(c => c.Id == cardId)
-                .Select(c => new { c.BoardColumn.BoardId })
-                .FirstOrDefaultAsync();
-
-            await _context.BoardCards
-                .Where(c => c.Id == cardId)
-                .ExecuteUpdateAsync(c => c.SetProperty(x => x.AssigneeUserId, userId));
-
-            await TouchBoard(card.BoardId);
-        }
-
         private async Task TouchBoard(long boardId)
         {
             var now = await _dbDate.Now();
@@ -345,6 +320,24 @@ namespace Kanban.Repositories
             }
 
             return members;
+        }
+
+        public async Task UpdateCard(long userId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
+        {
+            var board = await _context.BoardCards.Where(x => x.Id == cardId)
+                .Select(c => new { c.BoardColumn.BoardId }).FirstOrDefaultAsync();
+
+            await _context.BoardCards
+            .Where(c => c.Id == cardId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Desc, desc)
+                .SetProperty(x => x.DueDate, dueDate)
+                .SetProperty(x => x.AssigneeUserId, assigneeId > 0 ? assigneeId : null)
+                .SetProperty(x => x.WarningDays, warningDays)
+                .SetProperty(x => x.HighlightColor, highlightColor)
+            );
+
+            await TouchBoard(board.BoardId);
         }
     }
 }

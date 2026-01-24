@@ -3,6 +3,7 @@ using Kanban.Models;
 using Kanban.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -80,10 +81,48 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> Logout()
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return Ok(ServiceResult.Ok());
+        }
+
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordViewModel model)
+        {
+            var result = await _userService.ChangePassword(User.GetEmail(), model.currentPassword, model.newPassword);
+
+            if (!result.Success)
+            {
+                return Ok(ServiceResult.Fail(result.ErrorMessage));
+            }
+
+            return Ok(ServiceResult.Ok());
+        }
+
+        [Authorize]
+        [HttpPut]
+        public async Task<IActionResult> UpdateAvatar(string avatar)
+        {
+            var r = await _userService.UpdateAvatar(User.GetUserId(), avatar);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            var identity = HttpContext.User.Identity as ClaimsIdentity;
+            if (identity != null)
+            {
+                var existingClaim = identity.FindFirst("Avatar");
+                if (existingClaim != null)
+                {
+                    identity.RemoveClaim(existingClaim);
+                }
+                identity.AddClaim(new Claim("Avatar", avatar));
+            }
+
             return Ok(ServiceResult.Ok());
         }
 

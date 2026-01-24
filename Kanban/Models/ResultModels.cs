@@ -45,13 +45,22 @@ namespace Kanban.Models
         public long BoardId { get; set; }
         public string Email { get; set; }
     }
-    public class BoardCardInputModel
+    public class BoardModel
     {
-        public long ColumnId { get; set; }
-        public string Description { get; set; }
-        public DateOnly DueDate { get; set; }
+        public long BoardId { get; set; }
         public int WarningDays { get; set; }
         public string HighlightColor { get; set; }
+        public string Description { get; set; }
+        public DateOnly DueDate { get; set; }
+        public long AssigneeId { get; set; }
+    }
+    public class BoardCardUpdateModel : BoardModel
+    {
+        public long CardId { get; set; }
+    }
+    public class BoardCardInsertModel : BoardModel
+    {
+        public long ColumnId { get; set; }
     }
     public class BoardCardMoveInputModel
     {
@@ -93,5 +102,6 @@ namespace Kanban.Models
         public string HighlightColor { get; set; }
         public string AssigneeName { get; set; }
         public string AssigneeAvatar { get; set; }
+        public long AssigneeId { get; set; }
     }
 }
