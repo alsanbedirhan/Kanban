@@ -138,16 +138,19 @@ app.Use(async (context, next) =>
         return;
     }
 
-    var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
-    var tokens = antiforgery.GetAndStoreTokens(context);
+    if (!context.Request.Cookies.ContainsKey("XSRF-TOKEN"))
+    {
+        var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
+        var tokens = antiforgery.GetAndStoreTokens(context);
 
-    context.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken,
-      new CookieOptions
-      {
-          HttpOnly = false,
-          Secure = true,
-          SameSite = SameSiteMode.Strict
-      });
+        context.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
+            new CookieOptions
+            {
+                HttpOnly = false,
+                Secure = true,
+                SameSite = SameSiteMode.Strict
+            });
+    }
 
     await next();
 });
