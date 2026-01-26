@@ -17,6 +17,7 @@ namespace Kanban.Services
         private readonly IEmailService _emailService;
         private readonly IUserRepository _userRepository;
         private readonly IDBDateTimeProvider _dbDate;
+
         public KanbanService(IConfiguration config, IKanbanRepository kanbanRepository,
             IUserRepository userRepository, IEmailService emailService, IDBDateTimeProvider dbDate)
         {
@@ -35,17 +36,17 @@ namespace Kanban.Services
                 var now = await _dbDate.Now();
                 if (dueDate < DateOnly.FromDateTime(now.Date))
                 {
-                    return ServiceResult<BoardCard>.Fail("Tarih bugünden önce olamaz.");
+                    return ServiceResult<BoardCard>.Fail("Due date cannot be in the past.");
                 }
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<BoardCard>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
                 }
                 return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, columnId, desc, dueDate, warningDays, highlightColor, assigneeId));
             }
             catch (Exception)
             {
-                return ServiceResult<BoardCard>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<BoardCard>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -53,15 +54,15 @@ namespace Kanban.Services
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
                 {
-                    return ServiceResult<BoardColumn>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<BoardColumn>.Fail("You do not have permission to manage this board.");
                 }
                 return ServiceResult<BoardColumn>.Ok(await _kanbanRepository.AddColumn(boardId, title));
             }
             catch (Exception)
             {
-                return ServiceResult<BoardColumn>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<BoardColumn>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -71,26 +72,26 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(senderUserId, boardId))
                 {
-                    return ServiceResult<BoardCard>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
                 }
 
                 if (await _userRepository.CheckInvite(senderUserId, boardId, email))
                 {
-                    return ServiceResult<BoardCard>.Fail("Bu board için istek gönderilmiştir.");
+                    return ServiceResult<BoardCard>.Fail("An invitation has already been sent for this board.");
                 }
 
                 var u = await _userRepository.GetUserIdByEmail(email);
                 if (u != null && await _kanbanRepository.CheckBoardMembers(u.Value, boardId))
                 {
-                    return ServiceResult<BoardCard>.Fail("Kullanıcı zaten üye.");
+                    return ServiceResult<BoardCard>.Fail("User is already a member.");
                 }
 
                 if (u == null && await _userRepository.CheckInviteCountToday(email) > 0)
                 {
-                    return ServiceResult<BoardCard>.Fail("Üye olmayan kullanıcılara gönderilen davet mail sınırını aştınız");
+                    return ServiceResult<BoardCard>.Fail("You have exceeded the daily invitation limit for non-members.");
                 }
 
-                var i = await _userRepository.AddInvite(senderUserId, boardId, email);
+                var i = await _userRepository.AddInvite(senderUserId, boardId, email, (u != null ? u.Value : 0));
 
                 var b = await _kanbanRepository.GetBoardTitle(boardId);
 
@@ -102,7 +103,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -114,7 +115,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult<Board>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<Board>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -124,14 +125,14 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<List<BoardColumn>>.Fail("You do not have permission to access this board.");
                 }
                 await _kanbanRepository.DeleteBoard(userId, boardId);
                 return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -141,14 +142,20 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult.Fail("You do not have permission to access this board.");
+                }
+                var card = await _kanbanRepository.GetCardAssignee(cardId);
+
+                if (card != null && card > 0 && userId != card)
+                {
+                    return ServiceResult.Fail("Only the assigned user can delete this card.");
                 }
                 await _kanbanRepository.DeleteCard(cardId);
                 return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -156,16 +163,16 @@ namespace Kanban.Services
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult.Fail("You do not have permission to manage this board.");
                 }
                 await _kanbanRepository.DeleteColumn(columnId);
                 return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -175,14 +182,14 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<BoardColumnResultModel>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<List<BoardColumnResultModel>>.Fail("You do not have permission to access this board.");
                 }
 
                 return ServiceResult<List<BoardColumnResultModel>>.Ok(await _kanbanRepository.GetBoardColumns_Cards(boardId));
             }
             catch (Exception)
             {
-                return ServiceResult<List<BoardColumnResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<List<BoardColumnResultModel>>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -194,7 +201,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult<List<BoardOwnerResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<List<BoardOwnerResultModel>>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -204,14 +211,14 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<List<BoardColumn>>.Fail("You do not have permission to access this board.");
                 }
 
                 var card = await _kanbanRepository.GetCardAssignee(cardId);
 
                 if (card != null && card > 0 && userId != card)
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("Bu kartı yalnızca atanmış olan kullanıcı taşıyabilir.");
+                    return ServiceResult<List<BoardColumn>>.Fail("Only the assigned user can move this card.");
                 }
 
                 await _kanbanRepository.MoveCard(userId, cardId, newColumnId, newOrder);
@@ -219,7 +226,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -290,7 +297,7 @@ namespace Kanban.Services
                         return ServiceResult<InviteStatus>.Ok(InviteStatus.WRONG_ACC);
                     }
                 }
-                await _userRepository.SetAcceptedInvite(v.InviteId);
+                await _userRepository.SetAcceptedInvite(v.InviteId, (u != null ? u.Value : 0));
                 if (u != null)
                 {
                     await _kanbanRepository.AddUserToBoard(u.Value, v.BoardId, "MEMBER");
@@ -314,13 +321,13 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<BoardMemberResultModel>>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<List<BoardMemberResultModel>>.Fail("You do not have permission to access this board.");
                 }
                 return ServiceResult<List<BoardMemberResultModel>>.Ok(await _kanbanRepository.GetBoardMembers(boardId));
             }
             catch (Exception)
             {
-                return ServiceResult<List<BoardMemberResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<List<BoardMemberResultModel>>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -330,14 +337,14 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
                 {
-                    return ServiceResult.Fail("Bu board'a yönetim yetkiniz bulunmamaktadır.");
+                    return ServiceResult.Fail("You do not have permission to manage this board.");
                 }
                 await _kanbanRepository.DeleteMember(boardId, removeUserId);
                 return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -347,14 +354,14 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
                 {
-                    return ServiceResult.Fail("Bu board'a yönetim yetkiniz bulunmamaktadır.");
+                    return ServiceResult.Fail("You do not have permission to manage this board.");
                 }
                 await _kanbanRepository.PromoteToOwner(boardId, promoteUserId);
                 return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -364,13 +371,13 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<BoardRefresResultModel>.Fail("Bu board'a yönetim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<BoardRefresResultModel>.Fail("You do not have permission to access this board."); // Or management permission depending on intent, but usually read access to version is fine
                 }
                 return ServiceResult<BoardRefresResultModel>.Ok(await _kanbanRepository.GetBoardVersion(boardId));
             }
             catch (Exception)
             {
-                return ServiceResult<BoardRefresResultModel>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<BoardRefresResultModel>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -380,14 +387,22 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<BoardCard>.Fail("Bu board'a erişim yetkiniz bulunmamaktadır.");
+                    return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
                 }
+
+                var card = await _kanbanRepository.GetCardAssignee(cardId);
+
+                if (card != null && card > 0 && userId != card)
+                {
+                    return ServiceResult<List<BoardColumn>>.Fail("Only the assigned user can update this card.");
+                }
+
                 await _kanbanRepository.UpdateCard(userId, cardId, desc, dueDate, warningDays, highlightColor, assigneeId);
                 return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -399,7 +414,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult<List<InviteResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<List<InviteResultModel>>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -410,26 +425,26 @@ namespace Kanban.Services
                 var i = await _userRepository.GetInvite(inviteId);
                 if (i == null)
                 {
-                    return ServiceResult.Fail("Davet bulunamadı.");
+                    return ServiceResult.Fail("Invitation not found.");
                 }
                 if (i.IsUsed)
                 {
-                    return ServiceResult.Fail("Davet zaten kullanılmış.");
+                    return ServiceResult.Fail("Invitation has already been used.");
                 }
                 if (i.Email != email)
                 {
-                    return ServiceResult.Fail("Davet e-posta adresi ile uyuşmuyor.");
+                    return ServiceResult.Fail("Invitation does not match the email address.");
                 }
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(i.SenderUserId, i.BoardId))
                 {
-                    return ServiceResult.Fail("Davet eden kullanıcının artık yetkisi bulunmamaktadır.");
+                    return ServiceResult.Fail("The inviting user no longer has authority.");
                 }
                 await _kanbanRepository.WorkInvite(inviteId, userId, i.BoardId, isAccepted);
                 return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -441,7 +456,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult<List<NotificationResultModel>>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<List<NotificationResultModel>>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -451,14 +466,14 @@ namespace Kanban.Services
             {
                 if (!await _userRepository.CheckNotification(userId, id))
                 {
-                    return ServiceResult.Fail("Bu bildirimi silme yetkiniz bulunmamaktadır.");
+                    return ServiceResult.Fail("You do not have permission to delete this notification.");
                 }
-                await _userRepository.DeleteNotification(id);
+                await _userRepository.DeleteNotification(id, userId);
                 return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -471,7 +486,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -483,7 +498,63 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult<bool>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<bool>.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult<List<CommentResutModel>>> GetComments(long userId, long boardId, long cardId)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult<List<CommentResutModel>>.Fail("You do not have permission to access this board.");
+                }
+
+                return ServiceResult<List<CommentResutModel>>.Ok(await _kanbanRepository.GetComments(cardId));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<List<CommentResutModel>>.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult<BoardCardComment>> AddComment(long userId, long boardId, long cardId, string message)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
+                }
+
+                return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<BoardCardComment>.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult> DeleteComment(long userId, long boardId, long commentId)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult.Fail("You do not have permission to access this board.");
+                }
+
+                if (!await _kanbanRepository.ValidateComment(userId, commentId))
+                {
+                    return ServiceResult.Fail("You do not have permission to delete this comment.");
+                }
+                await _kanbanRepository.DeleteComment(commentId);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
     }

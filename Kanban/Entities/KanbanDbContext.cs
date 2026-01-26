@@ -15,6 +15,8 @@ public partial class KanbanDbContext : DbContext
 
     public virtual DbSet<BoardCard> BoardCards { get; set; }
 
+    public virtual DbSet<BoardCardComment> BoardCardComments { get; set; }
+
     public virtual DbSet<BoardColumn> BoardColumns { get; set; }
 
     public virtual DbSet<BoardMember> BoardMembers { get; set; }
@@ -91,6 +93,34 @@ public partial class KanbanDbContext : DbContext
             entity.HasOne(d => d.BoardColumn).WithMany(p => p.BoardCards)
                 .HasForeignKey(d => d.BoardColumnId)
                 .HasConstraintName("board_cards_board_columns_fk");
+        });
+
+        modelBuilder.Entity<BoardCardComment>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("board_card_comments_pk");
+
+            entity.ToTable("board_card_comments");
+
+            entity.Property(e => e.Id)
+                .UseIdentityAlwaysColumn()
+                .HasColumnName("id");
+            entity.Property(e => e.BoardCardId).HasColumnName("board_card_id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted");
+            entity.Property(e => e.Message)
+                .HasMaxLength(500)
+                .HasColumnName("message");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+
+            entity.HasOne(d => d.BoardCard).WithMany(p => p.BoardCardComments)
+                .HasForeignKey(d => d.BoardCardId)
+                .HasConstraintName("board_card_comments_board_cards_fk");
+
+            entity.HasOne(d => d.User).WithMany(p => p.BoardCardComments)
+                .HasForeignKey(d => d.UserId)
+                .HasConstraintName("board_card_comments_users_fk");
         });
 
         modelBuilder.Entity<BoardColumn>(entity =>

@@ -10,12 +10,12 @@ namespace Kanban.Repositories
         Task<bool> CheckInvite(long userId, long boardId, string email);
         Task<Userinvite?> GetInvite(long id);
         Task<List<InviteResultModel>> GetInvites(string email);
-        Task SetAcceptedInvite(long inviteId);
-        Task<Userinvite> AddInvite(long senderUserId, long boardId, string email);
+        Task SetAcceptedInvite(long inviteId, long userId);
+        Task<Userinvite> AddInvite(long senderUserId, long boardId, string email, long userId);
         Task<int> CheckInviteCountToday(string email);
         Task<bool> CheckNotification(long userId, long id);
         Task<List<NotificationResultModel>> GetNotifications(long userId);
-        Task DeleteNotification(long id);
+        Task DeleteNotification(long id, long userId);
         Task DeleteNotifications(long userId);
         Task<bool> CheckUpdates(long userId, string email);
         Task<User?> GetByEmailForUpdate(string email);

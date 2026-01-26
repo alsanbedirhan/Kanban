@@ -1,10 +1,6 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Repositories;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
 
 namespace Kanban.Services
 {
@@ -26,7 +22,7 @@ namespace Kanban.Services
             var u = await _userRepository.GetByEmailForUpdate(model.email);
             if (u != null && u.IsActive)
             {
-                return ServiceResult<User>.Fail("Bu email ile zaten bir kullanıcı var.");
+                return ServiceResult<User>.Fail("A user with this email already exists.");
             }
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(model.password);
 
@@ -34,7 +30,7 @@ namespace Kanban.Services
             {
                 if (u != null)
                 {
-                    u.FullName = model.fullname;
+                    u.FullName = model.fullName;
                     u.HashPassword = hashedPassword;
                     u.IsActive = true;
                     await _userRepository.SaveContext();
@@ -44,7 +40,7 @@ namespace Kanban.Services
                 {
                     return ServiceResult<User>.Ok(await _userRepository.Create(new User
                     {
-                        FullName = model.fullname,
+                        FullName = model.fullName,
                         Email = model.email,
                         IsActive = true,
                         HashPassword = hashedPassword
@@ -53,7 +49,7 @@ namespace Kanban.Services
             }
             catch (Exception ex)
             {
-                return ServiceResult<User>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<User>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -64,13 +60,13 @@ namespace Kanban.Services
                 var user = await _userRepository.GetByEmail(email);
 
                 if (user == null || !user.IsActive || !BCrypt.Net.BCrypt.Verify(password, user.HashPassword))
-                    return ServiceResult<User>.Fail("Kullanıcı adı veya şifre hatalı.");
+                    return ServiceResult<User>.Fail("Incorrect username or password.");
 
                 return ServiceResult<User>.Ok(user);
             }
             catch (Exception)
             {
-                return ServiceResult<User>.Fail("Hata oluştu");
+                return ServiceResult<User>.Fail("An error occurred.");
             }
         }
 
@@ -80,7 +76,7 @@ namespace Kanban.Services
             {
                 if (await _userRepository.VerifyCountToday(email) > 3)
                 {
-                    return ServiceResult.Fail("Limit aşıldı");
+                    return ServiceResult.Fail("Daily limit exceeded.");
                 }
 
                 string code = new Random().Next(100000, 999999).ToString();
@@ -93,7 +89,7 @@ namespace Kanban.Services
             }
             catch (Exception ex)
             {
-                return ServiceResult<User>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<User>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -104,7 +100,7 @@ namespace Kanban.Services
                 var now = await _dbDate.Now();
                 var stored = await _userRepository.GetLastVerify(email);
                 if (stored == null || stored.Code != code || stored.ExpiresAt < now)
-                    return ServiceResult.Fail("Kod geçersiz veya süresi dolmuş.");
+                    return ServiceResult.Fail("Invalid or expired code.");
 
                 await _userRepository.SetCodeUsed(stored.Id);
 
@@ -112,7 +108,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult<User>.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult<User>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -125,7 +121,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult.Fail("Veri tabanında hata oluştu, lütfen tekrar deneyiniz.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -137,7 +133,7 @@ namespace Kanban.Services
                 var user = await _userRepository.GetByEmailForUpdate(email);
 
                 if (user == null || !user.IsActive || !BCrypt.Net.BCrypt.Verify(currentPassword, user.HashPassword))
-                    return ServiceResult<User>.Fail("Şifre hatalı.");
+                    return ServiceResult<User>.Fail("Incorrect password.");
 
                 user.HashPassword = BCrypt.Net.BCrypt.HashPassword(newPassword);
                 await _userRepository.SaveContext();
@@ -146,7 +142,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult<User>.Fail("Hata oluştu");
+                return ServiceResult<User>.Fail("An error occurred.");
             }
         }
     }

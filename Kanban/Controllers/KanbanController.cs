@@ -1,4 +1,5 @@
-﻿using Kanban.Models;
+﻿using Kanban.Entities;
+using Kanban.Models;
 using Kanban.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -223,9 +224,9 @@ namespace Kanban.Controllers
         }
 
         [HttpDelete]
-        public async Task<IActionResult> DeleteNotification(long id)
+        public async Task<IActionResult> DeleteNotification(long notificationId)
         {
-            var r = await _kanbanService.DeleteNotification(User.GetUserId(), id);
+            var r = await _kanbanService.DeleteNotification(User.GetUserId(), notificationId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -243,6 +244,7 @@ namespace Kanban.Controllers
             }
             return Ok(ServiceResult.Ok());
         }
+
         [HttpGet]
         public async Task<IActionResult> CheckUpdates()
         {
@@ -252,6 +254,41 @@ namespace Kanban.Controllers
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
             return Ok(ServiceResult<bool>.Ok(r.Data));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetComments(long boardId, long cardId)
+        {
+            var userId = User.GetUserId();
+            var r = await _kanbanService.GetComments(userId, boardId, cardId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<List<CommentResutModel>>.Ok(r.Data));
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> AddComment([FromBody] CommentInputModel model)
+        {
+            var userId = User.GetUserId();
+            var r = await _kanbanService.AddComment(userId, model.BoardId, model.CardId, model.Message);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpDelete]
+        public async Task<IActionResult> DeleteComment(long boardId, long commentId)
+        {
+            var r = await _kanbanService.DeleteComment(User.GetUserId(), boardId, commentId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
         }
     }
 }

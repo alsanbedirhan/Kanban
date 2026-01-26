@@ -42,6 +42,10 @@
 
         <div class="sidebar-footer" id="authSection">
         </div>
+
+        <div class="developer-footer" style="padding: 15px; text-align: center; font-size: 0.85rem; border-top: 1px solid #eee; color: #666;">
+            Developed by <a href="https://bedirhanalsan.com" target="_blank" style="color: #333; text-decoration: none; font-weight: bold;">Bedirhan Alşan</a>
+        </div>
     </div>
 
     <div class="container">
@@ -51,7 +55,7 @@
         </div>
         <div class="header secondary-header" id="boardHeader" style="margin-top:0px;display:none;">
             <h1 id="boardHeaderTitle"></h1>
-            <button class="btn btn-primary" onclick="openNewColumnModal()">+ New Column</button>
+            <button class="btn btn-primary" id="btnNewColumn" onclick="openNewColumnModal()">+ New Column</button>
         </div>
         <div class="board" id="board">
         </div>
@@ -85,7 +89,7 @@
             <h3>Register</h3><br>
             <div class="form-group">
                 <label>Full Name</label>
-                <input type="text" id="registerFullname" placeholder="Your full name">
+                <input type="text" id="registerFullName" placeholder="Your full name">
             </div>
             <div class="form-group">
                 <label>Email</label>

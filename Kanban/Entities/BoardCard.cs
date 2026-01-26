@@ -29,5 +29,7 @@ public partial class BoardCard
 
     public virtual User? AssigneeUser { get; set; }
 
+    public virtual ICollection<BoardCardComment> BoardCardComments { get; set; } = new List<BoardCardComment>();
+
     public virtual BoardColumn BoardColumn { get; set; } = null!;
 }

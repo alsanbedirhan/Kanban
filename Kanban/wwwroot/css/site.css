@@ -1,12 +1,11 @@
 :root {
-    --primary-color: #667eea;
-    --primary-dark: #5a6fd6;
-    --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --primary-color: #1a6b36;
+    --primary-dark: #124d26;
+    --bg-gradient: linear-gradient(90deg, #1a6b36 0%, #207d41 40%, #2b4e91 100%);
     --sidebar-width: 260px;
     --text-dark: #2d3748;
     --border-color: #e2e8f0;
 }
-
 * {
     margin: 0;
     padding: 0;

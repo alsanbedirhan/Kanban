@@ -64,6 +64,12 @@ namespace Kanban.Models
     {
         public long CardId { get; set; }
     }
+    public class CommentInputModel
+    {
+        public long BoardId { get; set; }
+        public long CardId { get; set; }
+        public string Message { get; set; }
+    }
     public class BoardCardInsertModel : BoardModel
     {
         public long ColumnId { get; set; }
@@ -96,6 +102,11 @@ namespace Kanban.Models
         public long Id { get; set; }
         public string Message { get; set; }
         public DateTime CreatedAt { get; set; }
+    }
+    public class CommentResutModel : NotificationResultModel
+    {
+        public string FullName { get; set; }
+        public long UserId { get; set; }
     }
     public class BoardMemberResultModel
     {

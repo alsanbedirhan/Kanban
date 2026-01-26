@@ -18,6 +18,23 @@ namespace Kanban.Repositories
             _dbDate = dbDate;
         }
 
+        private async Task SendNotification(long userId, string message)
+        {
+            var now = await _dbDate.Now();
+            var notification = new Usernotification
+            {
+                UserId = userId,
+                Message = message,
+                CreatedAt = now,
+                IsDeleted = false
+            };
+
+            await _context.Usernotifications.AddAsync(notification);
+            await _context.SaveChangesAsync();
+
+            _cache.Remove($"User_HasUpdates_{userId}");
+        }
+
         public async Task<Board> AddBoard(long userId, string title)
         {
             var now = await _dbDate.Now();
@@ -28,16 +45,11 @@ namespace Kanban.Repositories
                 UserId = userId,
                 UpdatedAt = now,
                 CreatedAt = now,
-                BoardColumns = new List<BoardColumn> { new BoardColumn {
-                    IsActive = true,
-                    Title = "To Do"
-                }, new BoardColumn {
-                    IsActive = true,
-                    Title = "Progress"
-                },new BoardColumn {
-                    IsActive = true,
-                    Title = "Done"
-                }}
+                BoardColumns = new List<BoardColumn> {
+                    new BoardColumn { IsActive = true, Title = "To Do" },
+                    new BoardColumn { IsActive = true, Title = "Progress" },
+                    new BoardColumn { IsActive = true, Title = "Done" }
+                }
             };
             await _context.BoardMembers.AddAsync(new BoardMember
             {
@@ -61,6 +73,18 @@ namespace Kanban.Repositories
             {
                 await _context.BoardMembers.AddAsync(new BoardMember { BoardId = boardId, IsActive = true, RoleCode = "MEMBER", UserId = userId });
                 await _context.SaveChangesAsync();
+
+                var invite = await _context.Userinvites.AsNoTracking()
+                    .Where(x => x.Id == inviteId)
+                    .Select(x => new { x.SenderUserId, x.Board.Title })
+                    .FirstOrDefaultAsync();
+
+                if (invite != null)
+                {
+                    await SendNotification(invite.SenderUserId, $"Your invitation to board '{invite.Title}' was accepted.");
+                    await SendNotification(userId, $"You successfully joined the board '{invite.Title}'.");
+                }
+
                 await TouchBoard(boardId);
             }
         }
@@ -86,6 +110,13 @@ namespace Kanban.Repositories
 
             await _context.BoardCards.AddAsync(b);
             await _context.SaveChangesAsync();
+
+            if (assigneeId > 0 && assigneeId != userId)
+            {
+                string shortDesc = desc.Length > 30 ? desc.Substring(0, 27) + "..." : desc;
+                await SendNotification(assigneeId, $"You have been assigned to a new card: '{shortDesc}'");
+            }
+
             await TouchBoard(b.BoardColumn.BoardId);
             return b;
         }
@@ -144,11 +175,11 @@ namespace Kanban.Repositories
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
 
             var board = await _context.BoardCards
-        .Where(c => c.Id == cardId)
-        .Select(c => new { c.BoardColumn.BoardId })
-        .FirstOrDefaultAsync();
+                .Where(c => c.Id == cardId)
+                .Select(c => new { c.BoardColumn.BoardId })
+                .FirstOrDefaultAsync();
 
-            await TouchBoard(board.BoardId);
+            if (board != null) await TouchBoard(board.BoardId);
         }
 
         public async Task DeleteColumn(long columnId)
@@ -161,12 +192,12 @@ namespace Kanban.Repositories
              .Select(c => new { c.BoardId })
              .FirstOrDefaultAsync();
 
-            await TouchBoard(board.BoardId);
+            if (board != null) await TouchBoard(board.BoardId);
         }
 
         public async Task<Board?> GetBoard(long boardId)
         {
-            return await _context.Boards.AsNoTracking().AsNoTracking()
+            return await _context.Boards.AsNoTracking()
                 .Where(b => b.Id == boardId && b.IsActive)
                 .FirstOrDefaultAsync();
         }
@@ -217,7 +248,7 @@ namespace Kanban.Repositories
                 .Select(x => new { x.BoardColumnId, x.BoardColumn.BoardId })
                 .FirstOrDefaultAsync();
 
-            var oldColumnId = card.BoardColumnId;
+            if (card == null) return;
 
             var boardId = card.BoardId;
 
@@ -237,7 +268,6 @@ namespace Kanban.Repositories
         public async Task<bool> ValidateBoardWithBoardId(long userId, long boardId)
         {
             var members = await GetCachedBoardMembers(boardId);
-
             return members.Any(m => m.UserId == userId);
         }
 
@@ -259,21 +289,28 @@ namespace Kanban.Repositories
         public async Task<bool> ValidateManageBoard(long userId, long boardId)
         {
             var members = await GetCachedBoardMembers(boardId);
-
             return members.Any(m => m.UserId == userId && m.RoleCode == "OWNER");
         }
 
         public async Task DeleteMember(long boardId, long userId)
         {
             await _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
-                   .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
+                    .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsActive, false));
+
+            var boardTitle = await GetBoardTitle(boardId);
+            await SendNotification(userId, $"You have been removed from board '{boardTitle}'.");
+
             await TouchBoard(boardId);
         }
 
         public async Task PromoteToOwner(long boardId, long userId)
         {
             await _context.BoardMembers.Where(bc => bc.BoardId == boardId && bc.UserId == userId && bc.IsActive)
-                   .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.RoleCode, "OWNER"));
+                    .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.RoleCode, "OWNER"));
+
+            var boardTitle = await GetBoardTitle(boardId);
+            await SendNotification(userId, $"You have been promoted to OWNER of board '{boardTitle}'.");
+
             await TouchBoard(boardId);
         }
 
@@ -319,7 +356,6 @@ namespace Kanban.Repositories
 
                 _cache.Set(cacheKey, members, TimeSpan.FromHours(1));
             }
-
             return members;
         }
 
@@ -338,7 +374,57 @@ namespace Kanban.Repositories
                 .SetProperty(x => x.HighlightColor, highlightColor)
             );
 
-            await TouchBoard(board.BoardId);
+            if (board != null) await TouchBoard(board.BoardId);
+        }
+
+        public async Task<List<CommentResutModel>> GetComments(long cardId)
+        {
+            return await _context.BoardCardComments.AsNoTracking()
+                .Where(c => c.BoardCardId == cardId && !c.IsDeleted)
+                .Select(c => new CommentResutModel
+                {
+                    Id = c.Id,
+                    Message = c.Message,
+                    CreatedAt = c.CreatedAt,
+                    FullName = c.User.FullName,
+                    UserId = c.UserId
+                })
+                .ToListAsync();
+        }
+
+        public async Task<BoardCardComment> AddComment(long userId, long cardId, string message)
+        {
+            var now = await _dbDate.Now();
+            var comment = new BoardCardComment
+            {
+                BoardCardId = cardId,
+                CreatedAt = now,
+                IsDeleted = false,
+                Message = message,
+                UserId = userId
+            };
+            await _context.BoardCardComments.AddAsync(comment);
+            await _context.SaveChangesAsync();
+
+            var card = await _context.BoardCards.AsNoTracking().Select(c => new { c.Id, c.AssigneeUserId, c.Desc }).FirstOrDefaultAsync(c => c.Id == cardId);
+            if (card != null && card.AssigneeUserId.HasValue && card.AssigneeUserId.Value != userId)
+            {
+                string shortDesc = card.Desc.Length > 20 ? card.Desc.Substring(0, 17) + "..." : card.Desc;
+                await SendNotification(card.AssigneeUserId.Value, $"New comment on card '{shortDesc}': {message}");
+            }
+
+            return comment;
+        }
+
+        public async Task DeleteComment(long commentId)
+        {
+            await _context.BoardCardComments.Where(c => c.Id == commentId && !c.IsDeleted)
+                .ExecuteUpdateAsync(c => c.SetProperty(b => b.IsDeleted, true));
+        }
+
+        public Task<bool> ValidateComment(long userId, long commentId)
+        {
+            return _context.BoardCardComments.AnyAsync(c => c.Id == commentId && c.UserId == userId && !c.IsDeleted);
         }
     }
 }

@@ -1,5 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
+using Mailjet.Client.Resources;
+using System.ComponentModel.Design;
 
 namespace Kanban.Repositories
 {
@@ -8,7 +10,11 @@ namespace Kanban.Repositories
         Task<List<BoardColumnResultModel>> GetBoardColumns_Cards(long boardId);
         Task<BoardRefresResultModel> GetBoardVersion(long boardId);
         Task<List<BoardOwnerResultModel>> GetBoards(long userId);
+        Task<List<CommentResutModel>> GetComments(long cardId);
+        Task DeleteComment(long commentId);
+        Task<bool> ValidateComment(long userId, long commentId);
         Task WorkInvite(long inviteId, long userId, long boardId, bool isAccepted);
+        Task<BoardCardComment> AddComment(long userId, long cardId, string message);
         Task<List<BoardMemberResultModel>> GetBoardMembers(long boardId);
         Task<bool> CheckBoardMembers(long userId, long boardId);
         Task<long?> GetCardAssignee(long cardId);

@@ -25,7 +25,7 @@ namespace Kanban.Models
     }
     public class RegisterViewModel : LoginViewModel
     {
-        public string fullname { get; set; }
+        public string fullName { get; set; }
         public string otpCode { get; set; }
     }
     public class VerifyViewModel

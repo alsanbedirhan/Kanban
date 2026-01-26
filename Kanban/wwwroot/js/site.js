@@ -274,7 +274,7 @@ async function openNotifications() {
 
 async function deleteNotification(id) {
     try {
-        const res = await apiRequest(`/Kanban/DeleteNotification?id=${id}`, { method: 'DELETE' }, false);
+        const res = await apiRequest(`/Kanban/DeleteNotification?notificationId=${id}`, { method: 'DELETE' }, false);
 
         if (res.success) {
             const el = document.getElementById(`notif-${id}`);
@@ -501,7 +501,7 @@ function updateAuthUI() {
         const avatarPath = getAvatarPath(AppState.currentUser.avatar || 'def');
 
         area.innerHTML = `
-            <div style="cursor:pointer; position:relative;" onclick="openProfileMenu()" title="Menüyü Aç">
+            <div style="cursor:pointer; position:relative;" onclick="openProfileMenu()" title="Menu">
                 <img src="${avatarPath}" 
                      style="width:45px; height:45px; border-radius:50%; object-fit:cover; border: 2px solid #e2e8f0; transition: transform 0.2s;"
                      onmouseover="this.style.transform='scale(1.05)'; this.style.borderColor='#667eea';"
@@ -561,7 +561,7 @@ function openRegisterModal(prefillEmail = null) {
 
 function closeRegisterModal() {
     document.getElementById('registerModal').classList.remove('active');
-    const ids = ['registerFullname', 'registerEmail', 'registerPassword', 'registerConfirmPassword'];
+    const ids = ['registerFullName', 'registerEmail', 'registerPassword', 'registerConfirmPassword'];
     ids.forEach(id => document.getElementById(id).value = '');
 }
 
@@ -597,12 +597,12 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
-    const fullname = document.getElementById('registerFullname').value.trim();
+    const fullName = document.getElementById('registerFullName').value.trim();
     const email = document.getElementById('registerEmail').value.trim();
     const password = document.getElementById('registerPassword').value;
     const confirmPassword = document.getElementById('registerConfirmPassword').value;
 
-    if (!fullname || !email || !password || !confirmPassword)
+    if (!fullName || !email || !password || !confirmPassword)
         return Swal.fire('Error', 'Please fill all fields', 'error');
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -679,7 +679,7 @@ async function handleRegister() {
 
             const response = await apiRequest('/Auth/Register', {
                 method: 'POST',
-                body: JSON.stringify({ fullname, email, password, otpCode })
+                body: JSON.stringify({ fullName, email, password, otpCode })
             });
 
             if (response.success) {
@@ -688,7 +688,7 @@ async function handleRegister() {
                 closeRegisterModal();
                 Swal.fire({
                     title: 'Welcome!',
-                    text: `Registration successful! Welcome ${escapeHtml(fullname)}`,
+                    text: `Registration successful! Welcome ${escapeHtml(fullName)}`,
                     icon: 'success',
                     timer: 2000,
                     showConfirmButton: false
@@ -1052,40 +1052,62 @@ function renderColumns(columns) {
 
     const currentUserId = AppState.currentUser ? AppState.currentUser.userId : 0;
 
-    boardDiv.innerHTML = columns.map(col => `
+    const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
+    const isOwner = currentBoard && currentBoard.isOwner === true;
+
+    const addColBtn = document.getElementById('btnNewColumn') || document.querySelector("button[onclick='openNewColumnModal()']");
+
+    if (addColBtn) {
+        if (isOwner) {
+            addColBtn.removeAttribute('disabled');
+            addColBtn.style.opacity = '1';
+            addColBtn.style.cursor = 'pointer';
+        } else {
+            addColBtn.setAttribute('disabled', 'true');
+            addColBtn.style.opacity = '0.5';
+            addColBtn.style.cursor = 'not-allowed';
+        }
+    }
+
+    boardDiv.innerHTML = columns.map(col => {
+        const deleteBtnAttr = isOwner
+            ? `onclick="deleteColumn(${col.id})"`
+            : `disabled style="opacity: 0.3; cursor: not-allowed;" title="Only owner can delete"`;
+
+        return `
         <div class="column">
             <div class="column-header">
                 <span class="column-title">${escapeHtml(col.title)}</span>
                 <span class="card-count">${col.cards.length}</span>
-                <button class="btn btn-danger" onclick="deleteColumn(${col.id})">🗑️</button>
+                
+                <button class="btn btn-danger" ${deleteBtnAttr}>🗑️</button>
             </div>
             <div class="cards-container" data-column-id="${col.id}">
                 ${col.cards.map((card) => {
-        let cardBgColor = '#ffffff';
-        if (card.dueDate && card.warningDays && card.highlightColor) {
-            const dueDate = new Date(card.dueDate);
-            dueDate.setHours(0, 0, 0, 0);
-            const diffTime = dueDate - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays <= card.warningDays && diffDays >= 0) {
-                cardBgColor = card.highlightColor;
-            } else if (diffDays < 0) {
-                cardBgColor = '#fee2e2';
+            let cardBgColor = '#ffffff';
+            if (card.dueDate && card.warningDays && card.highlightColor) {
+                const dueDate = new Date(card.dueDate);
+                dueDate.setHours(0, 0, 0, 0);
+                const diffTime = dueDate - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays <= card.warningDays && diffDays >= 0) {
+                    cardBgColor = card.highlightColor;
+                } else if (diffDays < 0) {
+                    cardBgColor = '#fee2e2';
+                }
             }
-        }
 
-        const isLocked = card.assigneeId && card.assigneeId !== currentUserId;
+            const isLocked = card.assigneeId && card.assigneeId !== currentUserId;
+            const cursorStyle = isLocked ? 'not-allowed' : 'grab';
+            const lockedClass = isLocked ? 'locked-card' : '';
+            const lockIcon = isLocked ? '<span title="Locked by another user">🔒</span>' : '';
+            const opacityStyle = isLocked ? 'opacity: 0.8;' : '';
 
-        const cursorStyle = isLocked ? 'not-allowed' : 'grab';
-        const lockedClass = isLocked ? 'locked-card' : '';
-        const lockIcon = isLocked ? '<span title="Locked by another user">🔒</span>' : '';
-        const opacityStyle = isLocked ? 'opacity: 0.8;' : '';
+            const avatarHtml = card.assigneeAvatar
+                ? `<img src="${getAvatarPath(card.assigneeAvatar)}" title="${escapeHtml(card.assigneeName)}" class="card-avatar-small">`
+                : `<span class="card-avatar-empty" title="Unassigned">👤</span>`;
 
-        const avatarHtml = card.assigneeAvatar
-            ? `<img src="${getAvatarPath(card.assigneeAvatar)}" title="${escapeHtml(card.assigneeName)}" class="card-avatar-small">`
-            : `<span class="card-avatar-empty" title="Unassigned">👤</span>`;
-
-        return `
+            return `
                         <div class="card ${lockedClass}" 
                              data-card-id="${card.id}" 
                              oncontextmenu="return false;"
@@ -1110,11 +1132,11 @@ function renderColumns(columns) {
                             </div>
                         </div>
                     `;
-    }).join('')}
+        }).join('')}
             </div>
             <button class="btn btn-success" style="width:100%" onclick="openCardModal(${col.id})">+ Add Card</button>
         </div>
-    `).join('');
+    `}).join('');
 
     initSortable();
 }
@@ -1280,19 +1302,23 @@ async function openCardModal(columnId, cardId = null) {
         if (!card) return;
     }
 
-    const minDate = isEditMode ? new Date('2020-01-01').toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    const currentUserId = AppState.currentUser.userId;
+    const canEdit = !isEditMode || !card.assigneeId || card.assigneeId === currentUserId;
 
+    const disabledAttr = canEdit ? '' : 'disabled';
+    const inputStyle = canEdit ? '' : 'background-color: #f7fafc; color: #718096; cursor: not-allowed;';
+
+    const minDate = isEditMode ? new Date('2020-01-01').toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
     const membersRes = await apiRequest(`/Kanban/GetBoardMembers?boardId=${AppState.currentBoardId}`);
-    const members = membersRes.data;
 
     let membersOptions = `<option value="">-- Unassigned --</option>`;
-    members.forEach(m => {
+    membersRes.data.forEach(m => {
         const selected = (isEditMode && card.assigneeId && m.userId == card.assigneeId) ? 'selected' : '';
         membersOptions += `<option value="${m.userId}" ${selected}>${escapeHtml(m.fullName)}</option>`;
     });
 
     const defaults = {
-        title: isEditMode ? 'Edit Card' : 'New Card',
+        title: isEditMode ? (canEdit ? 'Edit Card' : 'View Card Details') : 'New Card',
         btnText: isEditMode ? 'Save Changes' : 'Create Card',
         desc: isEditMode ? (card.desc || "") : "",
         date: isEditMode ? new Date(card.dueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -1304,40 +1330,61 @@ async function openCardModal(columnId, cardId = null) {
     const warningDisplay = defaults.hasWarning ? 'block' : 'none';
     const warningChecked = defaults.hasWarning ? 'checked' : '';
 
+    let commentsSection = '';
+    if (isEditMode) {
+        commentsSection = `
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 2px solid #edf2f7;">
+                <h4 style="margin: 0 0 10px 0; color: #2d3748; font-size: 14px;">💬 Comments</h4>
+                
+                <div id="comments-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 8px;">
+                    <div style="text-align:center; color:#a0aec0; font-size:12px;">Loading comments...</div>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="new-comment-input" class="swal2-input" maxlength="400" placeholder="Write a comment..."
+                    onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComment(${cardId}); }"
+                           style="margin: 0; height: 38px; font-size: 13px; flex: 1;">
+                    <button type="button" class="btn btn-primary" onclick="submitComment(${cardId})" 
+                            style="padding: 0 20px; font-size: 13px; height: 38px;">Send</button>
+                </div>
+            </div>
+        `;
+    }
+
     let quill;
 
     const { value: formValues } = await Swal.fire({
         title: defaults.title,
-        width: '600px',
+        width: '650px',
         html: `
             <div style="text-align:left; display:flex; flex-direction:column; gap:15px;">
                 <div>
                     <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">DESCRIPTION</label>
-                    <div id="editor-container" style="height: 120px; background:white;"></div>
+                    <div id="editor-container" style="height: 120px; background:white; ${canEdit ? '' : 'pointer-events: none; background: #f7fafc;'}"></div>
                 </div>
                 
                 <div style="display:flex; gap:15px;">
                     <div style="flex:1;">
                         <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">ASSIGN TO</label>
-                        <select id="modal-assignee" class="swal2-select" style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px;">
+                        <select id="modal-assignee" class="swal2-select" ${disabledAttr} style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}">
                             ${membersOptions}
                         </select>
                     </div>
 
                     <div style="flex:1;">
                         <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">DUE DATE</label>
-                        <input type="date" id="modal-date" class="swal2-input" 
-                               style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px;" 
+                        <input type="date" id="modal-date" class="swal2-input" ${disabledAttr}
+                               style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}" 
                                value="${defaults.date}" min="${minDate}"> 
                     </div>
                 </div>
 
                 <div style="display: flex; align-items: center; gap: 8px; margin-top:5px;">
-                    <input type="checkbox" id="modal-reminder-check" style="width: 18px; height: 18px; cursor: pointer;" ${warningChecked}>
-                    <label for="modal-reminder-check" style="font-weight: bold; cursor: pointer; font-size:13px;">Show Warning Settings</label>
+                    <input type="checkbox" id="modal-reminder-check" style="width: 18px; height: 18px; cursor: pointer;" ${warningChecked} ${disabledAttr}>
+                    <label for="modal-reminder-check" style="font-weight: bold; cursor: pointer; font-size:13px; color: ${canEdit ? 'black' : '#a0aec0'}">Show Warning Settings</label>
                 </div>
 
-                <div id="warning-area" style="display: ${warningDisplay}; padding: 10px; background: #fff5f5; border: 1px dashed #feb2b2; border-radius: 8px;">
+                <div id="warning-area" style="display: ${warningDisplay}; padding: 10px; background: #fff5f5; border: 1px dashed #feb2b2; border-radius: 8px; ${canEdit ? '' : 'opacity: 0.6; pointer-events: none;'}">
                     <p style="color: #c53030; font-size: 11px; margin-bottom: 10px;"><b>⚠️ Note:</b> Card will turn red when approaching due date.</p>
                     <div style="display: flex; gap: 10px; align-items: flex-end;">
                         <div style="flex: 2;">
@@ -1354,27 +1401,31 @@ async function openCardModal(columnId, cardId = null) {
                         </div>
                     </div>
                 </div>
+
+                ${commentsSection}
             </div>
         `,
         showCancelButton: true,
+        showConfirmButton: canEdit,
         confirmButtonText: defaults.btnText,
         confirmButtonColor: '#667eea',
-        showDenyButton: isEditMode,
+        showDenyButton: isEditMode && canEdit,
         denyButtonText: '🗑️ Delete',
         denyButtonColor: '#f56565',
+        cancelButtonText: canEdit ? 'Cancel' : 'Close',
 
         didOpen: () => {
             quill = new Quill('#editor-container', {
                 theme: 'snow',
-                placeholder: 'Enter details...',
+                readOnly: !canEdit,
                 modules: {
-                    toolbar: [
+                    toolbar: canEdit ? [
                         ['bold', 'italic', 'underline', 'strike'],
                         [{ 'list': 'ordered' }, { 'list': 'bullet' }],
                         [{ 'color': [] }, { 'background': [] }],
                         [{ 'size': ['small', false, 'large', 'huge'] }],
                         ['clean']
-                    ]
+                    ] : false
                 }
             });
             quill.root.innerHTML = defaults.desc;
@@ -1386,13 +1437,18 @@ async function openCardModal(columnId, cardId = null) {
                     area.style.display = e.target.checked ? 'block' : 'none';
                 });
             }
+
+            if (isEditMode) {
+                loadComments(cardId);
+            }
         },
 
         preConfirm: () => {
+            if (!canEdit) return null;
+
             const description = quill.root.innerHTML;
             const assigneeId = document.getElementById('modal-assignee').value;
             const dueDate = document.getElementById('modal-date').value;
-
             const hasWarning = document.getElementById('modal-reminder-check').checked;
             const warningDays = hasWarning ? document.getElementById('modal-days').value : 0;
             const highlightColor = hasWarning ? document.getElementById('modal-color').value : null;
@@ -1406,7 +1462,7 @@ async function openCardModal(columnId, cardId = null) {
         }
     });
 
-    if (formValues) {
+    if (formValues && canEdit) {
         const payload = {
             description: formValues.description,
             dueDate: formValues.dueDate,
@@ -1422,7 +1478,6 @@ async function openCardModal(columnId, cardId = null) {
                     method: 'POST',
                     body: JSON.stringify({ cardId, ...payload })
                 });
-
                 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
                 Toast.fire({ icon: 'success', title: 'Card updated' });
             } else {
@@ -1430,13 +1485,10 @@ async function openCardModal(columnId, cardId = null) {
                     method: 'POST',
                     body: JSON.stringify({ columnId, ...payload })
                 });
-
                 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
                 Toast.fire({ icon: 'success', title: 'Card created' });
             }
-
             loadBoardData();
-
         } catch (e) {
             console.error(e);
             Swal.fire('Error', `Failed to ${isEditMode ? 'update' : 'create'} card`, 'error');
@@ -1444,6 +1496,121 @@ async function openCardModal(columnId, cardId = null) {
     }
     else if (Swal.getDenyButton() && Swal.getDenyButton().dataset.isDenied === "true") {
         deleteCard(cardId);
+    }
+}
+
+async function loadComments(cardId) {
+    const listEl = document.getElementById('comments-list');
+    if (!listEl) return;
+    const currentUserId = AppState.currentUser.userId;
+
+    try {
+        const res = await apiRequest(`/Kanban/GetComments?boardId=${AppState.currentBoardId}&cardId=${cardId}`, {}, false);
+
+        if (res.success && res.data.length > 0) {
+            listEl.innerHTML = res.data.map(c => {
+                const deleteBtn = (c.userId === currentUserId)
+                    ? `<span onclick="deleteComment(${c.id}, ${cardId})" 
+                            title="Delete Comment" 
+                            style="cursor:pointer; color:#e53e3e; margin-left:10px; font-size:14px;">
+                            🗑️
+                       </span>`
+                    : '';
+
+                return `
+                <div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
+                    <div style="display:flex; justify-content:space-between; font-size: 11px; color: #718096; margin-bottom: 2px;">
+                        <div>
+                            <strong>${escapeHtml(c.fullName)}</strong>
+                            <span style="margin-left:5px; color:#cbd5e0;">•</span>
+                            <span style="margin-left:5px;">${new Date(c.createdAt).toLocaleString('tr-TR')}</span>
+                        </div>
+                        <div>${deleteBtn}</div>
+                    </div>
+                    <div style="font-size: 13px; color: #2d3748; white-space: pre-wrap;">${escapeHtml(c.message)}</div>
+                </div>
+            `}).join('');
+        } else {
+            listEl.innerHTML = '<div style="text-align:center; color:#a0aec0; font-size:12px; padding:10px;">No comments yet.</div>';
+        }
+    } catch (e) {
+        listEl.innerHTML = '<div style="text-align:center; color:#e53e3e; font-size:12px;">Failed to load comments.</div>';
+    }
+}
+
+async function submitComment(cardId) {
+    const input = document.getElementById('new-comment-input');
+    const message = input.value.trim();
+    if (!message) return;
+
+    if (message.length > 400) {
+        Swal.showValidationMessage('Comment too long.');
+        return;
+    }
+    input.disabled = true;
+
+    try {
+        const res = await apiRequest('/Kanban/AddComment', {
+            method: 'POST',
+            body: JSON.stringify({ cardId, message, boardId: AppState.currentBoardId })
+        }, false);
+
+        if (res.success) {
+            input.value = '';
+            loadComments(cardId);
+        } else {
+            Swal.showValidationMessage('Failed to post comment');
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        input.disabled = false;
+        input.focus();
+    }
+}
+
+async function deleteComment(commentId, cardId) {
+    if (!checkAuth()) return;
+    const result = await Swal.fire({
+        title: 'Delete comment?',
+        text: "This action cannot be undone.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete',
+        cancelButtonText: 'Cancel',
+        width: 300
+    });
+
+    if (result.isConfirmed) {
+        try {
+            const res = await apiRequest(`/Kanban/DeleteComment?boardId=${AppState.currentBoardId}&commentId=${commentId}`, { method: 'DELETE' }, false);
+
+            if (res.success) {
+                loadComments(cardId);
+
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
+                Toast.fire({ icon: 'success', title: 'Comment deleted' });
+
+                let columnId = null;
+                outerLoop:
+                for (const col of AppState.currentColumns) {
+                    for (const c of col.cards) {
+                        if (c.id == cardId) {
+                            columnId = col.id;
+                            break outerLoop;
+                        }
+                    }
+                }
+
+                if (columnId) openCardModal(columnId, cardId);
+            } else {
+                Swal.fire('Error', res.errorMessage || 'Could not delete comment', 'error');
+            }
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Network error', 'error');
+        }
     }
 }
 

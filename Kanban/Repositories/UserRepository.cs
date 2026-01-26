@@ -151,29 +151,32 @@ namespace Kanban.Repositories
                 .AnyAsync(n => n.UserId == userId && n.Id == id && !n.IsDeleted);
         }
 
-        public async Task DeleteNotification(long id)
+        public async Task DeleteNotification(long id, long userId)
         {
             await _context.Usernotifications.Where(n => n.Id == id)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
+            _cache.Remove($"User_HasUpdates_{userId}");
         }
 
         public async Task DeleteNotifications(long userId)
         {
             await _context.Usernotifications.Where(n => n.UserId == userId && !n.IsDeleted)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
+            _cache.Remove($"User_HasUpdates_{userId}");
         }
         public async Task<Userinvite?> GetInvite(long id)
         {
             return await _context.Userinvites.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
         }
 
-        public async Task SetAcceptedInvite(long inviteId)
+        public async Task SetAcceptedInvite(long inviteId, long userId)
         {
             await _context.Userinvites.Where(bc => bc.Id == inviteId)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsAccepted, true));
+            _cache.Remove($"User_HasUpdates_{userId}");
         }
 
-        public async Task<Userinvite> AddInvite(long senderUserId, long boardId, string email)
+        public async Task<Userinvite> AddInvite(long senderUserId, long boardId, string email, long userId)
         {
             var now = await _dbDate.Now();
             var invite = new Userinvite
@@ -186,6 +189,10 @@ namespace Kanban.Repositories
             };
             await _context.Userinvites.AddAsync(invite);
             await _context.SaveChangesAsync();
+            if (userId > 0)
+            {
+                _cache.Remove($"User_HasUpdates_{userId}");
+            }
             return invite;
         }
 

@@ -1,5 +1,6 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
+using Mailjet.Client.Resources;
 
 namespace Kanban.Services
 {
@@ -9,7 +10,10 @@ namespace Kanban.Services
         Task<ServiceResult<List<BoardMemberResultModel>>> GetBoardMembers(long userId, long boardId);
         Task<ServiceResult<BoardRefresResultModel>> GetBoardVersion(long userId, long boardId);
         Task<ServiceResult<List<NotificationResultModel>>> GetNotifications(long userId);
+        Task<ServiceResult<BoardCardComment>> AddComment(long userId, long boardId, long cardId, string message);
+        Task<ServiceResult<List<CommentResutModel>>> GetComments(long userId, long boardId, long cardId);
         Task<ServiceResult> DeleteNotification(long userId, long id);
+        Task<ServiceResult> DeleteComment(long userId, long boardId, long commentId);
         Task<ServiceResult> DeleteNotifications(long userId);
         Task<ServiceResult> DeleteMember(long userId, long boardId, long removeUserId);
         Task<ServiceResult> PromoteToOwner(long userId, long boardId, long promoteUserId);
