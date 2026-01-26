@@ -8,10 +8,10 @@ namespace Kanban.Repositories
         Task<User?> GetByEmail(string email);
         Task<long?> GetUserIdByEmail(string email);
         Task<bool> CheckInvite(long userId, long boardId, string email);
-        Task<Userinvite?> GetInvite(long id);
+        Task<UserInvite?> GetInvite(long id);
         Task<List<InviteResultModel>> GetInvites(string email);
         Task SetAcceptedInvite(long inviteId, long userId);
-        Task<Userinvite> AddInvite(long senderUserId, long boardId, string email, long userId);
+        Task<UserInvite> AddInvite(long senderUserId, long boardId, string email, long userId);
         Task<int> CheckInviteCountToday(string email);
         Task<bool> CheckNotification(long userId, long id);
         Task<List<NotificationResultModel>> GetNotifications(long userId);
@@ -27,6 +27,6 @@ namespace Kanban.Repositories
         Task<int> VerifyCountToday(string email);
         Task SaveVerifyCode(string email, string code);
         Task SetCodeUsed(long id);
-        Task<Userverification?> GetLastVerify(string email);
+        Task<UserVerification?> GetLastVerify(string email);
     }
 }

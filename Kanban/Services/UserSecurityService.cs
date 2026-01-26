@@ -14,7 +14,7 @@ namespace Kanban.Services
             _userRepository = userRepository;
         }
 
-        public async Task<bool> IsUserValidAsync(int userId, string securityStamp)
+        public async Task<bool> IsUserValidAsync(long userId, string securityStamp)
         {
             string key = $"SECURITY:{userId}";
             if (!_cache.TryGetValue(key, out string? stamp) || string.IsNullOrEmpty(stamp))

@@ -42,7 +42,7 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
                 }
-                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, columnId, desc, dueDate, warningDays, highlightColor, assigneeId));
+                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, desc, dueDate, warningDays, highlightColor, assigneeId));
             }
             catch (Exception)
             {

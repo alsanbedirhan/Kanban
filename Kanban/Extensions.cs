@@ -53,8 +53,8 @@ namespace Kanban
             if (connection.State != System.Data.ConnectionState.Open)
                 await connection.OpenAsync();
 
-            using var command = connection.CreateCommand();
-            command.CommandText = "SELECT now()";
+            using var command = connection.CreateCommand(); 
+            command.CommandText = "SELECT GETDATE()";
 
             var result = await command.ExecuteScalarAsync();
             return (DateTime)result!;

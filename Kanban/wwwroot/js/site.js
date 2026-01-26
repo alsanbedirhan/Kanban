@@ -219,7 +219,7 @@ async function openNotifications() {
                 text: 'No new notifications.',
                 icon: 'info',
                 confirmButtonColor: '#667eea'
-            });
+            }).then(() => openProfileMenu());
         }
 
         const listItemsHtml = res.data.map(n => `
@@ -264,7 +264,7 @@ async function openNotifications() {
             showCloseButton: true,
             showConfirmButton: false,
             width: 450
-        });
+        }).then(() => openProfileMenu());
 
     } catch (e) {
         console.error(e);
@@ -274,7 +274,10 @@ async function openNotifications() {
 
 async function deleteNotification(id) {
     try {
-        const res = await apiRequest(`/Kanban/DeleteNotification?notificationId=${id}`, { method: 'DELETE' }, false);
+        const res = await apiRequest(`/Kanban/DeleteNotification`, {
+            method: 'POST',
+            body: JSON.stringify({ notificationId: id })
+        }, false);
 
         if (res.success) {
             const el = document.getElementById(`notif-${id}`);
@@ -294,6 +297,7 @@ async function deleteNotification(id) {
 }
 
 async function deleteAllNotifications() {
+    if (!checkAuth()) return;
     const confirm = await Swal.fire({
         title: 'Clear all?',
         text: "This will delete all your notifications.",
@@ -306,7 +310,7 @@ async function deleteAllNotifications() {
 
     if (confirm.isConfirmed) {
         try {
-            const res = await apiRequest('/Kanban/DeleteNotifications', { method: 'DELETE' });
+            const res = await apiRequest('/Kanban/DeleteNotifications', { method: 'POST' });
 
             if (res.success) {
                 Swal.fire('Deleted!', 'All notifications have been cleared.', 'success');
@@ -333,7 +337,7 @@ async function openPendingInvites() {
         const res = await apiRequest('/Kanban/GetInvites');
 
         if (!res.success || !res.data || res.data.length === 0) {
-            return Swal.fire('Invites', 'You have no pending invites.', 'info');
+            return Swal.fire('Invites', 'You have no pending invites.', 'info').then(() => openProfileMenu());
         }
 
         const invitesHtml = res.data.map(invite => `
@@ -362,7 +366,7 @@ async function openPendingInvites() {
             html: `<div style="max-height: 400px; overflow-y: auto;">${invitesHtml}</div>`,
             showConfirmButton: false,
             showCloseButton: true
-        });
+        }).then(() => openProfileMenu());
 
     } catch (e) {
         console.error(e);
@@ -374,7 +378,10 @@ async function handleInviteResponse(inviteId, isAccepted) {
     if (!checkAuth()) return;
 
     try {
-        const res = await apiRequest(`/Kanban/WorkInvite?inviteId=${inviteId}&isAccepted=${isAccepted}`, { method: 'PUT' }, false);
+        const res = await apiRequest(`/Kanban/WorkInvite`, {
+            method: 'POST',
+            body: JSON.stringify({ inviteId, isAccepted })
+        }, false);
 
         if (res.success) {
             Swal.fire({
@@ -397,6 +404,7 @@ async function handleInviteResponse(inviteId, isAccepted) {
 }
 
 async function openChangePasswordModal() {
+    if (!checkAuth()) return;
     const { value: formValues } = await Swal.fire({
         title: 'Change Password',
         html: `
@@ -415,7 +423,7 @@ async function openChangePasswordModal() {
                 document.getElementById('swal-conf-pass').value
             ]
         }
-    });
+    }).then(() => openProfileMenu());
 
     if (formValues) {
         const [oldPass, newPass, confPass] = formValues;
@@ -466,7 +474,7 @@ function openProfileMenu() {
                     <span style="font-size:18px;">📩</span>  Invites
                 </button>
 
-                <button onclick="Swal.close(); openAvatarModal()" style="${btnStyle}" onmouseover="${hoverEffect}" onmouseout="${outEffect}">
+                <button onclick="Swal.close(); openAvatarModal(true)" style="${btnStyle}" onmouseover="${hoverEffect}" onmouseout="${outEffect}">
                     <span style="font-size:18px;">🎨</span> Change Avatar
                 </button>
                 
@@ -946,7 +954,10 @@ async function promoteToOwner(boardId, userId) {
 
     if (confirm.isConfirmed) {
         try {
-            const response = await apiRequest(`/Kanban/PromoteToOwner?boardId=${boardId}&userId=${userId}`, { method: 'PUT' });
+            const response = await apiRequest(`/Kanban/PromoteToOwner`, {
+                method: 'POST',
+                body: JSON.stringify({ boardId, userId })
+            });
 
             if (response.success) {
                 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
@@ -1016,6 +1027,7 @@ async function addUserToBoard(boardId) {
 }
 
 async function deleteBoard(boardId) {
+    if (!checkAuth()) return;
     const result = await Swal.fire({
         title: 'Are you sure?',
         text: 'This board and all its contents will be deleted!',
@@ -1026,7 +1038,10 @@ async function deleteBoard(boardId) {
     });
     if (result.isConfirmed) {
         try {
-            await apiRequest(`/Kanban/DeleteBoard?boardId=${boardId}`, { method: 'DELETE' });
+            await apiRequest(`/Kanban/DeleteBoard`, {
+                method: 'POST',
+                body: JSON.stringify({ boardId })
+            });
             Swal.fire('Deleted!', 'Board has been deleted.', 'success');
             if (AppState.currentBoardId === boardId) {
                 AppState.currentBoardId = null;
@@ -1255,7 +1270,10 @@ async function deleteColumn(id) {
     });
     if (res.isConfirmed) {
         try {
-            await apiRequest(`/Kanban/DeleteColumn?boardId=${AppState.currentBoardId}&columnId=${id}`, { method: 'DELETE' });
+            await apiRequest(`/Kanban/DeleteColumn`, {
+                method: 'POST',
+                body: JSON.stringify({ boardId: AppState.currentBoardId, columnId: id })
+            });
             Swal.fire('Success', 'Column deleted successfully', 'success');
             loadBoardData();
         } catch {
@@ -1274,7 +1292,10 @@ async function deleteCard(id) {
     });
     if (res.isConfirmed) {
         try {
-            await apiRequest(`/Kanban/DeleteCard?boardId=${AppState.currentBoardId}&cardId=${id}`, { method: 'DELETE' });
+            await apiRequest(`/Kanban/DeleteCard`, {
+                method: 'POST',
+                body: JSON.stringify({ boardId: AppState.currentBoardId, cardId: id })
+            });
             loadBoardData();
         } catch {
             Swal.fire('Error', 'Failed to delete card', 'error');
@@ -1584,7 +1605,10 @@ async function deleteComment(commentId, cardId) {
 
     if (result.isConfirmed) {
         try {
-            const res = await apiRequest(`/Kanban/DeleteComment?boardId=${AppState.currentBoardId}&commentId=${commentId}`, { method: 'DELETE' }, false);
+            const res = await apiRequest(`/Kanban/DeleteComment`, {
+                method: 'POST',
+                body: JSON.stringify({ boardId: AppState.currentBoardId, commentId })
+            }, false);
 
             if (res.success) {
                 loadComments(cardId);
@@ -1624,6 +1648,16 @@ window.addEventListener('DOMContentLoaded', async () => {
             btn.textContent = input.type === "password" ? "🙈" : "🙊";
         });
     });
+
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener('click', () => {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar && sidebar.classList.contains('open')) {
+                toggleSidebar();
+            }
+        });
+    }
 
     await fetchCurrentUser();
 
@@ -1716,8 +1750,9 @@ function getAvatarPath(seed) {
     if (seed === 'def') return '/avatars/Felix.svg';
     return `/avatars/${seed}.svg`;
 }
-
-function openAvatarModal() {
+let avatarOpenedFromMenu = false;
+function openAvatarModal(fromMenu = false) {
+    avatarOpenedFromMenu = fromMenu;
     initAvatarSelector();
 
     if (AppState.currentUser && AppState.currentUser.avatar && AppState.currentUser.avatar !== 'def') {
@@ -1774,7 +1809,10 @@ function selectAvatarTemp(name, imgElement) {
 async function saveMyAvatar() {
     if (!checkAuth()) return;
     try {
-        await apiRequest(`/Auth/UpdateAvatar?avatar=${selectedAvatarTemp}`, { method: 'PUT' });
+        await apiRequest(`/Auth/UpdateAvatar`, {
+            method: 'POST',
+            body: JSON.stringify({ avatar: selectedAvatarTemp })
+        });
 
         if (AppState.currentUser) {
             AppState.currentUser.avatar = selectedAvatarTemp;
@@ -1782,14 +1820,19 @@ async function saveMyAvatar() {
         document.getElementById('avatarModal').classList.remove('active');
         updateAuthUI();
 
-        Swal.fire({
+        await Swal.fire({
             icon: 'success',
             title: 'Looks great!',
             toast: true,
             position: 'top-end',
             showConfirmButton: false,
-            timer: 3000
+            timer: 500
         });
+
+        if (avatarOpenedFromMenu) {
+            openProfileMenu();
+            avatarOpenedFromMenu = false;
+        }
 
     } catch (e) {
         console.error(e);

@@ -44,14 +44,14 @@ namespace Kanban.Repositories
         }
         public async Task SetCodeUsed(long id)
         {
-            await _context.Userverifications.Where(x => x.Id == id)
+            await _context.UserVerifications.Where(x => x.Id == id)
                 .ExecuteUpdateAsync(x => x.SetProperty(u => u.IsUsed, true));
         }
         public async Task<User> Create(User user)
         {
             await _context.Users.AddAsync(user);
 
-            var l = await _context.Userinvites.Where(x => x.Email == user.Email && x.IsAccepted && !x.IsUsed).ToListAsync();
+            var l = await _context.UserInvites.Where(x => x.Email == user.Email && x.IsAccepted && !x.IsUsed).ToListAsync();
 
             if (l.Any())
             {
@@ -73,31 +73,31 @@ namespace Kanban.Repositories
         public async Task<int> VerifyCountToday(string email)
         {
             var now = await _dbDate.Now();
-            return await _context.Userverifications.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
+            return await _context.UserVerifications.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
         }
 
         public async Task<int> CheckInviteCountToday(string email)
         {
             var now = await _dbDate.Now();
-            return await _context.Userinvites.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
+            return await _context.UserInvites.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
         }
 
         public async Task SaveVerifyCode(string email, string code)
         {
             var now = await _dbDate.Now();
-            var uv = new Userverification
+            var uv = new UserVerification
             {
                 ExpiresAt = now.AddMinutes(5),
                 Email = email,
                 Code = code,
                 CreatedAt = now
             };
-            await _context.Userverifications.AddAsync(uv);
+            await _context.UserVerifications.AddAsync(uv);
             await SaveContext();
         }
-        public async Task<Userverification?> GetLastVerify(string email)
+        public async Task<UserVerification?> GetLastVerify(string email)
         {
-            return await _context.Userverifications.AsNoTracking().Where(x => x.Email == email && !x.IsUsed)
+            return await _context.UserVerifications.AsNoTracking().Where(x => x.Email == email && !x.IsUsed)
                 .OrderByDescending(x => x.Id).FirstOrDefaultAsync();
         }
         public async Task<long?> GetUserIdByEmail(string email)
@@ -114,13 +114,13 @@ namespace Kanban.Repositories
 
         public async Task<bool> CheckInvite(long userId, long boardId, string email)
         {
-            return await _context.Userinvites.AsNoTracking()
+            return await _context.UserInvites.AsNoTracking()
                 .AnyAsync(i => i.BoardId == boardId && i.Email == email && !i.IsUsed);
         }
 
         public async Task<List<InviteResultModel>> GetInvites(string email)
         {
-            return await _context.Userinvites.AsNoTracking()
+            return await _context.UserInvites.AsNoTracking()
                 .Where(x => x.Email == email && !x.IsUsed && !x.IsAccepted)
                 .Select(x => new InviteResultModel
                 {
@@ -133,7 +133,7 @@ namespace Kanban.Repositories
 
         public async Task<List<NotificationResultModel>> GetNotifications(long userId)
         {
-            return await _context.Usernotifications.AsNoTracking()
+            return await _context.UserNotifications.AsNoTracking()
                 .Where(n => n.UserId == userId && !n.IsDeleted)
                 .Select(x => new NotificationResultModel
                 {
@@ -147,39 +147,39 @@ namespace Kanban.Repositories
 
         public async Task<bool> CheckNotification(long userId, long id)
         {
-            return await _context.Usernotifications
+            return await _context.UserNotifications
                 .AnyAsync(n => n.UserId == userId && n.Id == id && !n.IsDeleted);
         }
 
         public async Task DeleteNotification(long id, long userId)
         {
-            await _context.Usernotifications.Where(n => n.Id == id)
+            await _context.UserNotifications.Where(n => n.Id == id)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
             _cache.Remove($"User_HasUpdates_{userId}");
         }
 
         public async Task DeleteNotifications(long userId)
         {
-            await _context.Usernotifications.Where(n => n.UserId == userId && !n.IsDeleted)
+            await _context.UserNotifications.Where(n => n.UserId == userId && !n.IsDeleted)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
             _cache.Remove($"User_HasUpdates_{userId}");
         }
-        public async Task<Userinvite?> GetInvite(long id)
+        public async Task<UserInvite?> GetInvite(long id)
         {
-            return await _context.Userinvites.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+            return await _context.UserInvites.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task SetAcceptedInvite(long inviteId, long userId)
         {
-            await _context.Userinvites.Where(bc => bc.Id == inviteId)
+            await _context.UserInvites.Where(bc => bc.Id == inviteId)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsAccepted, true));
             _cache.Remove($"User_HasUpdates_{userId}");
         }
 
-        public async Task<Userinvite> AddInvite(long senderUserId, long boardId, string email, long userId)
+        public async Task<UserInvite> AddInvite(long senderUserId, long boardId, string email, long userId)
         {
             var now = await _dbDate.Now();
-            var invite = new Userinvite
+            var invite = new UserInvite
             {
                 BoardId = boardId,
                 Email = email,
@@ -187,7 +187,7 @@ namespace Kanban.Repositories
                 CreatedAt = now,
                 SenderUserId = senderUserId
             };
-            await _context.Userinvites.AddAsync(invite);
+            await _context.UserInvites.AddAsync(invite);
             await _context.SaveChangesAsync();
             if (userId > 0)
             {
@@ -202,10 +202,10 @@ namespace Kanban.Repositories
 
             if (!_cache.TryGetValue(cacheKey, out bool hasUpdates))
             {
-                bool hasNotif = await _context.Usernotifications.AnyAsync(x => x.UserId == userId && !x.IsDeleted);
+                bool hasNotif = await _context.UserNotifications.AnyAsync(x => x.UserId == userId && !x.IsDeleted);
                 if (!hasNotif)
                 {
-                    bool hasInvite = await _context.Userinvites.AnyAsync(x => x.Email == email && !x.IsUsed);
+                    bool hasInvite = await _context.UserInvites.AnyAsync(x => x.Email == email && !x.IsUsed);
                     hasUpdates = hasInvite;
                 }
                 else

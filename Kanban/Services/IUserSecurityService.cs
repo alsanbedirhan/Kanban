@@ -2,6 +2,6 @@
 {
     public interface IUserSecurityService
     {
-        Task<bool> IsUserValidAsync(int userId, string securityStamp);
+        Task<bool> IsUserValidAsync(long userId, string securityStamp);
     }
 }

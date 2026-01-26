@@ -104,10 +104,10 @@ namespace Kanban.Controllers
         }
 
         [Authorize]
-        [HttpPut]
-        public async Task<IActionResult> UpdateAvatar(string avatar)
+        [HttpPost]
+        public async Task<IActionResult> UpdateAvatar([FromBody] AvatarUpdateModel model)
         {
-            var r = await _userService.UpdateAvatar(User.GetUserId(), avatar);
+            var r = await _userService.UpdateAvatar(User.GetUserId(), model.Avatar);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -120,7 +120,7 @@ namespace Kanban.Controllers
                 {
                     identity.RemoveClaim(existingClaim);
                 }
-                identity.AddClaim(new Claim("Avatar", avatar));
+                identity.AddClaim(new Claim("Avatar", model.Avatar));
             }
 
             return Ok(ServiceResult.Ok());

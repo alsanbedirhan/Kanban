@@ -21,5 +21,7 @@ public partial class Board
 
     public virtual ICollection<BoardMember> BoardMembers { get; set; } = new List<BoardMember>();
 
-    public virtual ICollection<Userinvite> Userinvites { get; set; } = new List<Userinvite>();
+    public virtual User User { get; set; } = null!;
+
+    public virtual ICollection<UserInvite> UserInvites { get; set; } = new List<UserInvite>();
 }

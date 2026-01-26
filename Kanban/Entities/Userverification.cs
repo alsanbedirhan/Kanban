@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Kanban.Entities;
 
-public partial class Userverification
+public partial class UserVerification
 {
     public long Id { get; set; }
 

@@ -21,7 +21,7 @@ namespace Kanban.Repositories
         private async Task SendNotification(long userId, string message)
         {
             var now = await _dbDate.Now();
-            var notification = new Usernotification
+            var notification = new UserNotification
             {
                 UserId = userId,
                 Message = message,
@@ -29,7 +29,7 @@ namespace Kanban.Repositories
                 IsDeleted = false
             };
 
-            await _context.Usernotifications.AddAsync(notification);
+            await _context.UserNotifications.AddAsync(notification);
             await _context.SaveChangesAsync();
 
             _cache.Remove($"User_HasUpdates_{userId}");
@@ -64,7 +64,7 @@ namespace Kanban.Repositories
 
         public async Task WorkInvite(long inviteId, long userId, long boardId, bool isAccepted)
         {
-            await _context.Userinvites.Where(bc => bc.Id == inviteId)
+            await _context.UserInvites.Where(bc => bc.Id == inviteId)
                 .ExecuteUpdateAsync(bc => bc
                 .SetProperty(b => b.IsAccepted, isAccepted)
                 .SetProperty(b => b.IsUsed, true));
@@ -74,7 +74,7 @@ namespace Kanban.Repositories
                 await _context.BoardMembers.AddAsync(new BoardMember { BoardId = boardId, IsActive = true, RoleCode = "MEMBER", UserId = userId });
                 await _context.SaveChangesAsync();
 
-                var invite = await _context.Userinvites.AsNoTracking()
+                var invite = await _context.UserInvites.AsNoTracking()
                     .Where(x => x.Id == inviteId)
                     .Select(x => new { x.SenderUserId, x.Board.Title })
                     .FirstOrDefaultAsync();
@@ -89,7 +89,7 @@ namespace Kanban.Repositories
             }
         }
 
-        public async Task<BoardCard> AddCard(long userId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
+        public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
         {
             var lastOrder = await _context.BoardCards
                 .Where(c => c.BoardColumnId == columnId && c.IsActive)
@@ -113,11 +113,10 @@ namespace Kanban.Repositories
 
             if (assigneeId > 0 && assigneeId != userId)
             {
-                string shortDesc = desc.Length > 30 ? desc.Substring(0, 27) + "..." : desc;
-                await SendNotification(assigneeId, $"You have been assigned to a new card: '{shortDesc}'");
+                await SendNotification(assigneeId, $"You have been assigned to a new card");
             }
 
-            await TouchBoard(b.BoardColumn.BoardId);
+            await TouchBoard(boardId);
             return b;
         }
 
@@ -210,7 +209,7 @@ namespace Kanban.Repositories
                 {
                     Id = x.Id,
                     Title = x.Title,
-                    Cards = x.BoardCards.Select(c => new BoardCardResultModel
+                    Cards = x.BoardCards.Where(y => y.IsActive).Select(c => new BoardCardResultModel
                     {
                         Id = c.Id,
                         Desc = c.Desc,
@@ -409,8 +408,7 @@ namespace Kanban.Repositories
             var card = await _context.BoardCards.AsNoTracking().Select(c => new { c.Id, c.AssigneeUserId, c.Desc }).FirstOrDefaultAsync(c => c.Id == cardId);
             if (card != null && card.AssigneeUserId.HasValue && card.AssigneeUserId.Value != userId)
             {
-                string shortDesc = card.Desc.Length > 20 ? card.Desc.Substring(0, 17) + "..." : card.Desc;
-                await SendNotification(card.AssigneeUserId.Value, $"New comment on card '{shortDesc}': {message}");
+                await SendNotification(card.AssigneeUserId.Value, $"New comment on card: {message}");
             }
 
             return comment;

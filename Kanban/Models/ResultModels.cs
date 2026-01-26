@@ -46,6 +46,15 @@ namespace Kanban.Models
         public long BoardId { get; set; }
         public string Email { get; set; }
     }
+    public class NotificationInputModel
+    {
+        public long NotificationId { get; set; }
+    }
+    public class InviteInputModel
+    {
+        public long InviteId { get; set; }
+        public bool IsAccepted { get; set; }
+    }
     public class BoardUserInputModel
     {
         public long BoardId { get; set; }
@@ -59,6 +68,26 @@ namespace Kanban.Models
         public string Description { get; set; }
         public DateOnly DueDate { get; set; }
         public long AssigneeId { get; set; }
+    }
+    public class AvatarUpdateModel
+    {
+        public string Avatar { get; set; }
+    }
+    public class BoardDeleteModel
+    {
+        public long BoardId { get; set; }
+    }
+    public class BoardColumnDeleteModel : BoardDeleteModel
+    {
+        public long ColumnId { get; set; }
+    }
+    public class BoardCardCommentDeleteModel : BoardDeleteModel
+    {
+        public long CommentId { get; set; }
+    }
+    public class BoardCardDeleteModel : BoardDeleteModel
+    {
+        public long CardId { get; set; }
     }
     public class BoardCardUpdateModel : BoardModel
     {

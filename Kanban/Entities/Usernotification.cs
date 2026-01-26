@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Kanban.Entities;
 
-public partial class Usernotification
+public partial class UserNotification
 {
     public long Id { get; set; }
 

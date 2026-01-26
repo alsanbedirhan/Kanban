@@ -62,10 +62,10 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
-        [HttpPut]
-        public async Task<IActionResult> PromoteToOwner(long boardId, long userId)
+        [HttpPost]
+        public async Task<IActionResult> PromoteToOwner([FromBody] BoardMemberInputModel model)
         {
-            var r = await _kanbanService.PromoteToOwner(User.GetUserId(), boardId, userId);
+            var r = await _kanbanService.PromoteToOwner(User.GetUserId(), model.BoardId, model.UserId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -112,10 +112,10 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
-        [HttpDelete]
-        public async Task<IActionResult> DeleteBoard(long boardId)
+        [HttpPost]
+        public async Task<IActionResult> DeleteBoard([FromBody] BoardDeleteModel model)
         {
-            var r = await _kanbanService.DeleteBoard(User.GetUserId(), boardId);
+            var r = await _kanbanService.DeleteBoard(User.GetUserId(), model.BoardId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -134,10 +134,10 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
-        [HttpDelete]
-        public async Task<IActionResult> DeleteColumn(long boardId, long columnId)
+        [HttpPost]
+        public async Task<IActionResult> DeleteColumn([FromBody] BoardColumnDeleteModel model)
         {
-            var r = await _kanbanService.DeleteColumn(User.GetUserId(), boardId, columnId);
+            var r = await _kanbanService.DeleteColumn(User.GetUserId(), model.BoardId, model.ColumnId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -157,10 +157,10 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
-        [HttpDelete]
-        public async Task<IActionResult> DeleteCard(long boardId, long cardId)
+        [HttpPost]
+        public async Task<IActionResult> DeleteCard([FromBody] BoardCardDeleteModel model)
         {
-            var r = await _kanbanService.DeleteCard(User.GetUserId(), boardId, cardId);
+            var r = await _kanbanService.DeleteCard(User.GetUserId(), model.BoardId, model.CardId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -212,10 +212,10 @@ namespace Kanban.Controllers
             return Ok(ServiceResult<List<NotificationResultModel>>.Ok(r.Data));
         }
 
-        [HttpPut]
-        public async Task<IActionResult> WorkInvite(long inviteId, bool isAccepted)
+        [HttpPost]
+        public async Task<IActionResult> WorkInvite([FromBody] InviteInputModel model)
         {
-            var r = await _kanbanService.WorkInvite(User.GetEmail(), User.GetUserId(), inviteId, isAccepted);
+            var r = await _kanbanService.WorkInvite(User.GetEmail(), User.GetUserId(), model.InviteId, model.IsAccepted);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -223,10 +223,10 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
-        [HttpDelete]
-        public async Task<IActionResult> DeleteNotification(long notificationId)
+        [HttpPost]
+        public async Task<IActionResult> DeleteNotification([FromBody] NotificationInputModel model)
         {
-            var r = await _kanbanService.DeleteNotification(User.GetUserId(), notificationId);
+            var r = await _kanbanService.DeleteNotification(User.GetUserId(), model.NotificationId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -234,7 +234,7 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
-        [HttpDelete]
+        [HttpPost]
         public async Task<IActionResult> DeleteNotifications()
         {
             var r = await _kanbanService.DeleteNotifications(User.GetUserId());
@@ -280,10 +280,10 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
-        [HttpDelete]
-        public async Task<IActionResult> DeleteComment(long boardId, long commentId)
+        [HttpPost]
+        public async Task<IActionResult> DeleteComment([FromBody] BoardCardCommentDeleteModel model)
         {
-            var r = await _kanbanService.DeleteComment(User.GetUserId(), boardId, commentId);
+            var r = await _kanbanService.DeleteComment(User.GetUserId(), model.BoardId, model.CommentId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));

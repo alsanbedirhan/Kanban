@@ -13,7 +13,7 @@ using System.Security.Claims;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<KanbanDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+  options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IUserSecurityService, UserSecurityService>();
 builder.Services.AddScoped<IDBDateTimeProvider, DBDateTimeProvider>();
@@ -74,11 +74,11 @@ builder.Services.AddAuthentication(options =>
             }
 
             var securityService = context.HttpContext.RequestServices
-                .GetRequiredService<IUserSecurityService>();
+              .GetRequiredService<IUserSecurityService>();
 
             var isValid = await securityService.IsUserValidAsync(
-                int.Parse(userIdClaim.Value),
-                stampClaim.Value
+              int.Parse(userIdClaim.Value),
+              stampClaim.Value
             );
 
             if (!isValid)
@@ -116,9 +116,9 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseCors(x => x.WithOrigins("https://kanflow.online", "https://www.kanflow.online")
-               .AllowCredentials()
-               .AllowAnyMethod()
-               .AllowAnyHeader());
+       .AllowCredentials()
+       .AllowAnyMethod()
+       .AllowAnyHeader());
 
 app.UseHttpsRedirection();
 app.UseRouting();
@@ -142,12 +142,12 @@ app.Use(async (context, next) =>
     var tokens = antiforgery.GetAndStoreTokens(context);
 
     context.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken,
-        new CookieOptions
-        {
-            HttpOnly = false,
-            Secure = true,
-            SameSite = SameSiteMode.Strict
-        });
+      new CookieOptions
+      {
+          HttpOnly = false,
+          Secure = true,
+          SameSite = SameSiteMode.Strict
+      });
 
     await next();
 });
@@ -155,8 +155,8 @@ app.Use(async (context, next) =>
 app.MapStaticAssets();
 
 app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
+  name: "default",
+  pattern: "{controller=Home}/{action=Index}/{id?}")
+  .WithStaticAssets();
 
 app.Run();

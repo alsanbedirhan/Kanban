@@ -23,260 +23,141 @@ public partial class KanbanDbContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
-    public virtual DbSet<Userinvite> Userinvites { get; set; }
+    public virtual DbSet<UserInvite> UserInvites { get; set; }
 
-    public virtual DbSet<Usernotification> Usernotifications { get; set; }
+    public virtual DbSet<UserNotification> UserNotifications { get; set; }
 
-    public virtual DbSet<Userverification> Userverifications { get; set; }
+    public virtual DbSet<UserVerification> UserVerifications { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.HasPostgresExtension("pgcrypto");
-
         modelBuilder.Entity<Board>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("boards_pk");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.Title).HasMaxLength(100);
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("(getdate())");
 
-            entity.ToTable("boards");
-
-            entity.Property(e => e.Id)
-                .UseIdentityAlwaysColumn()
-                .HasColumnName("id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.IsActive)
-                .HasDefaultValue(true)
-                .HasColumnName("is_active");
-            entity.Property(e => e.Title)
-                .HasMaxLength(100)
-                .HasColumnName("title");
-            entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("updated_at");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.HasOne(d => d.User).WithMany(p => p.Boards)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("Boards_Users_FK");
         });
 
         modelBuilder.Entity<BoardCard>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("board_cards_pk");
-
-            entity.ToTable("board_cards");
-
-            entity.Property(e => e.Id)
-                .UseIdentityAlwaysColumn()
-                .HasColumnName("id");
-            entity.Property(e => e.AssigneeUserId).HasColumnName("assignee_user_id");
-            entity.Property(e => e.BoardColumnId).HasColumnName("board_column_id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
-            entity.Property(e => e.Desc).HasColumnName("desc");
-            entity.Property(e => e.DueDate).HasColumnName("due_date");
-            entity.Property(e => e.HighlightColor)
-                .HasMaxLength(10)
-                .HasColumnName("highlight_color");
-            entity.Property(e => e.IsActive)
-                .HasDefaultValue(true)
-                .HasColumnName("is_active");
-            entity.Property(e => e.OrderNo).HasColumnName("order_no");
-            entity.Property(e => e.WarningDays).HasColumnName("warning_days");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.HighlightColor).HasMaxLength(10);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
 
             entity.HasOne(d => d.AssigneeUser).WithMany(p => p.BoardCards)
                 .HasForeignKey(d => d.AssigneeUserId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName("board_cards_users_fk");
+                .HasConstraintName("FK_BoardCards_Users");
 
             entity.HasOne(d => d.BoardColumn).WithMany(p => p.BoardCards)
                 .HasForeignKey(d => d.BoardColumnId)
-                .HasConstraintName("board_cards_board_columns_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_BoardCards_BoardColumns");
         });
 
         modelBuilder.Entity<BoardCardComment>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("board_card_comments_pk");
-
-            entity.ToTable("board_card_comments");
-
-            entity.Property(e => e.Id)
-                .UseIdentityAlwaysColumn()
-                .HasColumnName("id");
-            entity.Property(e => e.BoardCardId).HasColumnName("board_card_id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted");
-            entity.Property(e => e.Message)
-                .HasMaxLength(500)
-                .HasColumnName("message");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Message).HasMaxLength(500);
 
             entity.HasOne(d => d.BoardCard).WithMany(p => p.BoardCardComments)
                 .HasForeignKey(d => d.BoardCardId)
-                .HasConstraintName("board_card_comments_board_cards_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_BoardCardComments_BoardCards");
 
             entity.HasOne(d => d.User).WithMany(p => p.BoardCardComments)
                 .HasForeignKey(d => d.UserId)
-                .HasConstraintName("board_card_comments_users_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_BoardCardComments_Users");
         });
 
         modelBuilder.Entity<BoardColumn>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("board_columns_pk");
-
-            entity.ToTable("board_columns");
-
-            entity.Property(e => e.Id)
-                .UseIdentityAlwaysColumn()
-                .HasColumnName("id");
-            entity.Property(e => e.BoardId).HasColumnName("board_id");
-            entity.Property(e => e.IsActive)
-                .HasDefaultValue(true)
-                .HasColumnName("is_active");
-            entity.Property(e => e.Title)
-                .HasMaxLength(100)
-                .HasColumnName("title");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.Title).HasMaxLength(100);
 
             entity.HasOne(d => d.Board).WithMany(p => p.BoardColumns)
                 .HasForeignKey(d => d.BoardId)
-                .HasConstraintName("board_columns_boards_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_BoardColumns_Boards");
         });
 
         modelBuilder.Entity<BoardMember>(entity =>
         {
-            entity.HasKey(e => new { e.BoardId, e.UserId }).HasName("board_members_pk");
+            entity.HasKey(e => new { e.BoardId, e.UserId });
 
-            entity.ToTable("board_members");
-
-            entity.Property(e => e.BoardId).HasColumnName("board_id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.IsActive)
-                .HasDefaultValue(true)
-                .HasColumnName("is_active");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.RoleCode)
-                .HasDefaultValueSql("'MEM'::text")
-                .HasColumnName("role_code");
+                .HasMaxLength(50)
+                .HasDefaultValue("MEM");
 
             entity.HasOne(d => d.Board).WithMany(p => p.BoardMembers)
                 .HasForeignKey(d => d.BoardId)
-                .HasConstraintName("board_members_boards_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_BoardMembers_Boards");
 
             entity.HasOne(d => d.User).WithMany(p => p.BoardMembers)
                 .HasForeignKey(d => d.UserId)
-                .HasConstraintName("board_members_users_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_BoardMembers_Users");
         });
 
         modelBuilder.Entity<User>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("users_pk");
+            entity.HasIndex(e => e.Email, "UQ_Users_Email").IsUnique();
 
-            entity.ToTable("users");
-
-            entity.HasIndex(e => e.Email, "users_email_unique").IsUnique();
-
-            entity.Property(e => e.Id)
-                .UseIdentityAlwaysColumn()
-                .HasColumnName("id");
             entity.Property(e => e.Avatar)
                 .HasMaxLength(20)
-                .HasDefaultValueSql("'def'::character varying")
-                .HasColumnName("avatar");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.Email)
-                .HasMaxLength(100)
-                .HasColumnName("email");
-            entity.Property(e => e.FullName)
-                .HasMaxLength(100)
-                .HasColumnName("full_name");
-            entity.Property(e => e.HashPassword)
-                .HasMaxLength(255)
-                .HasColumnName("hash_password");
-            entity.Property(e => e.IsActive)
-                .HasDefaultValue(true)
-                .HasColumnName("is_active");
+                .HasDefaultValue("def");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Email).HasMaxLength(100);
+            entity.Property(e => e.FullName).HasMaxLength(100);
+            entity.Property(e => e.HashPassword).HasMaxLength(255);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.SecurityStamp)
                 .HasMaxLength(255)
-                .HasDefaultValueSql("(gen_random_uuid())::text")
-                .HasColumnName("security_stamp");
+                .HasDefaultValueSql("(CONVERT([nvarchar](36),newid()))");
         });
 
-        modelBuilder.Entity<Userinvite>(entity =>
+        modelBuilder.Entity<UserInvite>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("userinvites_pk");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Email).HasMaxLength(100);
 
-            entity.ToTable("userinvites");
-
-            entity.Property(e => e.Id)
-                .UseIdentityAlwaysColumn()
-                .HasColumnName("id");
-            entity.Property(e => e.BoardId).HasColumnName("board_id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.Email)
-                .HasMaxLength(100)
-                .HasColumnName("email");
-            entity.Property(e => e.IsAccepted).HasColumnName("is_accepted");
-            entity.Property(e => e.IsUsed).HasColumnName("is_used");
-            entity.Property(e => e.SenderUserId).HasColumnName("sender_user_id");
-
-            entity.HasOne(d => d.Board).WithMany(p => p.Userinvites)
+            entity.HasOne(d => d.Board).WithMany(p => p.UserInvites)
                 .HasForeignKey(d => d.BoardId)
-                .HasConstraintName("userinvites_board_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UserInvites_Boards");
 
-            entity.HasOne(d => d.SenderUser).WithMany(p => p.Userinvites)
+            entity.HasOne(d => d.SenderUser).WithMany(p => p.UserInvites)
                 .HasForeignKey(d => d.SenderUserId)
-                .HasConstraintName("userinvites_users_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UserInvites_Users");
         });
 
-        modelBuilder.Entity<Usernotification>(entity =>
+        modelBuilder.Entity<UserNotification>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("usernotifications_pk");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Message).HasMaxLength(500);
 
-            entity.ToTable("usernotifications");
-
-            entity.Property(e => e.Id)
-                .UseIdentityAlwaysColumn()
-                .HasColumnName("id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted");
-            entity.Property(e => e.Message)
-                .HasMaxLength(500)
-                .HasColumnName("message");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-
-            entity.HasOne(d => d.User).WithMany(p => p.Usernotifications)
+            entity.HasOne(d => d.User).WithMany(p => p.UserNotifications)
                 .HasForeignKey(d => d.UserId)
-                .HasConstraintName("usernotifications_users_fk");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UserNotifications_Users");
         });
 
-        modelBuilder.Entity<Userverification>(entity =>
+        modelBuilder.Entity<UserVerification>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("userverifications_pk");
-
-            entity.ToTable("userverifications");
-
-            entity.Property(e => e.Id)
-                .UseIdentityAlwaysColumn()
-                .HasColumnName("id");
-            entity.Property(e => e.Code)
-                .HasMaxLength(10)
-                .HasColumnName("code");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.Email)
-                .HasMaxLength(100)
-                .HasColumnName("email");
-            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
-            entity.Property(e => e.IsUsed).HasColumnName("is_used");
+            entity.Property(e => e.Code).HasMaxLength(10);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Email).HasMaxLength(100);
         });
 
         OnModelCreatingPartial(modelBuilder);
