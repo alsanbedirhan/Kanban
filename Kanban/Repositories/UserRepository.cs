@@ -50,6 +50,7 @@ namespace Kanban.Repositories
         public async Task<User> Create(User user)
         {
             await _context.Users.AddAsync(user);
+            await SaveContext();
 
             var l = await _context.UserInvites.Where(x => x.Email == user.Email && x.IsAccepted && !x.IsUsed).ToListAsync();
 
@@ -65,7 +66,6 @@ namespace Kanban.Repositories
 
                 l.ForEach(i => i.IsUsed = true);
             }
-
             await SaveContext();
             return user;
         }

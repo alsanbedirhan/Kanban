@@ -10,6 +10,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>kanflow</title>
+
+    <meta name="description" content="Manage projects effortlessly with Kanflow. Organize tasks, collaborate with your team, and boost productivity. The fast, secure, and free Kanban tool." />
+    <meta name="keywords" content="kanban, project management, task tracking, agile, scrum, workflow, productivity, kanflow, bedirhan alsan, todo list" />
+    <meta name="author" content="Bedirhan Alsan" />
+    <meta name="robots" content="index, follow" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.kanflow.online/" />
+    <meta property="og:title" content="Kanflow - Streamline Your Workflow" />
+    <meta property="og:description" content="The modern way to manage tasks. Create boards, invite your team, and get things done. Simple, fast, and effective." />
+    <meta property="og:image" content="https://www.kanflow.online/logo.png" />
+    <meta property="og:image:alt" content="Kanflow Dashboard Preview" />
+    <meta property="og:site_name" content="Kanflow" />
+    <meta property="og:locale" content="en_US" />
+
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
@@ -110,6 +125,15 @@
                 <input type="password" id="registerConfirmPassword" placeholder="••••••••">
                 <button type="button" tabindex="-1" aria-label="Show/Hide Password" class="toggle-password" data-target="registerConfirmPassword">🙈</button>
             </div>
+            <div style="display: flex; align-items: flex-start; gap: 10px; margin-top: 15px; margin-bottom: 15px;">
+                <input type="checkbox" id="registerAgreement" style="width: 20px; height: 20px; cursor: pointer; margin-top: 2px;">
+                <label for="registerAgreement" style="font-size: 13px; color: #4a5568; cursor: pointer;">
+                    I have read and agree to the
+                    <a href="#" onclick="showPrivacyPolicy(event)" style="color: var(--primary-color); text-decoration: underline;">Privacy Policy</a> and
+                    <a href="#" onclick="showUserAgreement(event)" style="color: var(--primary-color); text-decoration: underline;">User Agreement</a>.
+                </label>
+            </div>
+
             <div style="text-align:right;">
                 <button type="button" class="btn btn-secondary" onclick="closeRegisterModal()">Cancel</button>
                 <button type="submit" class="btn btn-primary">Register</button>

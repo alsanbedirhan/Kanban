@@ -131,22 +131,27 @@ app.UseStatusCodePagesWithReExecute("/Error/{0}");
 
 app.Use(async (context, next) =>
 {
-    await next();
+    var path = context.Request.Path.Value?.ToLower() ?? "";
 
-    if (context.Response.StatusCode == 401 ||
-        context.Response.StatusCode == 403)
+    context.Response.OnStarting(async () =>
     {
-        foreach (var cookie in context.Request.Cookies.Keys)
+        if ((context.Response.StatusCode == 401 || context.Response.StatusCode == 403) &&
+        path.StartsWith("/Kanban") || path.StartsWith("/Auth") || path.StartsWith("/Home"))
         {
-            context.Response.Cookies.Delete(cookie, new CookieOptions
+            foreach (var cookie in context.Request.Cookies.Keys)
             {
-                Path = "/",
-                Secure = true,
-                HttpOnly = true,
-                SameSite = SameSiteMode.Strict
-            });
+                context.Response.Cookies.Delete(cookie, new CookieOptions
+                {
+                    Path = "/",
+                    Secure = true,
+                    HttpOnly = true,
+                    SameSite = SameSiteMode.Strict
+                });
+            }
         }
-    }
+    });
+
+    await next();
 });
 
 app.UseAuthentication();

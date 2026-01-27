@@ -616,7 +616,42 @@ async function handleLogin() {
     }
 }
 
+function showPrivacyPolicy(e) {
+    e.preventDefault();
+    Swal.fire({
+        title: 'Privacy Policy',
+        html: `
+            <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
+                <p><strong>Data Controller:</strong> Bedirhan Alşan (Kanflow Project)</p>
+                <p>Your personal data (Name, Surname, Email) is processed solely for the purpose of membership registration and service provision.</p>
+                <p>Your data is not shared with third parties (except for legal obligations).</p>
+            </div>
+        `,
+        confirmButtonText: 'Close'
+    });
+}
+
+function showUserAgreement(e) {
+    e.preventDefault();
+    Swal.fire({
+        title: 'User Agreement',
+        html: `
+            <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
+                <p>1. This application is developed as a portfolio project.</p>
+                <p>2. The permanence of data uploaded to the system (cards, boards) is not guaranteed.</p>
+                <p>3. The user agrees not to upload harmful, offensive, or illegal content to the system.</p>
+            </div>
+        `,
+        confirmButtonText: 'Close'
+    });
+}
+
 async function handleRegister() {
+    const agreementCheckbox = document.getElementById('registerAgreement');
+    if (!agreementCheckbox || !agreementCheckbox.checked) {
+        return Swal.fire('Warning', 'Please accept the User Agreement and Privacy Policy to proceed.', 'warning');
+    }
+
     const fullName = document.getElementById('registerFullName').value.trim();
     const email = document.getElementById('registerEmail').value.trim();
     const password = document.getElementById('registerPassword').value;
@@ -1402,15 +1437,15 @@ async function openCardModal(columnId, cardId = null) {
                     <div id="editor-container" style="height: 120px; background:white; ${canEdit ? '' : 'pointer-events: none; background: #f7fafc;'}"></div>
                 </div>
                 
-                <div style="display:flex; gap:15px;">
-                    <div style="flex:1;">
+                <div style="display:flex; flex-wrap:wrap; gap:15px;">
+                    <div style="flex:1 1 200px;">
                         <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">ASSIGN TO</label>
                         <select id="modal-assignee" class="swal2-select" ${disabledAttr} style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}">
                             ${membersOptions}
                         </select>
                     </div>
 
-                    <div style="flex:1;">
+                    <div style="flex:1 1 200px;">
                         <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">DUE DATE</label>
                         <input type="date" id="modal-date" class="swal2-input" ${disabledAttr}
                                style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}" 
