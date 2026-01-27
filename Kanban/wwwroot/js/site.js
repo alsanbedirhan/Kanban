@@ -132,6 +132,10 @@ AppState.startPolling = function () {
     this.syncInterval = setInterval(async () => {
         if (!this.currentBoardId || !this.lastSyncTime || this.isDragging) return;
 
+        if (document.body.classList.contains('swal2-shown')) {
+            return;
+        }
+
         try {
             const res = await apiRequest(`/Kanban/CheckBoardVersion?boardId=${this.currentBoardId}`, {}, false);
 
@@ -831,7 +835,7 @@ function renderBoardList() {
 
 async function selectBoard(id) {
     const sidebar = document.getElementById('sidebar');
-    if (window.innerWidth <= 768 && sidebar.classList.contains('open')) toggleSidebar();
+    if (sidebar.classList.contains('open')) toggleSidebar();
 
     AppState.stopPolling();
     AppState.currentBoardId = id;

@@ -136,7 +136,7 @@ app.Use(async (context, next) =>
     context.Response.OnStarting(async () =>
     {
         if ((context.Response.StatusCode == 401 || context.Response.StatusCode == 403) &&
-        path.StartsWith("/Kanban") || path.StartsWith("/Auth") || path.StartsWith("/Home"))
+        (path.StartsWith("/kanban") || path.StartsWith("/auth") || path.StartsWith("/home")))
         {
             foreach (var cookie in context.Request.Cookies.Keys)
             {
