@@ -12,6 +12,8 @@
     padding: 0;
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.5) transparent;
 }
 
 html, body {
@@ -31,6 +33,22 @@ input::-ms-reveal, input::-ms-clear {
 .swal2-container {
     z-index: 10000 !important;
 }
+
+#sidebarOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1999;
+    display: none;
+    backdrop-filter: blur(2px);
+}
+
+    #sidebarOverlay.active {
+        display: block;
+    }
 
 .sidebar {
     position: fixed;
@@ -191,30 +209,36 @@ input::-ms-reveal, input::-ms-clear {
 .board {
     display: flex;
     gap: 20px;
-    padding-bottom: 50px;
     align-items: flex-start;
     flex: 1;
     min-height: 0;
     width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
+    padding-bottom: 20px;
+    margin-bottom: 50px;
 }
 
     .board::-webkit-scrollbar {
-        height: 12px;
+        height: 10px;
     }
 
     .board::-webkit-scrollbar-track {
-        background: rgba(255,255,255,0.2);
+        background: rgba(0,0,0,0.1);
         border-radius: 10px;
+        margin: 0 20px;
     }
 
     .board::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,0.6);
+        background: rgba(255,255,255,0.7);
         border-radius: 10px;
-        border: 3px solid transparent;
+        border: 2px solid transparent;
         background-clip: content-box;
     }
+
+        .board::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.9);
+        }
 
 .column {
     background: #f8f9fa;
@@ -244,7 +268,18 @@ input::-ms-reveal, input::-ms-clear {
     padding: 10px;
     overflow-y: auto;
     flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e0 transparent;
 }
+
+    .cards-container::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .cards-container::-webkit-scrollbar-thumb {
+        background-color: #cbd5e0;
+        border-radius: 4px;
+    }
 
 .card {
     background: white;
@@ -524,21 +559,6 @@ input::-ms-reveal, input::-ms-clear {
             left: 0;
         }
 
-    .sidebar-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.5);
-        z-index: 1999;
-        display: none;
-    }
-
-    body.sidebar-open .sidebar-overlay {
-        display: block;
-    }
-
     .header {
         align-items: center;
         padding: 10px;
@@ -575,13 +595,12 @@ input::-ms-reveal, input::-ms-clear {
         flex: 1;
         height: auto;
         gap: 10px;
-        /*scroll-snap-type: x mandatory;*/
+        margin-bottom: 20px;
     }
 
     .column {
         min-width: 70vw;
         max-width: 70vw;
-        /* scroll-snap-align: start;*/
     }
 
     .board.is-dragging {

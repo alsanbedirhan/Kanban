@@ -129,6 +129,26 @@ app.UseRouting();
 
 app.UseStatusCodePagesWithReExecute("/Error/{0}");
 
+app.Use(async (context, next) =>
+{
+    await next();
+
+    if (context.Response.StatusCode == 401 ||
+        context.Response.StatusCode == 403)
+    {
+        foreach (var cookie in context.Request.Cookies.Keys)
+        {
+            context.Response.Cookies.Delete(cookie, new CookieOptions
+            {
+                Path = "/",
+                Secure = true,
+                HttpOnly = true,
+                SameSite = SameSiteMode.Strict
+            });
+        }
+    }
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 

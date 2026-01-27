@@ -22,6 +22,7 @@ const AppState = {
         this.stopPolling();
         renderBoardList();
         renderColumns([]);
+        deleteAllCookies();
     }
 };
 
@@ -93,7 +94,7 @@ async function apiRequest(endpoint, options = {}, showload = true) {
             credentials: 'same-origin'
         });
 
-        if (response.status === 401) {
+        if (response.status === 401 || response.status === 403) {
             AppState.reset();
             updateAuthUI();
             throw new Error('Session expired or unauthorized.');
@@ -837,13 +838,10 @@ async function loadBoardData(showLoad = true) {
         const columnsRes = res.data.item1;
         const timeRes = res.data.item2;
 
-        AppState.currentColumns = columnsRes.data;
+        AppState.currentColumns = columnsRes;
+        AppState.lastSyncTime = timeRes;
 
-        if (timeRes.success) {
-            AppState.lastSyncTime = timeRes.data;
-        }
-
-        renderColumns(columnsRes.data);
+        renderColumns(columnsRes);
 
         const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
         if (currentBoard) {
@@ -1248,6 +1246,12 @@ function initSortable() {
 
 async function openNewColumnModal() {
     if (!checkAuth()) return;
+
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.classList.contains('open')) {
+        toggleSidebar();
+    }
+
     const { value: title } = await Swal.fire({
         title: 'New Column Name',
         input: 'text',
@@ -1649,6 +1653,18 @@ async function deleteComment(commentId, cardId) {
             console.error(e);
             Swal.fire('Error', 'Network error', 'error');
         }
+    }
+}
+
+function deleteAllCookies() {
+    const cookies = document.cookie.split(";");
+
+    for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i];
+        const eqPos = cookie.indexOf("=");
+        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+
+        document.cookie = name.trim() + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
     }
 }
 
