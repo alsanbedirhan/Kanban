@@ -6,6 +6,7 @@ const AppState = {
     currentBoardId: null,
     boards: [],
     currentColumns: [],
+    isRequestPending: false,
 
     isDragging: false,
 
@@ -62,9 +63,11 @@ function getXsrfToken() {
     return null;
 }
 
-async function apiRequest(endpoint, options = {}, showload = true) {
+async function apiRequest(endpoint, options = {}, showload = true, isPooling = false) {
     if (showload) showLoading();
-
+    if (!isPooling) {
+        AppState.isRequestPending = true;
+    }
     try {
         const method = (options.method || 'GET').toUpperCase();
 
@@ -123,6 +126,10 @@ async function apiRequest(endpoint, options = {}, showload = true) {
         throw error;
     } finally {
         if (showload) hideLoading();
+
+        if (!isPooling) {
+            AppState.isRequestPending = false;
+        }
     }
 }
 
@@ -136,8 +143,12 @@ AppState.startPolling = function () {
             return;
         }
 
+        if (AppState.isRequestPending) {
+            return;
+        }
+
         try {
-            const res = await apiRequest(`/Kanban/CheckBoardVersion?boardId=${this.currentBoardId}`, {}, false);
+            const res = await apiRequest(`/Kanban/CheckBoardVersion?boardId=${this.currentBoardId}`, {}, false, true);
 
             const serverTime = new Date(res.data.lastUpdate).getTime();
             const localTime = new Date(res.data.now).getTime();
@@ -421,45 +432,131 @@ async function handleInviteResponse(inviteId, isAccepted) {
 
 async function openChangePasswordModal() {
     if (!checkAuth()) return;
-    const { value: formValues } = await Swal.fire({
+
+    const containerStyle = `
+        position: relative; 
+        max-width: 100%; 
+        width: 18em;
+        margin: 1em auto;
+        display: flex;
+        align-items: center;
+    `;
+
+    const inputStyle = `
+        width: 100%; 
+        margin: 0;
+        padding-right: 35px;
+        box-sizing: border-box;
+    `;
+
+    const iconStyle = `
+        position: absolute; 
+        right: 10px; 
+        z-index: 2; 
+        cursor: pointer; 
+        font-size: 1.2em;
+        background: transparent;
+        border: none;
+        padding: 0;
+    `;
+
+    const { value: passwordData } = await Swal.fire({
         title: 'Change Password',
         html: `
-            <input id="swal-old-pass" type="password" class="swal2-input" placeholder="Current Password">
-            <input id="swal-new-pass" type="password" class="swal2-input" placeholder="New Password">
-            <input id="swal-conf-pass" type="password" class="swal2-input" placeholder="Confirm New Password">
+            <div style="${containerStyle}">
+                <input id="swal-old-pass" type="password" class="swal2-input" placeholder="Current Password" style="${inputStyle}">
+                <span class="pass-toggle" data-target="swal-old-pass" style="${iconStyle}">🙈</span>
+            </div>
+
+            <div style="${containerStyle}">
+                <input id="swal-new-pass" type="password" class="swal2-input" placeholder="New Password" style="${inputStyle}">
+                <span class="pass-toggle" data-target="swal-new-pass" style="${iconStyle}">🙈</span>
+            </div>
+
+            <div style="${containerStyle}">
+                <input id="swal-conf-pass" type="password" class="swal2-input" placeholder="Confirm New Password" style="${inputStyle}">
+                <span class="pass-toggle" data-target="swal-conf-pass" style="${iconStyle}">🙈</span>
+            </div>
         `,
         focusConfirm: false,
         showCancelButton: true,
         confirmButtonText: 'Update',
         cancelButtonText: 'Cancel',
-        preConfirm: () => {
-            return [
-                document.getElementById('swal-old-pass').value,
-                document.getElementById('swal-new-pass').value,
-                document.getElementById('swal-conf-pass').value
-            ]
-        }
-    }).then(() => openProfileMenu());
-
-    if (formValues) {
-        const [oldPass, newPass, confPass] = formValues;
-
-        if (!oldPass || !newPass || !confPass) return Swal.fire('Error', 'Please fill all fields.', 'error');
-        if (newPass !== confPass) return Swal.fire('Error', 'New passwords do not match.', 'error');
-        if (newPass.length < 6) return Swal.fire('Error', 'Password must be at least 6 characters.', 'error');
-
-        try {
-            await apiRequest('/Auth/ChangePassword', {
-                method: 'POST',
-                body: JSON.stringify({ oldPass, newPass })
+        didOpen: () => {
+            const popup = Swal.getPopup();
+            const toggles = popup.querySelectorAll('.pass-toggle');
+            toggles.forEach(toggle => {
+                toggle.addEventListener('click', () => {
+                    const targetId = toggle.getAttribute('data-target');
+                    const input = popup.querySelector(`#${targetId}`);
+                    if (input.type === "password") {
+                        input.type = "text";
+                        toggle.textContent = "🙊";
+                    } else {
+                        input.type = "password";
+                        toggle.textContent = "🙈";
+                    }
+                });
             });
-            Swal.fire('Success', 'Password updated successfully.', 'success');
-        } catch (e) {
-            Swal.fire('Error', 'Failed to update password.', 'error');
-        }
+        },
+        preConfirm: () => {
+            const currentPassword = document.getElementById('swal-old-pass').value;
+            const newPassword = document.getElementById('swal-new-pass').value;
+            const confPass = document.getElementById('swal-conf-pass').value;
 
+            if (!currentPassword || !newPassword || !confPass) {
+                Swal.showValidationMessage('Please fill all fields.');
+                return false;
+            }
+
+            if (newPassword.length < 6) {
+                Swal.showValidationMessage('Password must be at least 6 characters.');
+                return false;
+            }
+
+            if (newPassword !== confPass) {
+                Swal.showValidationMessage('New passwords do not match.');
+                return false;
+            }
+
+            return { currentPassword, newPassword };
+        }
+    });
+
+    if (passwordData) {
+        try {
+            const res = await apiRequest('/Auth/ChangePassword', {
+                method: 'POST',
+                body: JSON.stringify(passwordData)
+            });
+            if (res.success) {
+                const temp = AppState.currentUser.email;
+
+                await Swal.fire({
+                    title: 'Password Changed',
+                    text: 'Please login again with your new password.',
+                    icon: 'success',
+                    confirmButtonText: 'Login'
+                });
+
+                AppState.reset();
+                updateAuthUI();
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
+                AppState.stopPolling();
+
+                openLoginModal(temp);
+
+            } else {
+                await Swal.fire('Error', res.errorMessage || 'Failed to update password.', 'error');
+                openChangePasswordModal();
+            }
+        } catch (e) {
+            console.error(e);
+        }
     }
 }
+
 function openProfileMenu() {
     if (!checkAuth()) return;
 
@@ -1878,6 +1975,15 @@ function selectAvatarTemp(name, imgElement) {
 async function saveMyAvatar() {
     if (!checkAuth()) return;
     try {
+        if (AppState.currentUser.avatar == selectedAvatarTemp) {
+            document.getElementById('avatarModal').classList.remove('active');
+            if (avatarOpenedFromMenu) {
+                openProfileMenu();
+                avatarOpenedFromMenu = false;
+            }
+            return;
+        }
+
         await apiRequest(`/Auth/UpdateAvatar`, {
             method: 'POST',
             body: JSON.stringify({ avatar: selectedAvatarTemp })
@@ -1895,7 +2001,7 @@ async function saveMyAvatar() {
             toast: true,
             position: 'top-end',
             showConfirmButton: false,
-            timer: 500
+            timer: 1000
         });
 
         if (avatarOpenedFromMenu) {

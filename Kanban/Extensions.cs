@@ -11,10 +11,6 @@ namespace Kanban
             long.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out long userId);
             return userId;
         }
-        public static string GetAvatar(this ClaimsPrincipal user)
-        {
-            return user.FindFirst(ClaimTypes.UserData)?.Value ?? "";
-        }
         public static string GetEmail(this ClaimsPrincipal user)
         {
             return user.FindFirst(ClaimTypes.Email)?.Value ?? "";

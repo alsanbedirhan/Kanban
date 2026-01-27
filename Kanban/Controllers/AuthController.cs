@@ -36,8 +36,7 @@ namespace Kanban.Controllers
                 UserId = result.Data.Id,
                 FullName = result.Data.FullName,
                 Email = result.Data.Email,
-                SecurityStamp = result.Data.SecurityStamp,
-                Avatar = result.Data.Avatar
+                SecurityStamp = result.Data.SecurityStamp
             });
 
             return Ok(ServiceResult.Ok());
@@ -76,8 +75,7 @@ namespace Kanban.Controllers
                 UserId = result.Data.Id,
                 FullName = result.Data.FullName,
                 Email = result.Data.Email,
-                SecurityStamp = result.Data.SecurityStamp,
-                Avatar = result.Data.Avatar
+                SecurityStamp = result.Data.SecurityStamp
             });
 
             return Ok(ServiceResult.Ok());
@@ -95,13 +93,13 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordViewModel model)
         {
-            var result = await _userService.ChangePassword(User.GetEmail(), model.currentPassword, model.newPassword);
+            var result = await _userService.ChangePassword(User.GetUserId(), User.GetEmail(), model.currentPassword, model.newPassword);
 
             if (!result.Success)
             {
                 return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
-
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Ok(ServiceResult.Ok());
         }
 
@@ -114,16 +112,6 @@ namespace Kanban.Controllers
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
-            var identity = HttpContext.User.Identity as ClaimsIdentity;
-            if (identity != null)
-            {
-                var existingClaim = identity.FindFirst("Avatar");
-                if (existingClaim != null)
-                {
-                    identity.RemoveClaim(existingClaim);
-                }
-                identity.AddClaim(new Claim("Avatar", model.Avatar));
-            }
 
             return Ok(ServiceResult.Ok());
         }
@@ -135,7 +123,6 @@ namespace Kanban.Controllers
                 new Claim(ClaimTypes.NameIdentifier, claimsModel.UserId.ToString()),
                 new Claim(ClaimTypes.Name, claimsModel.FullName ?? ""),
                 new Claim(ClaimTypes.Email, claimsModel.Email),
-                new Claim(ClaimTypes.UserData, claimsModel.Avatar),
                 new Claim("SecurityStamp", claimsModel.SecurityStamp ?? "")
             };
 

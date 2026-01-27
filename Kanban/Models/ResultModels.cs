@@ -1,7 +1,7 @@
 ﻿
 namespace Kanban.Models
 {
-    public class UserResultModel : AvatarResultModel
+    public class UserResultModel
     {
         public long UserId { get; set; }
         public string? FullName { get; set; }
@@ -18,7 +18,11 @@ namespace Kanban.Models
         public string BoardName { get; set; }
         public string InviterName { get; set; }
     }
-    public class AvatarResultModel
+    public class FetchResultModel : UserResultModel
+    {
+        public string Avatar { get; set; }
+    }
+    public class AvatarUpdateModel
     {
         public string Avatar { get; set; }
     }
@@ -68,10 +72,6 @@ namespace Kanban.Models
         public string Description { get; set; }
         public DateOnly DueDate { get; set; }
         public long AssigneeId { get; set; }
-    }
-    public class AvatarUpdateModel
-    {
-        public string Avatar { get; set; }
     }
     public class BoardDeleteModel
     {

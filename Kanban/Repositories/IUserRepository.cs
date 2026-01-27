@@ -6,6 +6,7 @@ namespace Kanban.Repositories
     public interface IUserRepository
     {
         Task<User?> GetByEmail(string email);
+        Task<string> GetHashPasswordByEmail(string email);
         Task<long?> GetUserIdByEmail(string email);
         Task<bool> CheckInvite(long userId, long boardId, string email);
         Task<UserInvite?> GetInvite(long id);
@@ -19,9 +20,11 @@ namespace Kanban.Repositories
         Task DeleteNotifications(long userId);
         Task<bool> CheckUpdates(long userId, string email);
         Task<User?> GetByEmailForUpdate(string email);
+        Task ChangePassword(long userId, string pass);
         Task UpdateAvatar(long userId, string avatar);
-        Task<User?> GetById(long id);
-        Task<User?> GetByIdForUpdate(long id);
+        Task<string> GetAvatar(long userId);
+        Task<User?> GetById(long userId);
+        Task<User?> GetByIdForUpdate(long userId);
         Task SaveContext();
         Task<User> Create(User user);
         Task<int> VerifyCountToday(string email);

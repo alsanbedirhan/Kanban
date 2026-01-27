@@ -1,7 +1,6 @@
 using Kanban.Models;
 using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 
@@ -10,9 +9,11 @@ namespace Kanban.Controllers
     public class HomeController : Controller
     {
         private readonly IKanbanService _kanbanService;
-        public HomeController(IKanbanService kanbanService)
+        private readonly IUserService _userService;
+        public HomeController(IKanbanService kanbanService, IUserService userService)
         {
             _kanbanService = kanbanService;
+            _userService = userService;
         }
 
         [HttpGet]
@@ -30,16 +31,17 @@ namespace Kanban.Controllers
         }
 
         [HttpGet]
-        public IActionResult Fetch()
+        public async Task<IActionResult> Fetch()
         {
             if (User.Identity?.IsAuthenticated ?? false)
             {
-                return Ok(ServiceResult<UserResultModel>.Ok(new UserResultModel
+                var avatar = await _userService.GetAvatar(User.GetUserId());
+                return Ok(ServiceResult<FetchResultModel>.Ok(new FetchResultModel
                 {
                     UserId = User.GetUserId(),
                     FullName = User.Identity?.Name ?? "",
                     Email = User.GetEmail(),
-                    Avatar = User.GetAvatar()
+                    Avatar = avatar.Data ?? ""
                 }));
             }
             return Ok(ServiceResult.Fail(""));

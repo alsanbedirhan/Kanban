@@ -30,13 +30,13 @@ namespace Kanban.Repositories
         {
             return await _context.Users.FirstOrDefaultAsync(x => x.Email == email);
         }
-        public async Task<User?> GetById(long id)
+        public async Task<User?> GetById(long userId)
         {
-            return await _context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+            return await _context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId);
         }
-        public async Task<User?> GetByIdForUpdate(long id)
+        public async Task<User?> GetByIdForUpdate(long userId)
         {
-            return await _context.Users.FirstOrDefaultAsync(x => x.Id == id);
+            return await _context.Users.FirstOrDefaultAsync(x => x.Id == userId);
         }
         public async Task SaveContext()
         {
@@ -46,6 +46,15 @@ namespace Kanban.Repositories
         {
             await _context.UserVerifications.Where(x => x.Id == id)
                 .ExecuteUpdateAsync(x => x.SetProperty(u => u.IsUsed, true));
+        }
+        public async Task ChangePassword(long userId, string pass)
+        {
+            var sec = Guid.NewGuid().ToString();
+            await _context.Users.Where(x => x.Id == userId)
+                .ExecuteUpdateAsync(x => x.SetProperty(u => u.HashPassword, pass)
+                .SetProperty(u => u.SecurityStamp, sec));
+            _cache.Remove($"SECURITY:{userId}");
+            _cache.Set($"SECURITY:{userId}", sec, TimeSpan.FromHours(6));
         }
         public async Task<User> Create(User user)
         {
@@ -110,6 +119,8 @@ namespace Kanban.Repositories
         {
             await _context.Users.Where(u => u.Id == userId && u.IsActive)
                 .ExecuteUpdateAsync(u => u.SetProperty(user => user.Avatar, avatar));
+            _cache.Remove($"AVATAR:{userId}");
+            _cache.Set($"AVATAR:{userId}", avatar, TimeSpan.FromHours(6));
         }
 
         public async Task<bool> CheckInvite(long userId, long boardId, string email)
@@ -217,6 +228,29 @@ namespace Kanban.Repositories
             }
 
             return hasUpdates;
+        }
+
+        public async Task<string> GetHashPasswordByEmail(string email)
+        {
+            return await _context.Users.AsNoTracking()
+                .Where(u => u.Email == email && u.IsActive)
+                .Select(u => u.HashPassword)
+                .FirstOrDefaultAsync() ?? string.Empty;
+        }
+
+        public async Task<string> GetAvatar(long userId)
+        {
+            string key = $"AVATAR:{userId}";
+            if (!_cache.TryGetValue(key, out string? avatar) || string.IsNullOrEmpty(avatar))
+            {
+                avatar = await _context.Users.AsNoTracking()
+                .Where(u => u.Id == userId && u.IsActive)
+                .Select(u => u.Avatar)
+                .FirstOrDefaultAsync() ?? string.Empty;
+
+                _cache.Set(key, avatar, TimeSpan.FromHours(6));
+            }
+            return avatar;
         }
     }
 }

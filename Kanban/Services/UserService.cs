@@ -126,23 +126,33 @@ namespace Kanban.Services
         }
 
 
-        public async Task<ServiceResult> ChangePassword(string email, string currentPassword, string newPassword)
+        public async Task<ServiceResult> ChangePassword(long userId, string email, string currentPassword, string newPassword)
         {
             try
             {
-                var user = await _userRepository.GetByEmailForUpdate(email);
+                var userPass = await _userRepository.GetHashPasswordByEmail(email);
 
-                if (user == null || !user.IsActive || !BCrypt.Net.BCrypt.Verify(currentPassword, user.HashPassword))
-                    return ServiceResult<User>.Fail("Incorrect password.");
+                if (string.IsNullOrEmpty(userPass) || !BCrypt.Net.BCrypt.Verify(currentPassword, userPass))
+                    return ServiceResult.Fail("Incorrect password.");
 
-                user.HashPassword = BCrypt.Net.BCrypt.HashPassword(newPassword);
-                await _userRepository.SaveContext();
-
-                return ServiceResult<User>.Ok(user);
+                await _userRepository.ChangePassword(userId, BCrypt.Net.BCrypt.HashPassword(newPassword));
+                return ServiceResult.Ok();
             }
             catch (Exception)
             {
-                return ServiceResult<User>.Fail("An error occurred.");
+                return ServiceResult.Fail("An error occurred.");
+            }
+        }
+
+        public async Task<ServiceResult<string>> GetAvatar(long userId)
+        {
+            try
+            {
+                return ServiceResult<string>.Ok(await _userRepository.GetAvatar(userId));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<string>.Fail("An error occurred.");
             }
         }
     }
