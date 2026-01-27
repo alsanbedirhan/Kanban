@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="kanflowStrongBlue" x1="0%" y1="60%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#38ef7d;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0072ff;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <rect x="10" y="16" width="10" height="32" rx="3" fill="url(#kanflowStrongBlue)" />
+  <rect x="26" y="10" width="10" height="44" rx="3" fill="url(#kanflowStrongBlue)" />
+  <rect x="42" y="16" width="10" height="32" rx="3" fill="url(#kanflowStrongBlue)" />
+</svg>

@@ -10,9 +10,11 @@ namespace Kanban.Controllers
     public class KanbanController : Controller
     {
         private readonly IKanbanService _kanbanService;
-        public KanbanController(IKanbanService kanbanService)
+        private readonly IDBDateTimeProvider _dbDate;
+        public KanbanController(IKanbanService kanbanService, IDBDateTimeProvider dbDate)
         {
             _kanbanService = kanbanService;
+            _dbDate = dbDate;
         }
 
         [HttpGet]
@@ -24,7 +26,8 @@ namespace Kanban.Controllers
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
-            return Ok(ServiceResult<List<BoardColumnResultModel>>.Ok(r.Data));
+            var now = await _dbDate.Now();
+            return Ok(ServiceResult<Tuple<List<BoardColumnResultModel>, DateTime>>.Ok(Tuple.Create(r.Data, now)));
         }
 
         [HttpGet]

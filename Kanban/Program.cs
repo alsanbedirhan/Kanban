@@ -29,6 +29,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-XSRF-TOKEN";
+    options.SuppressXFrameOptionsHeader = false;
 });
 
 builder.Services.AddHsts(options =>
@@ -56,9 +57,12 @@ builder.Services.AddAuthentication(options =>
     {
         OnValidatePrincipal = async context =>
         {
-            var acceptHeader = context.Request.Headers["Accept"].ToString();
-
-            if (!string.IsNullOrEmpty(acceptHeader) && acceptHeader.Contains("image/"))
+            var path = context.Request.Path.Value?.ToLower() ?? "";
+            if (path.StartsWith("/avatars") ||
+                path.Contains(".svg") ||
+                path.Contains(".png") ||
+                path.StartsWith("/css") ||
+                path.StartsWith("/js"))
             {
                 return;
             }
@@ -127,33 +131,6 @@ app.UseStatusCodePagesWithReExecute("/Error/{0}");
 
 app.UseAuthentication();
 app.UseAuthorization();
-
-app.Use(async (context, next) =>
-{
-    var allowed = new[] { "GET", "POST", "DELETE", "PUT" };
-
-    if (!allowed.Contains(context.Request.Method))
-    {
-        context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
-        return;
-    }
-
-    if (!context.Request.Cookies.ContainsKey("XSRF-TOKEN"))
-    {
-        var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
-        var tokens = antiforgery.GetAndStoreTokens(context);
-
-        context.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
-            new CookieOptions
-            {
-                HttpOnly = false,
-                Secure = true,
-                SameSite = SameSiteMode.Strict
-            });
-    }
-
-    await next();
-});
 
 app.MapStaticAssets();
 

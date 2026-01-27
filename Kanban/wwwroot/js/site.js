@@ -65,6 +65,16 @@ async function apiRequest(endpoint, options = {}, showload = true) {
     if (showload) showLoading();
 
     try {
+        const method = (options.method || 'GET').toUpperCase();
+
+        if (method !== 'GET') {
+            try {
+                await fetch('/Home/GetToken', {}, false);
+            } catch (err) {
+                console.warn("Token error...", err);
+            }
+        }
+
         const token = getXsrfToken();
         const headers = {
             'Content-Type': 'application/json',
@@ -79,7 +89,8 @@ async function apiRequest(endpoint, options = {}, showload = true) {
 
         const response = await fetch(endpoint, {
             ...options,
-            headers: headers
+            headers: headers,
+            credentials: 'same-origin'
         });
 
         if (response.status === 401) {
@@ -715,12 +726,11 @@ async function handleRegister() {
 async function handleLogout() {
     try {
         await apiRequest('/Auth/Logout', { method: 'POST' });
-        await fetchCurrentUser();
-        AppState.stopPolling();
+        AppState.reset();
+        updateAuthUI();
         const sidebar = document.getElementById('sidebar');
         if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
-        renderBoardList();
-        renderColumns([]);
+        AppState.stopPolling();
         Swal.fire('Success', 'Logged out successfully', 'success');
     } catch {
         Swal.fire('Error', 'Logout failed', 'error');
@@ -823,10 +833,9 @@ async function loadBoardData(showLoad = true) {
     if (!AppState.currentBoardId) return;
 
     try {
-        const [columnsRes, timeRes] = await Promise.all([
-            apiRequest(`/Kanban/GetBoard?boardId=${AppState.currentBoardId}`, {}, showLoad),
-            apiRequest(`/Home/Now`, {}, false)
-        ]);
+        const res = await apiRequest(`/Kanban/GetBoard?boardId=${AppState.currentBoardId}`, {}, showLoad);
+        const columnsRes = res.data.item1;
+        const timeRes = res.data.item2;
 
         AppState.currentColumns = columnsRes.data;
 
@@ -1296,10 +1305,15 @@ async function deleteCard(id) {
                 method: 'POST',
                 body: JSON.stringify({ boardId: AppState.currentBoardId, cardId: id })
             });
+            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+            Toast.fire({ icon: 'success', title: 'Card deleted' });
             loadBoardData();
         } catch {
             Swal.fire('Error', 'Failed to delete card', 'error');
         }
+    }
+    else {
+        openCardModal(null, id);
     }
 }
 
@@ -1374,7 +1388,7 @@ async function openCardModal(columnId, cardId = null) {
 
     let quill;
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues, isDenied } = await Swal.fire({
         title: defaults.title,
         width: '650px',
         html: `
@@ -1515,7 +1529,7 @@ async function openCardModal(columnId, cardId = null) {
             Swal.fire('Error', `Failed to ${isEditMode ? 'update' : 'create'} card`, 'error');
         }
     }
-    else if (Swal.getDenyButton() && Swal.getDenyButton().dataset.isDenied === "true") {
+    else if (isDenied) {
         deleteCard(cardId);
     }
 }

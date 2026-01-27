@@ -1,5 +1,7 @@
 using Kanban.Models;
 using Kanban.Services;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 
@@ -8,12 +10,11 @@ namespace Kanban.Controllers
     public class HomeController : Controller
     {
         private readonly IKanbanService _kanbanService;
-        private readonly IDBDateTimeProvider _dbDate;
-        public HomeController(IKanbanService kanbanService, IDBDateTimeProvider dbDate)
+        public HomeController(IKanbanService kanbanService)
         {
             _kanbanService = kanbanService;
-            _dbDate = dbDate;
         }
+
         [HttpGet]
         public async Task<IActionResult> Index(string? token)
         {
@@ -27,6 +28,7 @@ namespace Kanban.Controllers
             }
             return View(ServiceResult<InviteStatus>.Ok(InviteStatus.NONE));
         }
+
         [HttpGet]
         public IActionResult Fetch()
         {
@@ -42,10 +44,23 @@ namespace Kanban.Controllers
             }
             return Ok(ServiceResult.Fail(""));
         }
+
         [HttpGet]
-        public async Task<IActionResult> Now()
+        public IActionResult GetToken()
         {
-            return Ok(ServiceResult<DateTime>.Ok(await _dbDate.Now()));
+            var antiforgery = HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
+            var tokens = antiforgery.GetAndStoreTokens(HttpContext);
+
+            HttpContext.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
+                new CookieOptions
+                {
+                    HttpOnly = false,
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict,
+                    Path = "/"
+                });
+
+            return Ok(ServiceResult.Ok());
         }
     }
 }

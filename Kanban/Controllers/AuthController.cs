@@ -1,6 +1,8 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Services;
+using Mailjet.Client.Resources;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -126,17 +128,36 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
-        private async Task signIn(MyClaims claims)
+        private async Task signIn(MyClaims claimsModel)
         {
-            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
-               new ClaimsPrincipal(new ClaimsIdentity(new List<Claim>
-           {
-                new Claim(ClaimTypes.NameIdentifier, claims.UserId.ToString()),
-                new Claim(ClaimTypes.Name, claims.FullName),
-                new Claim(ClaimTypes.Email, claims.Email),
-                new Claim(ClaimTypes.UserData, claims.Avatar),
-                new Claim("SecurityStamp", claims.SecurityStamp)
-           }, CookieAuthenticationDefaults.AuthenticationScheme)));
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, claimsModel.UserId.ToString()),
+                new Claim(ClaimTypes.Name, claimsModel.FullName ?? ""),
+                new Claim(ClaimTypes.Email, claimsModel.Email),
+                new Claim(ClaimTypes.UserData, claimsModel.Avatar),
+                new Claim("SecurityStamp", claimsModel.SecurityStamp ?? "")
+            };
+
+            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var authProperties = new AuthenticationProperties { IsPersistent = true };
+
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                new ClaimsPrincipal(claimsIdentity),
+                authProperties);
+
+            var antiforgery = HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
+            var tokens = antiforgery.GetAndStoreTokens(HttpContext);
+
+            HttpContext.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
+                new CookieOptions
+                {
+                    HttpOnly = false,
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict,
+                    Path = "/"
+                });
         }
 
     }
