@@ -8,15 +8,14 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.IO;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Database Connection
 builder.Services.AddDbContext<KanbanDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. Dependency Injection (Services & Repositories)
 builder.Services.AddScoped<IUserSecurityService, UserSecurityService>();
 builder.Services.AddScoped<IDBDateTimeProvider, DBDateTimeProvider>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -60,7 +59,8 @@ builder.Services.AddAuthentication(options =>
 
             if (path.StartsWith("/avatars") || path.Contains(".svg") ||
                 path.Contains(".png") || path.StartsWith("/css") ||
-                path.StartsWith("/js"))
+                path.StartsWith("/js") || path.StartsWith("/lib") ||
+                path.Contains(".ico"))
             {
                 return;
             }
@@ -87,25 +87,47 @@ builder.Services.AddAuthentication(options =>
 
         OnRedirectToLogin = async context =>
         {
+            foreach (var cookie in context.Request.Cookies.Keys)
+            {
+                context.Response.Cookies.Delete(cookie, new CookieOptions
+                {
+                    Path = "/",
+                    Secure = true,
+                    HttpOnly = true,
+                    SameSite = SameSiteMode.Strict
+                });
+            }
+
             if (IsApiRequest(context.Request))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             }
             else
             {
-                context.Response.Redirect(context.RedirectUri);
+                context.Response.Redirect("/Error/401");
             }
         },
 
         OnRedirectToAccessDenied = async context =>
         {
+            foreach (var cookie in context.Request.Cookies.Keys)
+            {
+                context.Response.Cookies.Delete(cookie, new CookieOptions
+                {
+                    Path = "/",
+                    Secure = true,
+                    HttpOnly = true,
+                    SameSite = SameSiteMode.Strict
+                });
+            }
+
             if (IsApiRequest(context.Request))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
             }
             else
             {
-                context.Response.Redirect(context.RedirectUri);
+                context.Response.Redirect("/Error/403");
             }
         }
     };
@@ -120,6 +142,11 @@ var app = builder.Build();
 
 bool IsApiRequest(HttpRequest request)
 {
+    var path = request.Path.Value?.ToLower() ?? "";
+
+    if (path.StartsWith("/auth") || path.StartsWith("/kanban"))
+        return true;
+
     if (request.Headers["X-Requested-With"] == "XMLHttpRequest")
         return true;
 
@@ -140,32 +167,12 @@ app.UseCors(x => x.WithOrigins("https://kanflow.online", "https://www.kanflow.on
        .AllowAnyHeader());
 
 app.UseHttpsRedirection();
+
+app.UseStaticFiles();
+
 app.UseRouting();
 
 app.UseStatusCodePagesWithReExecute("/Error/{0}");
-
-app.Use(async (context, next) =>
-{
-    context.Response.OnStarting(async () =>
-    {
-        if ((context.Response.StatusCode == 401 || context.Response.StatusCode == 403) &&
-            IsApiRequest(context.Request))
-        {
-            foreach (var cookie in context.Request.Cookies.Keys)
-            {
-                context.Response.Cookies.Delete(cookie, new CookieOptions
-                {
-                    Path = "/",
-                    Secure = true,
-                    HttpOnly = true,
-                    SameSite = SameSiteMode.Strict
-                });
-            }
-        }
-    });
-
-    await next();
-});
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -22,7 +22,7 @@ html, body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: var(--bg-gradient);
     color: var(--text-dark);
-    overflow: hidden;
+    /*overflow: hidden;*/
     transition: padding-left 0.3s ease;
 }
 
@@ -164,7 +164,7 @@ input::-ms-reveal, input::-ms-clear {
     flex-direction: column;
     padding-top: 20px;
     padding-bottom: 0;
-    overflow: hidden;
+    /*overflow: hidden;*/
 }
 
 .board-actions-btn {

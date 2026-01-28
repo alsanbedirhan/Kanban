@@ -54,11 +54,12 @@ function hideLoading() {
 
 function getXsrfToken() {
     const name = "XSRF-TOKEN=";
-    const decodedCookie = decodeURIComponent(document.cookie);
-    const ca = decodedCookie.split(';');
-    for (let i = 0; i < ca.length; i++) {
-        let c = ca[i].trim();
-        if (c.indexOf(name) === 0) return c.substring(name.length, c.length);
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+        cookie = cookie.trim();
+        if (cookie.indexOf(name) === 0) {
+            return cookie.substring(name.length);
+        }
     }
     return null;
 }
@@ -73,9 +74,11 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
 
         if (method !== 'GET') {
             try {
-                await fetch('/Home/GetToken', {}, false);
+                await fetch('/Home/GetToken', {
+                    credentials: 'same-origin'
+                });
             } catch (err) {
-                console.warn("Token error...", err);
+                console.warn("Token fetch error:", err);
             }
         }
 
@@ -98,8 +101,14 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
         });
 
         if (response.status === 401 || response.status === 403) {
+            console.warn('Session expired or unauthorized. Redirecting to home...');
             AppState.reset();
             updateAuthUI();
+
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 500);
+
             throw new Error('Session expired or unauthorized.');
         }
 
@@ -120,7 +129,8 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
 
     } catch (error) {
         console.error('API Error:', error);
-        if (showload) {
+
+        if (showload && error.message !== 'Session expired or unauthorized.') {
             Swal.fire('Error', error.message || 'A connection error occurred.', 'error');
         }
         throw error;
@@ -144,6 +154,11 @@ AppState.startPolling = function () {
         }
 
         if (AppState.isRequestPending) {
+            return;
+        }
+
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar && sidebar.classList.contains('open')) {
             return;
         }
 
