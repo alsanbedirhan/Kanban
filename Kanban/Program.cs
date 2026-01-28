@@ -12,18 +12,17 @@ using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 1. Database Connection
 builder.Services.AddDbContext<KanbanDbContext>(options =>
-  options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// 2. Dependency Injection (Services & Repositories)
 builder.Services.AddScoped<IUserSecurityService, UserSecurityService>();
 builder.Services.AddScoped<IDBDateTimeProvider, DBDateTimeProvider>();
-
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserService, UserService>();
-
 builder.Services.AddScoped<IKanbanRepository, KanbanRepository>();
 builder.Services.AddScoped<IKanbanService, KanbanService>();
-
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddAntiforgery(options =>
@@ -58,10 +57,9 @@ builder.Services.AddAuthentication(options =>
         OnValidatePrincipal = async context =>
         {
             var path = context.Request.Path.Value?.ToLower() ?? "";
-            if (path.StartsWith("/avatars") ||
-                path.Contains(".svg") ||
-                path.Contains(".png") ||
-                path.StartsWith("/css") ||
+
+            if (path.StartsWith("/avatars") || path.Contains(".svg") ||
+                path.Contains(".png") || path.StartsWith("/css") ||
                 path.StartsWith("/js"))
             {
                 return;
@@ -77,13 +75,8 @@ builder.Services.AddAuthentication(options =>
                 return;
             }
 
-            var securityService = context.HttpContext.RequestServices
-              .GetRequiredService<IUserSecurityService>();
-
-            var isValid = await securityService.IsUserValidAsync(
-              int.Parse(userIdClaim.Value),
-              stampClaim.Value
-            );
+            var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
+            var isValid = await securityService.IsUserValidAsync(int.Parse(userIdClaim.Value), stampClaim.Value);
 
             if (!isValid)
             {
@@ -94,15 +87,26 @@ builder.Services.AddAuthentication(options =>
 
         OnRedirectToLogin = async context =>
         {
-            if ((context.Request.Headers.ContainsKey("X-Requested-With") && context.Request.Headers["X-Requested-With"].ToString() == "XMLHttpRequest") ||
-            (context.Request.Headers.ContainsKey("Accept") && context.Request.Headers["Accept"].ToString().Contains("application/json")) ||
-            (context.Request.Headers.ContainsKey("Content-Type") && context.Request.Headers["Content-Type"].ToString().Contains("application/json")))
+            if (IsApiRequest(context.Request))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return;
             }
+            else
+            {
+                context.Response.Redirect(context.RedirectUri);
+            }
+        },
 
-            context.Response.Redirect(context.RedirectUri);
+        OnRedirectToAccessDenied = async context =>
+        {
+            if (IsApiRequest(context.Request))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            }
+            else
+            {
+                context.Response.Redirect(context.RedirectUri);
+            }
         }
     };
 });
@@ -113,6 +117,17 @@ builder.Services.AddControllersWithViews(options =>
 });
 
 var app = builder.Build();
+
+bool IsApiRequest(HttpRequest request)
+{
+    if (request.Headers["X-Requested-With"] == "XMLHttpRequest")
+        return true;
+
+    if (request.Headers.Accept.Any(x => x != null && x.Contains("application/json")))
+        return true;
+
+    return false;
+}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -131,12 +146,10 @@ app.UseStatusCodePagesWithReExecute("/Error/{0}");
 
 app.Use(async (context, next) =>
 {
-    var path = context.Request.Path.Value?.ToLower() ?? "";
-
     context.Response.OnStarting(async () =>
     {
         if ((context.Response.StatusCode == 401 || context.Response.StatusCode == 403) &&
-        (path.StartsWith("/kanban") || path.StartsWith("/auth") || path.StartsWith("/home")))
+            IsApiRequest(context.Request))
         {
             foreach (var cookie in context.Request.Cookies.Keys)
             {

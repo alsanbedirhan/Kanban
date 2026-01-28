@@ -487,10 +487,11 @@ input::-ms-reveal, input::-ms-clear {
 .toggle-password {
     position: absolute;
     right: 10px;
-    top: 38px;
+    top: 34px;
     background: none;
     border: none;
     cursor: pointer;
+    font-size: 1.2rem;
 }
 
 .column-title {

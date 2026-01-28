@@ -60,7 +60,7 @@ namespace Kanban.Services
                 var user = await _userRepository.GetByEmail(email);
 
                 if (user == null || !user.IsActive || !BCrypt.Net.BCrypt.Verify(password, user.HashPassword))
-                    return ServiceResult<User>.Fail("Incorrect username or password.");
+                    return ServiceResult<User>.Fail("Incorrect email or password.");
 
                 return ServiceResult<User>.Ok(user);
             }
