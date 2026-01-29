@@ -21,6 +21,11 @@ namespace Kanban.Models
     public class FetchResultModel : UserResultModel
     {
         public string Avatar { get; set; }
+        public string QuickNote { get; set; }
+    }
+    public class QuickNoteModel
+    {
+        public string QuickNote { get; set; }
     }
     public class AvatarUpdateModel
     {

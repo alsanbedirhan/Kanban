@@ -49,6 +49,7 @@ public partial class KanbanDbContext : DbContext
         modelBuilder.Entity<BoardCard>(entity =>
         {
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Desc).HasColumnType("text");
             entity.Property(e => e.HighlightColor).HasMaxLength(10);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
 
@@ -121,6 +122,7 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.FullName).HasMaxLength(100);
             entity.Property(e => e.HashPassword).HasMaxLength(255);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.QuickNote).HasMaxLength(1000);
             entity.Property(e => e.SecurityStamp)
                 .HasMaxLength(255)
                 .HasDefaultValueSql("(CONVERT([nvarchar](36),newid()))");

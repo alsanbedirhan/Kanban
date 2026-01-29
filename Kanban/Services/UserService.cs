@@ -155,5 +155,30 @@ namespace Kanban.Services
                 return ServiceResult<string>.Fail("An error occurred.");
             }
         }
+
+        public async Task<ServiceResult<string>> GetQuickNote(long userId)
+        {
+            try
+            {
+                return ServiceResult<string>.Ok(await _userRepository.GetQuickNote(userId));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<string>.Fail("An error occurred.");
+            }
+        }
+
+        public async Task<ServiceResult> UpdateQuickNote(long userId, string quickNote)
+        {
+            try
+            {
+                await _userRepository.UpdateQuickNote(userId, quickNote);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("An error occurred.");
+            }
+        }
     }
 }

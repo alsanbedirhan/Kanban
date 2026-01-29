@@ -509,6 +509,84 @@ input::-ms-reveal, input::-ms-clear {
     font-size: 18px;
 }
 
+.quick-note-toggle {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #fcd34d;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    z-index: 2900;
+    transition: transform 0.2s;
+}
+
+    .quick-note-toggle:hover {
+        transform: scale(1.1);
+    }
+
+.quick-note-wrapper {
+    position: fixed;
+    bottom: 100px;
+    right: 30px;
+    width: 300px;
+    height: 350px;
+    background: #fffbeb;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    z-index: 2900;
+    display: none;
+    flex-direction: column;
+    border: 1px solid #fcd34d;
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+}
+
+    .quick-note-wrapper.active {
+        display: flex;
+    }
+
+.quick-note-header {
+    padding: 10px 15px;
+    background: #fcd34d;
+    font-weight: bold;
+    color: #4b5563;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+
+#quickNoteArea {
+    flex: 1;
+    width: 100%;
+    border: none;
+    resize: none;
+    padding: 15px;
+    background: transparent;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    outline: none;
+    color: #374151;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .notification-badge {
     position: absolute;
     top: 0;
@@ -560,6 +638,11 @@ input::-ms-reveal, input::-ms-clear {
         padding-bottom: max(20px, env(safe-area-inset-bottom));
         height: 100dvh;
         overflow: hidden;
+    }
+
+     .quick-note-toggle {
+        bottom: 10px;
+        right: 10px;
     }
 
     .sidebar {

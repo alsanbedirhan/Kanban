@@ -36,12 +36,14 @@ namespace Kanban.Controllers
             if (User.Identity?.IsAuthenticated ?? false)
             {
                 var avatar = await _userService.GetAvatar(User.GetUserId());
+                var quicNote = await _userService.GetQuickNote(User.GetUserId());
                 return Ok(ServiceResult<FetchResultModel>.Ok(new FetchResultModel
                 {
                     UserId = User.GetUserId(),
                     FullName = User.Identity?.Name ?? "",
                     Email = User.GetEmail(),
-                    Avatar = avatar.Data ?? ""
+                    Avatar = avatar.Data ?? "",
+                    QuickNote = quicNote.Data ?? ""
                 }));
             }
             return Ok(ServiceResult.Fail(""));

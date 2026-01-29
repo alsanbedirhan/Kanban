@@ -1924,6 +1924,97 @@ function handleInviteStatus() {
     }
 }
 
+let quickNoteTimeout;
+const quickNoteArea = document.getElementById('quickNoteArea');
+const saveStatus = document.getElementById('saveStatus');
+
+function toggleQuickNote() {
+    if (!checkAuth()) return;
+
+    const container = document.getElementById('quickNoteContainer');
+    container.classList.toggle('active');
+
+    if (container.classList.contains('active')) {
+        if (AppState.currentUser) {
+            quickNoteArea.value = AppState.currentUser.quickNote || "";
+        }
+        quickNoteArea.focus();
+    }
+}
+
+quickNoteArea.addEventListener('input', () => {
+    saveStatus.style.opacity = '1';
+    saveStatus.innerText = 'Typing...';
+
+    if (AppState.currentUser) {
+        AppState.currentUser.quickNote = quickNoteArea.value;
+    }
+
+    clearTimeout(quickNoteTimeout);
+
+    quickNoteTimeout = setTimeout(async () => {
+        saveStatus.innerText = 'Saving...';
+
+        try {
+            await apiRequest('/Auth/UpdateQuickNote', {
+                method: 'POST',
+                body: JSON.stringify({ quickNote: quickNoteArea.value }) 
+            }, false);
+
+            saveStatus.innerText = 'Saved ✅';
+            setTimeout(() => { saveStatus.style.opacity = '0'; }, 2000);
+
+        } catch (error) {
+            saveStatus.innerText = 'Error! ❌';
+        }
+    }, 1000);
+});
+
+
+let deleteTimeout;
+
+async function clearQuickNote() {
+    if (!quickNoteArea.value.trim()) return;
+
+    const btn = document.getElementById('btnTrash');
+
+    if (btn.innerText === '🗑️') {
+        btn.innerText = '❓';
+        btn.style.color = 'red';
+
+        deleteTimeout = setTimeout(() => {
+            btn.innerText = '🗑️';
+            btn.style.color = '';
+        }, 3000);
+
+    } else {
+        clearTimeout(deleteTimeout);
+
+        if (AppState.currentUser) {
+            AppState.currentUser.quickNote = "";
+        }
+
+        try {
+            saveStatus.style.opacity = '1';
+            saveStatus.innerText = 'Clearing...';
+
+            await apiRequest('/Auth/UpdateQuickNote', {
+                method: 'POST',
+                body: JSON.stringify({ quickNote: "" })
+            }, false);
+
+            saveStatus.innerText = 'Cleared ✨';
+            setTimeout(() => { saveStatus.style.opacity = '0'; }, 2000);
+
+        } catch (error) {
+            console.error("Clear error", error);
+        }
+
+        btn.innerText = '🗑️';
+        btn.style.color = '';
+    }
+}
+
 const AVATAR_OPTIONS = [
     "Abby", "Aiden", "Aneka", "Axel", "Bear", "Bella", "Brian", "Bubba", "Caleb", "Christopher", "Coco", "Cookie",
     "Daisy", "Easton", "Elsie", "Felix", "Finn", "Gizmo", "Hazel", "Hunter", "Jack", "Jasper", "Julia", "Lucky",

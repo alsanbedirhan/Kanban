@@ -252,5 +252,28 @@ namespace Kanban.Repositories
             }
             return avatar;
         }
+
+        public async Task<string> GetQuickNote(long userId)
+        {
+            string key = $"NOTE:{userId}";
+            if (!_cache.TryGetValue(key, out string? quickNote) || string.IsNullOrEmpty(quickNote))
+            {
+                quickNote = await _context.Users.AsNoTracking()
+                .Where(u => u.Id == userId && u.IsActive)
+                .Select(u => u.QuickNote)
+                .FirstOrDefaultAsync() ?? string.Empty;
+
+                _cache.Set(key, quickNote, TimeSpan.FromHours(6));
+            }
+            return quickNote;
+        }
+
+        public async Task UpdateQuickNote(long userId, string quickNote)
+        {
+            await _context.Users.Where(u => u.Id == userId && u.IsActive)
+                .ExecuteUpdateAsync(u => u.SetProperty(user => user.QuickNote, quickNote));
+            _cache.Remove($"NOTE:{userId}");
+            _cache.Set($"NOTE:{userId}", quickNote, TimeSpan.FromHours(6));
+        }
     }
 }

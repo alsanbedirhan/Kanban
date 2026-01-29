@@ -116,6 +116,19 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> UpdateQuickNote([FromBody] QuickNoteModel model)
+        {
+            var userId = User.GetUserId();
+            var r = await _userService.UpdateQuickNote(userId, model.QuickNote);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
         private async Task signIn(MyClaims claimsModel)
         {
             var claims = new List<Claim>

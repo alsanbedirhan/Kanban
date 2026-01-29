@@ -175,6 +175,23 @@
         </div>
     </template>
 
+    <button id="quickNoteBtn" class="quick-note-toggle" onclick="toggleQuickNote()">
+        📝
+    </button>
+
+    <div id="quickNoteContainer" class="quick-note-wrapper">
+        <div class="quick-note-header">
+            <span>Quick Notes</span>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <span id="saveStatus" style="font-size:10px; color:#666; opacity:0; transition:opacity 0.3s;">Saved ✅</span>
+
+                <span id="btnTrash" style="cursor:pointer;" onclick="clearQuickNote()">🗑️</span>
+                <span style="cursor:pointer;" onclick="toggleQuickNote()">✕</span>
+            </div>
+        </div>
+        <textarea id="quickNoteArea" placeholder="Write here..."></textarea>
+    </div>
+
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script>

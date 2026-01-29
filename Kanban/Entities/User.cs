@@ -21,6 +21,8 @@ public partial class User
 
     public string Avatar { get; set; } = null!;
 
+    public string? QuickNote { get; set; }
+
     public virtual ICollection<BoardCardComment> BoardCardComments { get; set; } = new List<BoardCardComment>();
 
     public virtual ICollection<BoardCard> BoardCards { get; set; } = new List<BoardCard>();

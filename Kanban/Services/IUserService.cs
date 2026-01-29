@@ -11,6 +11,8 @@ namespace Kanban.Services
         Task<ServiceResult> VerifyCodeAndUpdate(string email, string code);
         Task<ServiceResult> UpdateAvatar(long userId, string avatar);
         Task<ServiceResult<string>> GetAvatar(long userId);
+        Task<ServiceResult<string>> GetQuickNote(long userId);
+        Task<ServiceResult> UpdateQuickNote(long userId, string quickNote);
         Task<ServiceResult> ChangePassword(long userId, string email, string currentPassword, string newPassword);
     }
 }

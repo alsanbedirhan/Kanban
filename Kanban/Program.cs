@@ -81,9 +81,7 @@ builder.Services.AddAuthentication(options =>
                     context.Response.Cookies.Delete(cookie, new CookieOptions
                     {
                         Path = "/",
-                        Secure = true,
-                        HttpOnly = true,
-                        SameSite = SameSiteMode.Strict
+                        Secure = true
                     });
                 }
                 return;
@@ -102,9 +100,7 @@ builder.Services.AddAuthentication(options =>
                     context.Response.Cookies.Delete(cookie, new CookieOptions
                     {
                         Path = "/",
-                        Secure = true,
-                        HttpOnly = true,
-                        SameSite = SameSiteMode.Strict
+                        Secure = true
                     });
                 }
             }
@@ -117,9 +113,7 @@ builder.Services.AddAuthentication(options =>
                 context.Response.Cookies.Delete(cookie, new CookieOptions
                 {
                     Path = "/",
-                    Secure = true,
-                    HttpOnly = true,
-                    SameSite = SameSiteMode.Strict
+                    Secure = true
                 });
             }
 
@@ -140,9 +134,7 @@ builder.Services.AddAuthentication(options =>
                 context.Response.Cookies.Delete(cookie, new CookieOptions
                 {
                     Path = "/",
-                    Secure = true,
-                    HttpOnly = true,
-                    SameSite = SameSiteMode.Strict
+                    Secure = true
                 });
             }
 

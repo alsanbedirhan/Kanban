@@ -23,6 +23,8 @@ namespace Kanban.Repositories
         Task ChangePassword(long userId, string pass);
         Task UpdateAvatar(long userId, string avatar);
         Task<string> GetAvatar(long userId);
+        Task<string> GetQuickNote(long userId);
+        Task UpdateQuickNote(long userId, string quickNote);
         Task<User?> GetById(long userId);
         Task<User?> GetByIdForUpdate(long userId);
         Task SaveContext();
