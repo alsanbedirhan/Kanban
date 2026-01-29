@@ -1250,11 +1250,17 @@ function renderColumns(columns) {
         return `
         <div class="column">
             <div class="column-header">
-                <span class="column-title">${escapeHtml(col.title)}</span>
-                <span class="card-count">${col.cards.length}</span>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <span class="column-title">${escapeHtml(col.title)}</span>
+                    <span class="card-count">${col.cards.length}</span>
+                </div>
                 
-                <button class="btn btn-danger" ${deleteBtnAttr}>🗑️</button>
+                <div style="display:flex; gap:5px;">
+                    <button class="btn btn-primary" onclick="openCardModal(${col.id})" title="Add Card" style="padding: 5px 10px;">＋</button>
+                    <button class="btn btn-danger" ${deleteBtnAttr} style="padding: 5px 10px;">🗑️</button>
+                </div>
             </div>
+            
             <div class="cards-container" data-column-id="${col.id}">
                 ${col.cards.map((card) => {
             let cardBgColor = '#ffffff';

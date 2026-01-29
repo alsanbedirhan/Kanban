@@ -28,6 +28,9 @@ builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-XSRF-TOKEN";
     options.SuppressXFrameOptionsHeader = false;
+    options.Cookie.HttpOnly = false;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
 });
 
 builder.Services.AddHsts(options =>
@@ -72,6 +75,17 @@ builder.Services.AddAuthentication(options =>
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
+
+                foreach (var cookie in context.Request.Cookies.Keys)
+                {
+                    context.Response.Cookies.Delete(cookie, new CookieOptions
+                    {
+                        Path = "/",
+                        Secure = true,
+                        HttpOnly = true,
+                        SameSite = SameSiteMode.Strict
+                    });
+                }
                 return;
             }
 
@@ -82,6 +96,17 @@ builder.Services.AddAuthentication(options =>
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
+
+                foreach (var cookie in context.Request.Cookies.Keys)
+                {
+                    context.Response.Cookies.Delete(cookie, new CookieOptions
+                    {
+                        Path = "/",
+                        Secure = true,
+                        HttpOnly = true,
+                        SameSite = SameSiteMode.Strict
+                    });
+                }
             }
         },
 
