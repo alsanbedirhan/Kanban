@@ -126,11 +126,11 @@ input::-ms-reveal, input::-ms-clear {
     font-weight: 500;
 }
 
-    .board-item:hover, .board-item.active {
-        background: #e6f2ff;
-        color: var(--primary-color);
-        border-right: 3px solid var(--primary-color);
-    }
+.board-item:hover, .board-item.active {
+    background: #e6f2ff;
+    color: var(--primary-color);
+    border-right: 3px solid var(--primary-color);
+}
 
 .close-sidebar-btn {
     background: none;

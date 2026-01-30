@@ -162,6 +162,11 @@ AppState.startPolling = function () {
             return;
         }
 
+        const container = document.getElementById('quickNoteContainer');
+        if (container.classList.contains('active')) {
+            return;
+        }
+
         try {
             const res = await apiRequest(`/Kanban/CheckBoardVersion?boardId=${this.currentBoardId}`, {}, false, true);
 
@@ -937,7 +942,7 @@ function renderBoardList() {
     const boardHtml = (b) => `
         <li class="board-item ${b.id === AppState.currentBoardId ? 'active' : ''}" onclick="selectBoard(${b.id})">
             <span>📊 ${escapeHtml(b.title)}</span>
-            <div class="board-actions-btn" onclick="event.stopPropagation(); showBoardMenu(${b.id}, '${escapeHtml(b.title).replace(/'/g, "\\'")}')">⋮</div>
+            <div class="board-actions-btn" onclick="event.stopPropagation(); showBoardMenu(${b.id});">⋮</div>
         </li>
     `;
 
@@ -960,18 +965,26 @@ async function selectBoard(id) {
 
 async function openNewBoardModal() {
     if (!checkAuth()) return;
-    const { value: title } = await Swal.fire({
+    const { value: tt } = await Swal.fire({
         title: 'New Board Name',
         input: 'text',
         inputPlaceholder: 'Enter board name...',
         confirmButtonText: 'Create',
-        showCancelButton: true
+        showCancelButton: true,
+        inputValidator: (value) => {
+            if (value.trim().length < 3) {
+                return 'Name must be at least 3 characters!';
+            }
+            if (value.trim().length > 100) {
+                return 'Name is too long!';
+            }
+        }
     });
-    if (title) {
+    if (tt && tt.trim()) {
         try {
             await apiRequest('/Kanban/CreateBoard', {
                 method: 'POST',
-                body: JSON.stringify({ title })
+                body: JSON.stringify({ title: tt.trim() })
             });
             Swal.fire('Success', 'Board created successfully', 'success');
             loadBoards();
@@ -1006,20 +1019,127 @@ async function loadBoardData(showLoad = true) {
     }
 }
 
-async function showBoardMenu(boardId, boardName) {
-    if (!checkAuth()) return;
+async function startRenameProcess(boardId) {
+    const board = AppState.boards.find(b => b.id === boardId);
+
+    if (!board) return;
+
+    const currentName = board.title;
+
     const result = await Swal.fire({
-        title: escapeHtml(boardName),
+        title: 'Rename Board',
+        input: 'text',
+        inputValue: currentName,
         showCancelButton: true,
-        confirmButtonText: 'Manage Users',
-        confirmButtonColor: '#48bb78',
-        cancelButtonText: 'Close',
-        showDenyButton: true,
-        denyButtonText: 'Delete Board',
-        denyButtonColor: '#f56565'
+        confirmButtonText: 'Save',
+        confirmButtonColor: '#3182ce',
+        cancelButtonText: 'Cancel',
+        inputPlaceholder: 'Enter new board name',
+        inputValidator: (value) => {
+            if (value.trim().length < 3) {
+                return 'Name must be at least 3 characters!';
+            }
+            if (value.trim().length > 100) {
+                return 'Name is too long!';
+            }
+        }
     });
-    if (result.isConfirmed) openManageUsersModal(boardId);
-    else if (result.isDenied) deleteBoard(boardId);
+    const newTitle = result.value;
+    if (result.isConfirmed && newTitle && newTitle.trim() !== currentName) {
+        const finalTitle = newTitle.trim();
+        try {
+            await apiRequest('/Kanban/UpdateBoardTitle', {
+                method: 'POST',
+                body: JSON.stringify({
+                    boardId: boardId,
+                    title: finalTitle
+                })
+            }, false);
+
+            const board = AppState.boards.find(b => b.id === boardId);
+            if (board) board.title = finalTitle;
+
+            const sidebarItem = document.querySelector(`.board-item[onclick*="${boardId}"]`);
+            if (sidebarItem) {
+                sidebarItem.innerHTML = sidebarItem.innerHTML.replace(
+                    escapeHtml(currentName),
+                    escapeHtml(finalTitle)
+                );
+            }
+
+            if (AppState.currentBoardId === boardId) {
+                const headerTitle = document.getElementById('boardHeaderTitle');
+                if (headerTitle) headerTitle.innerText = finalTitle;
+            }
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Renamed!',
+                text: 'Board name has been updated.',
+                timer: 1500,
+                showConfirmButton: false
+            });
+
+        } catch (error) {
+            console.error("Rename error", error);
+            Swal.fire('Error', 'Failed to rename board.', 'error');
+        }
+    }
+    else if (result.isDismissed) {
+        showBoardMenu(boardId);
+    }
+}
+
+async function showBoardMenu(boardId) {
+    if (!checkAuth()) return;
+
+    const board = AppState.boards.find(b => b.id === boardId);
+
+    if (!board) return;
+
+    const boardName = board.title;
+
+    await Swal.fire({
+        title: escapeHtml(boardName),
+        html: `
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+                
+                <button id="menuBtnRename" class="swal2-confirm swal2-styled" 
+                        style="background-color: #3182ce; width: 100%; margin: 0;">
+                    ✏️ Rename Board
+                </button>
+
+                <button id="menuBtnManage" class="swal2-confirm swal2-styled" 
+                        style="background-color: #48bb78; width: 100%; margin: 0;">
+                    👥 Manage Users
+                </button>
+
+                <button id="menuBtnDelete" class="swal2-deny swal2-styled" 
+                        style="background-color: #f56565; width: 100%; margin: 0;">
+                    🗑️ Delete Board
+                </button>
+            </div>
+        `,
+        showConfirmButton: false,
+        showDenyButton: false,
+        showCloseButton: true,
+        didOpen: () => {
+            document.getElementById('menuBtnRename').addEventListener('click', () => {
+                Swal.close();
+                startRenameProcess(boardId);
+            });
+
+            document.getElementById('menuBtnManage').addEventListener('click', () => {
+                Swal.close();
+                openManageUsersModal(boardId);
+            });
+
+            document.getElementById('menuBtnDelete').addEventListener('click', () => {
+                Swal.close();
+                deleteBoard(boardId);
+            });
+        }
+    });
 }
 
 async function openManageUsersModal(boardId) {
@@ -1089,6 +1209,9 @@ async function openManageUsersModal(boardId) {
         }).then((result) => {
             if (result.isConfirmed) {
                 addUserToBoard(boardId);
+            }
+            else {
+                showBoardMenu(boardId);
             }
         });
 
@@ -1185,7 +1308,6 @@ async function addUserToBoard(boardId) {
 }
 
 async function deleteBoard(boardId) {
-    if (!checkAuth()) return;
     const result = await Swal.fire({
         title: 'Are you sure?',
         text: 'This board and all its contents will be deleted!',
@@ -1210,6 +1332,9 @@ async function deleteBoard(boardId) {
         } catch {
             Swal.fire('Error', 'Failed to delete board', 'error');
         }
+    }
+    else {
+        showBoardMenu(boardId);
     }
 }
 
@@ -1958,7 +2083,7 @@ quickNoteArea.addEventListener('input', () => {
         try {
             await apiRequest('/Auth/UpdateQuickNote', {
                 method: 'POST',
-                body: JSON.stringify({ quickNote: quickNoteArea.value }) 
+                body: JSON.stringify({ quickNote: quickNoteArea.value })
             }, false);
 
             saveStatus.innerText = 'Saved ✅';
@@ -1989,6 +2114,8 @@ async function clearQuickNote() {
 
     } else {
         clearTimeout(deleteTimeout);
+
+        quickNoteArea.value = "";
 
         if (AppState.currentUser) {
             AppState.currentUser.quickNote = "";

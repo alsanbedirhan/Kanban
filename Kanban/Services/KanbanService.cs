@@ -4,6 +4,7 @@ using Kanban.Repositories;
 using Mailjet.Client.Resources;
 using Microsoft.IdentityModel.Tokens;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -550,6 +551,24 @@ namespace Kanban.Services
                     return ServiceResult.Fail("You do not have permission to delete this comment.");
                 }
                 await _kanbanRepository.DeleteComment(commentId);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult> UpdateBoardTitle(long userId, long boardId, string title)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
+                {
+                    return ServiceResult.Fail("You do not have permission to manage this board.");
+                }
+
+                await _kanbanRepository.UpdateBoardTitle(boardId, title);
                 return ServiceResult.Ok();
             }
             catch (Exception)

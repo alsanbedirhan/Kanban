@@ -28,6 +28,7 @@ builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-XSRF-TOKEN";
     options.SuppressXFrameOptionsHeader = false;
+    options.Cookie.Name = "Kanflow.Antiforgery";
     options.Cookie.HttpOnly = false;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;

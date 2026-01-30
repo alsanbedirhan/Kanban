@@ -32,5 +32,6 @@ namespace Kanban.Services
         string GenerateJwt(string email, long inviteId, long boardId);
         Task<ServiceResult> WorkInvite(string email, long userId, long inviteId, bool isAccepted);
         Task<ServiceResult<bool>> CheckUpdates(long userId, string email);
+        Task<ServiceResult> UpdateBoardTitle(long userId, long boardId, string title);
     }
 }

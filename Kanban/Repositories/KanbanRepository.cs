@@ -228,6 +228,7 @@ namespace Kanban.Repositories
         {
             return await _context.BoardMembers.AsNoTracking()
                 .Where(b => b.UserId == userId && b.IsActive && b.Board.IsActive)
+                .OrderByDescending(x => x.Board.Id)
                 .Select(b => new BoardOwnerResultModel { Board = b.Board, IsOwner = b.RoleCode == "OWNER" })
                 .ToListAsync();
         }
@@ -423,6 +424,13 @@ namespace Kanban.Repositories
         public Task<bool> ValidateComment(long userId, long commentId)
         {
             return _context.BoardCardComments.AnyAsync(c => c.Id == commentId && c.UserId == userId && !c.IsDeleted);
+        }
+
+        public async Task UpdateBoardTitle(long boardId, string title)
+        {
+            await _context.Boards
+               .Where(b => b.Id == boardId && b.IsActive)
+               .ExecuteUpdateAsync(b => b.SetProperty(x => x.Title, title));
         }
     }
 }

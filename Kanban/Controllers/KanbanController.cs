@@ -293,5 +293,16 @@ namespace Kanban.Controllers
             }
             return Ok(ServiceResult.Ok());
         }
+
+        [HttpPost]
+        public async Task<IActionResult> UpdateBoardTitle([FromBody] BoardColumnInputModel model)
+        {
+            var r = await _kanbanService.UpdateBoardTitle(User.GetUserId(), model.BoardId, model.Title);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
     }
 }
