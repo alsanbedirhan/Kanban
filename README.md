@@ -17,7 +17,7 @@ Kanflow allows teams and individuals to visualize their work, limit work-in-prog
 * Architecture: N-Layer / Clean Architecture
 * ORM: Entity Framework Core
 * Database: SQL Server
-* Authentication: ASP.NET Identity (Customized for invite-only access)
+* Authentication: ASP.NET Identity
 
  ## Frontend
 * Type: Single Page Application (SPA)
