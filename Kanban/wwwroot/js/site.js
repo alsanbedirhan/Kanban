@@ -1751,6 +1751,15 @@ async function openCardModal(columnId, cardId = null) {
             });
             quill.root.innerHTML = defaults.desc;
 
+            if (canEdit) {
+                setTimeout(() => {
+                    quill.focus();
+
+                    const length = quill.getLength();
+                    quill.setSelection(length, length);
+                }, 100);
+            }
+
             const checkbox = document.getElementById('modal-reminder-check');
             const area = document.getElementById('warning-area');
             if (checkbox && area) {
