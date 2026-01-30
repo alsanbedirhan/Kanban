@@ -5,8 +5,8 @@ Live Demo: www.kanflow.online
 Kanflow allows teams and individuals to visualize their work, limit work-in-progress, and maximize efficiency. The project was developed to demonstrate advanced backend architecture, SPA implementation, and secure user management practices.
 
 # Key Features
-* Kanban Boards: Drag-and-drop interface for managing tasks across different stages.
-* Invitation System: Secure, invite-only user registration flow.
+* Kanban Boards: Drag-and-drop interface for managing tasks across different stages.*
+* Secure Authentication: ASP.NET Identity integration with Email Verification.
 * SPA Architecture: Seamless user experience with no page reloads, powered by .NET MVC.
 * Email Integration: Automated email notifications and invites using Mailjet.
 * Responsive Design: Fully functional across desktop and mobile devices.
