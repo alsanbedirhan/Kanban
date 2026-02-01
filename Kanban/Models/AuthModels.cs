@@ -5,8 +5,9 @@ namespace Kanban.Models
     {
         public string? SecurityStamp { get; set; }
     }
-    public class LoginViewModel : VerifyViewModel
+    public class LoginViewModel 
     {
+        public string email { get; set; }
         public string password { get; set; }
     }
     public class EmailSettings
@@ -23,6 +24,10 @@ namespace Kanban.Models
         public string Audience { get; set; }
         public int ExpireMinutes { get; set; }
     }
+    public class TurnstileSettings
+    {
+        public string SecretKey { get; set; }
+    }
     public class RegisterViewModel : LoginViewModel
     {
         public string fullName { get; set; }
@@ -31,6 +36,7 @@ namespace Kanban.Models
     public class VerifyViewModel
     {
         public string email { get; set; }
+        public string turnstileToken { get; set; }
     }
     public class ChangePasswordViewModel
     {

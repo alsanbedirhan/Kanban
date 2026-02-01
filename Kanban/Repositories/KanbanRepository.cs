@@ -228,7 +228,7 @@ namespace Kanban.Repositories
         {
             return await _context.BoardMembers.AsNoTracking()
                 .Where(b => b.UserId == userId && b.IsActive && b.Board.IsActive)
-                .OrderByDescending(x => x.Board.Id)
+                .OrderByDescending(b => b.Board.BoardColumns.SelectMany(y => y.BoardCards).Max(c => (DateTime?)c.CreatedAt))
                 .Select(b => new BoardOwnerResultModel { Board = b.Board, IsOwner = b.RoleCode == "OWNER" })
                 .ToListAsync();
         }
@@ -248,13 +248,22 @@ namespace Kanban.Repositories
                 .Select(x => new { x.BoardColumnId, x.BoardColumn.BoardId })
                 .FirstOrDefaultAsync();
 
-            if (card == null) return;
-
             var boardId = card.BoardId;
 
-            await _context.BoardCards
-                .Where(c => c.BoardColumnId == newColumnId && c.OrderNo >= newOrder && c.IsActive)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.OrderNo, x => x.OrderNo + 1));
+            var maxOrder = await _context.BoardCards
+                .Where(c => c.BoardColumnId == newColumnId && c.IsActive)
+                .MaxAsync(x => (int?)x.OrderNo) ?? 0;
+
+            if (newOrder > maxOrder)
+            {
+                newOrder = maxOrder + 1;
+            }
+            else
+            {
+                await _context.BoardCards
+                    .Where(c => c.BoardColumnId == newColumnId && c.OrderNo >= newOrder && c.IsActive)
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.OrderNo, x => x.OrderNo + 1));
+            }
 
             await _context.BoardCards
                 .Where(c => c.Id == cardId)

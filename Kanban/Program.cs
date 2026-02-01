@@ -1,15 +1,13 @@
 using Kanban;
 using Kanban.Entities;
-using Kanban.Models;
 using Kanban.Repositories;
 using Kanban.Services;
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.IO;
 using System.Security.Claims;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +21,8 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IKanbanRepository, KanbanRepository>();
 builder.Services.AddScoped<IKanbanService, KanbanService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+
+builder.Services.AddHttpClient<ITurnstileService, TurnstileService>();
 
 builder.Services.AddAntiforgery(options =>
 {
@@ -179,12 +179,63 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+app.UseCors(x => x
+    .WithOrigins("https://kanflow.online", "https://www.kanflow.online")
+    .AllowCredentials()
+    .AllowAnyMethod()
+    .AllowAnyHeader()
+    .SetPreflightMaxAge(TimeSpan.FromHours(24)));
+
 app.UseCors(x => x.WithOrigins("https://kanflow.online", "https://www.kanflow.online")
        .AllowCredentials()
        .AllowAnyMethod()
        .AllowAnyHeader());
 
 app.UseHttpsRedirection();
+
+app.Use(async (context, next) =>
+{
+    var csp = new StringBuilder();
+
+    csp.Append("default-src 'self'; ");
+
+    csp.Append("script-src 'self' 'unsafe-inline' 'unsafe-eval' ");
+    csp.Append("https://challenges.cloudflare.com ");
+    csp.Append("https://cdn.jsdelivr.net ");
+    csp.Append("https://cdn.quilljs.com; ");
+
+    csp.Append("script-src-elem 'self' 'unsafe-inline' ");
+    csp.Append("https://challenges.cloudflare.com ");
+    csp.Append("https://cdn.jsdelivr.net ");
+    csp.Append("https://cdn.quilljs.com; ");
+
+    csp.Append("style-src 'self' 'unsafe-inline' ");
+    csp.Append("https://cdn.quilljs.com; ");
+
+    csp.Append("style-src-elem 'self' 'unsafe-inline' ");
+    csp.Append("https://cdn.quilljs.com; ");
+
+    csp.Append("frame-src 'self' ");
+    csp.Append("https://challenges.cloudflare.com; ");
+
+    csp.Append("connect-src 'self' ");
+    csp.Append("https://challenges.cloudflare.com");
+    if (app.Environment.IsDevelopment())
+    {
+        csp.Append(" ws://localhost:* http://localhost:*");
+    }
+    csp.Append("; ");
+
+    csp.Append("img-src 'self' data: blob: https:; ");
+
+    csp.Append("font-src 'self' data:;");
+
+    context.Response.Headers.Append("Content-Security-Policy", csp.ToString());
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+
+    await next();
+});
 
 app.UseStaticFiles();
 

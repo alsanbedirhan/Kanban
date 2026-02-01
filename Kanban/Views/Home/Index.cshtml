@@ -12,7 +12,7 @@
     <title>kanflow</title>
 
     <meta name="description" content="Manage projects effortlessly with Kanflow. Organize tasks, collaborate with your team, and boost productivity. The fast, secure, and free Kanban tool." />
-    <meta name="keywords" content="kanban, project management, task tracking, agile, scrum, workflow, productivity, kanflow, bedirhan alsan, todo list" />
+    <meta name="keywords" content="kanban, project management, task tracking, agile, scrum, workflow, productivity, kanflow, bedirhan alşan, bedirhan alsan, todo list" />
     <meta name="author" content="Bedirhan Alsan" />
     <meta name="robots" content="index, follow" />
 
@@ -28,23 +28,29 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 </head>
 <body>
+    <div id="server-data"
+         style="display:none;"
+         data-invite-status="@Model.Data.ToString()"
+         data-server-message="@Model.ErrorMessage">
+    </div>
 
-    <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+    <button class="menu-toggle" data-action="toggleSidebar">☰</button>
+    <div class="sidebar-overlay" id="sidebarOverlay" data-action="toggleSidebar"></div>
 
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <h2>kanflow.online</h2>
-            <button class="close-sidebar-btn" onclick="toggleSidebar()">×</button>
+            <button class="close-sidebar-btn" data-action="toggleSidebar">×</button>
         </div>
 
         <div class="sidebar-content">
             <div style="padding: 0 20px;">
-                <button class="add-board-btn" onclick="openNewBoardModal()">
+                <button class="add-board-btn" data-action="openNewBoardModal">
                     + New Board
                 </button>
             </div>
@@ -56,8 +62,7 @@
             <ul class="board-list" id="sharedBoardList"></ul>
         </div>
 
-        <div class="sidebar-footer" id="authSection">
-        </div>
+        <div class="sidebar-footer" id="authSection"></div>
 
         <div class="developer-footer" style="padding: 15px; text-align: center; font-size: 0.85rem; border-top: 1px solid #eee; color: #666;">
             Developed by <a href="https://bedirhanalsan.com" target="_blank" style="color: #333; text-decoration: none; font-weight: bold;">Bedirhan Alşan</a>
@@ -75,13 +80,13 @@
 
         <div class="header secondary-header" id="boardHeader" style="margin-top:0px;display:none;">
             <h1 id="boardHeaderTitle"></h1>
-            <button class="btn btn-primary" id="btnNewColumn" onclick="openNewColumnModal()">+ New Column</button>
+            <button class="btn btn-primary" id="btnNewColumn" data-action="openNewColumnModal">+ New Column</button>
         </div>
         <div class="board" id="board">
         </div>
     </div>
 
-    <form onsubmit="handleLogin(); return false;" class="modal" id="loginModal">
+    <form class="modal" id="loginModal">
         <div class="modal-content">
             <h3>Login</h3><br>
             <div class="form-group">
@@ -91,20 +96,20 @@
             <div class="form-group">
                 <label>Password</label>
                 <input type="password" id="loginPassword" placeholder="••••••••">
-                <button type="button" tabindex="-1" aria-label="Show/Hide Password" class="toggle-password" data-target="loginPassword">🙈</button>
+                <button type="button" tabindex="-1" class="toggle-password" data-target="loginPassword">🙈</button>
             </div>
             <div style="text-align:right;">
-                <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Cancel</button>
+                <button type="button" class="btn btn-secondary" data-action="closeLoginModal">Cancel</button>
                 <button type="submit" class="btn btn-primary">Login</button>
             </div>
             <div style="margin-top:20px; text-align:center; font-size:14px;">
                 Don’t have an account?
-                <button type="button" class="btn-link" onclick="switchToRegister()">Register</button>
+                <button type="button" class="btn-link" data-action="switchToRegister">Register</button>
             </div>
         </div>
     </form>
 
-    <form onsubmit="handleRegister(); return false;" class="modal" id="registerModal">
+    <form class="modal" id="registerModal">
         <div class="modal-content">
             <h3>Register</h3><br>
             <div class="form-group">
@@ -118,29 +123,33 @@
             <div class="form-group">
                 <label>Password</label>
                 <input type="password" id="registerPassword" placeholder="••••••••">
-                <button type="button" tabindex="-1" aria-label="Show/Hide Password" class="toggle-password" data-target="registerPassword">🙈</button>
+                <button type="button" tabindex="-1" class="toggle-password" data-target="registerPassword">🙈</button>
             </div>
             <div class="form-group">
                 <label>Confirm Password</label>
                 <input type="password" id="registerConfirmPassword" placeholder="••••••••">
-                <button type="button" tabindex="-1" aria-label="Show/Hide Password" class="toggle-password" data-target="registerConfirmPassword">🙈</button>
+                <button type="button" tabindex="-1" class="toggle-password" data-target="registerConfirmPassword">🙈</button>
             </div>
             <div style="display: flex; align-items: flex-start; gap: 10px; margin-top: 15px; margin-bottom: 15px;">
                 <input type="checkbox" id="registerAgreement" style="width: 20px; height: 20px; cursor: pointer; margin-top: 2px;">
                 <label for="registerAgreement" style="font-size: 13px; color: #4a5568; cursor: pointer;">
                     I have read and agree to the
-                    <a href="#" onclick="showPrivacyPolicy(event)" style="color: var(--primary-color); text-decoration: underline;">Privacy Policy</a> and
-                    <a href="#" onclick="showUserAgreement(event)" style="color: var(--primary-color); text-decoration: underline;">User Agreement</a>.
+                    <a href="#" data-action="showPrivacyPolicy" style="color: var(--primary-color); text-decoration: underline;">Privacy Policy</a> and
+                    <a href="#" data-action="showUserAgreement" style="color: var(--primary-color); text-decoration: underline;">User Agreement</a>.
                 </label>
             </div>
 
+            <div style="margin-bottom: 15px; display: flex; justify-content: center; width: 100%">
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAACWAgmX9pAp9Li7E"></div>
+            </div>
+
             <div style="text-align:right;">
-                <button type="button" class="btn btn-secondary" onclick="closeRegisterModal()">Cancel</button>
+                <button type="button" class="btn btn-secondary" data-action="closeRegisterModal">Cancel</button>
                 <button type="submit" class="btn btn-primary">Register</button>
             </div>
             <div style="margin-top:20px; text-align:center; font-size:14px;">
                 Already have an account?
-                <button type="button" class="btn-link" onclick="switchToLogin()">Login</button>
+                <button type="button" class="btn-link" data-action="switchToLogin">Login</button>
             </div>
         </div>
     </form>
@@ -150,10 +159,9 @@
             <h3>Select Your Look</h3>
             <p style="color:#666; margin-bottom:20px;">Choose an avatar to personalize your profile.</p>
 
-            <div id="avatarSelectionArea">
-            </div>
+            <div id="avatarSelectionArea"></div>
 
-            <button class="btn btn-primary" style="width:100%; margin-top:20px;" onclick="saveMyAvatar()">
+            <button class="btn btn-primary" style="width:100%; margin-top:20px;" data-action="saveMyAvatar">
                 Let's Go!
             </button>
         </div>
@@ -175,18 +183,15 @@
         </div>
     </template>
 
-    <button id="quickNoteBtn" class="quick-note-toggle" onclick="toggleQuickNote()">
-        📝
-    </button>
+    <button id="quickNoteBtn" class="quick-note-toggle" data-action="toggleQuickNote">📝</button>
 
     <div id="quickNoteContainer" class="quick-note-wrapper">
-        <div class="quick-note-header">
+        <div class="quick-note-header" style="font-size:20px">
             <span>Quick Notes</span>
             <div style="display:flex; gap:10px; align-items:center;">
                 <span id="saveStatus" style="font-size:10px; color:#666; opacity:0; transition:opacity 0.3s;">Saved ✅</span>
-
-                <span id="btnTrash" style="cursor:pointer;" onclick="clearQuickNote()">🗑️</span>
-                <span style="cursor:pointer;" onclick="toggleQuickNote()">✕</span>
+                <span id="btnTrash" style="cursor:pointer;" data-action="clearQuickNote">🗑️</span>
+                <span style="cursor:pointer;" data-action="toggleQuickNote">✕</span>
             </div>
         </div>
         <textarea id="quickNoteArea" placeholder="Write here..." maxlength="1000"></textarea>
@@ -194,10 +199,5 @@
 
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-    <script>
-        window.SERVER_INVITE_STATUS = '@Model.Data.ToString()';
-
-        window.SERVER_MESSAGE = '@Model.ErrorMessage';
-    </script>
 </body>
 </html>

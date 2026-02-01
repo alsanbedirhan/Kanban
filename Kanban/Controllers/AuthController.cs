@@ -16,9 +16,11 @@ namespace Kanban.Controllers
     public class AuthController : Controller
     {
         private readonly IUserService _userService;
-        public AuthController(IUserService userService)
+        private readonly ITurnstileService _turnstileService;
+        public AuthController(IUserService userService, ITurnstileService turnstileService)
         {
             _userService = userService;
+            _turnstileService = turnstileService;
         }
 
         [HttpPost]
@@ -45,6 +47,12 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> VerifyWork([FromBody] VerifyViewModel model)
         {
+            var isHuman = await _turnstileService.VerifyAsync(model.turnstileToken);
+            if (!isHuman)
+            {
+                return Ok(ServiceResult.Fail("Turnstile verification failed."));
+            }
+
             var result = await _userService.GenerateAndSaveVerifyCode(model.email);
 
             if (!result.Success)

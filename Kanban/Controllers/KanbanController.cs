@@ -101,7 +101,7 @@ namespace Kanban.Controllers
                 Id = x.Board.Id,
                 Title = x.Board.Title,
                 IsOwner = x.IsOwner
-            }).OrderByDescending(x => x.Id).ToList()));
+            }).ToList()));
         }
 
         [HttpPost]

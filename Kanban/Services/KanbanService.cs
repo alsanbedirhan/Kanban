@@ -22,7 +22,7 @@ namespace Kanban.Services
         public KanbanService(IConfiguration config, IKanbanRepository kanbanRepository,
             IUserRepository userRepository, IEmailService emailService, IDBDateTimeProvider dbDate)
         {
-            _jwtSettings = config.GetSection("JwtSettingsKey").Get<JwtSettings>() ?? null;
+            _jwtSettings = config.GetSection("JwtSettings").Get<JwtSettings>() ?? null;
             _kanbanRepository = kanbanRepository;
             _userRepository = userRepository;
             _emailService = emailService;
@@ -372,7 +372,7 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<BoardRefresResultModel>.Fail("You do not have permission to access this board."); // Or management permission depending on intent, but usually read access to version is fine
+                    return ServiceResult<BoardRefresResultModel>.Fail("You do not have permission to access this board.");
                 }
                 return ServiceResult<BoardRefresResultModel>.Ok(await _kanbanRepository.GetBoardVersion(boardId));
             }
