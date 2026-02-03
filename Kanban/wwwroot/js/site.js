@@ -1703,7 +1703,7 @@ function initSortable() {
                 const oldColumnId = evt.from.dataset.columnId;
                 const newColumnId = evt.to.dataset.columnId;
 
-                if (oldColumnId === oldColumnId && evt.oldIndex === evt.newIndex) return;
+                if (oldColumnId === newColumnId && evt.oldIndex === evt.newIndex) return;
 
                 const item = evt.item;
                 const cardId = evt.item.dataset.cardId;
