@@ -48,6 +48,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {
+    options.Cookie.Name = "Kanflow.Auth";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
@@ -77,6 +78,7 @@ builder.Services.AddAuthentication(options =>
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
 
+                context.Response.Headers.Append("Set-Cookie", $"{options.Cookie.Name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; httponly");
                 foreach (var cookie in context.Request.Cookies.Keys)
                 {
                     context.Response.Cookies.Delete(cookie, new CookieOptions
@@ -96,6 +98,7 @@ builder.Services.AddAuthentication(options =>
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
 
+                context.Response.Headers.Append("Set-Cookie", $"{options.Cookie.Name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; httponly");
                 foreach (var cookie in context.Request.Cookies.Keys)
                 {
                     context.Response.Cookies.Delete(cookie, new CookieOptions
@@ -109,6 +112,7 @@ builder.Services.AddAuthentication(options =>
 
         OnRedirectToLogin = async context =>
         {
+            context.Response.Headers.Append("Set-Cookie", $"{options.Cookie.Name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; httponly");
             foreach (var cookie in context.Request.Cookies.Keys)
             {
                 context.Response.Cookies.Delete(cookie, new CookieOptions
@@ -130,6 +134,7 @@ builder.Services.AddAuthentication(options =>
 
         OnRedirectToAccessDenied = async context =>
         {
+            context.Response.Headers.Append("Set-Cookie", $"{options.Cookie.Name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; httponly");
             foreach (var cookie in context.Request.Cookies.Keys)
             {
                 context.Response.Cookies.Delete(cookie, new CookieOptions
@@ -185,11 +190,6 @@ app.UseCors(x => x
     .AllowAnyMethod()
     .AllowAnyHeader()
     .SetPreflightMaxAge(TimeSpan.FromHours(24)));
-
-app.UseCors(x => x.WithOrigins("https://kanflow.online", "https://www.kanflow.online")
-       .AllowCredentials()
-       .AllowAnyMethod()
-       .AllowAnyHeader());
 
 app.UseHttpsRedirection();
 

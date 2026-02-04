@@ -1604,9 +1604,25 @@ let autoScrollFrame = null;
 let currentContainer = null;
 
 document.addEventListener('dragover', (e) => {
+    handleScrollCalculation(e.clientY, e.target);
+});
+
+document.addEventListener('touchmove', (e) => {
     if (!AppState.isDragging) return;
 
-    const container = e.target.closest('.cards-container');
+    const touch = e.touches[0];
+    const y = touch.clientY;
+    const x = touch.clientX;
+
+    const elementUnderFinger = document.elementFromPoint(x, y);
+
+    handleScrollCalculation(y, elementUnderFinger);
+}, { passive: false });
+
+function handleScrollCalculation(y, targetElement) {
+    if (!AppState.isDragging || !targetElement) return;
+
+    const container = targetElement.closest('.cards-container');
 
     if (!container) {
         autoScrollSpeed = 0;
@@ -1615,7 +1631,6 @@ document.addEventListener('dragover', (e) => {
 
     currentContainer = container;
     const rect = container.getBoundingClientRect();
-    const y = e.clientY;
 
     const sensitivity = 200;
     const maxSpeed = 20;
@@ -1635,7 +1650,8 @@ document.addEventListener('dragover', (e) => {
     if (autoScrollSpeed !== 0 && !autoScrollFrame) {
         performSmoothScroll();
     }
-});
+}
+
 function performSmoothScroll() {
     if (Math.abs(autoScrollSpeed) < 0.1 || !currentContainer) {
         cancelAnimationFrame(autoScrollFrame);
@@ -1644,18 +1660,20 @@ function performSmoothScroll() {
     }
 
     currentContainer.scrollTop += autoScrollSpeed;
-
     autoScrollFrame = requestAnimationFrame(performSmoothScroll);
 }
 
-document.addEventListener('dragend', () => {
+const stopScroll = () => {
     autoScrollSpeed = 0;
     if (autoScrollFrame) {
         cancelAnimationFrame(autoScrollFrame);
         autoScrollFrame = null;
     }
     currentContainer = null;
-});
+};
+
+document.addEventListener('dragend', stopScroll);
+document.addEventListener('touchend', stopScroll);
 
 function initSortable() {
     const boardElement = document.getElementById('board');
@@ -1664,7 +1682,7 @@ function initSortable() {
         Sortable.create(container, {
             group: 'kanban',
             animation: 150,
-            delay: 0,
+            delay: 200,
             delayOnTouchOnly: true,
             touchStartThreshold: 5,
             scroll: true,
