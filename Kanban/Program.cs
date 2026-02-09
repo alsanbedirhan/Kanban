@@ -78,13 +78,13 @@ builder.Services.AddAuthentication(options =>
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
 
-                context.Response.Headers.Append("Set-Cookie", $"{options.Cookie.Name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; httponly");
                 foreach (var cookie in context.Request.Cookies.Keys)
                 {
                     context.Response.Cookies.Delete(cookie, new CookieOptions
                     {
                         Path = "/",
-                        Secure = true
+                        Secure = true,
+                        SameSite = SameSiteMode.Strict
                     });
                 }
                 return;
@@ -98,13 +98,13 @@ builder.Services.AddAuthentication(options =>
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
 
-                context.Response.Headers.Append("Set-Cookie", $"{options.Cookie.Name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; httponly");
                 foreach (var cookie in context.Request.Cookies.Keys)
                 {
                     context.Response.Cookies.Delete(cookie, new CookieOptions
                     {
                         Path = "/",
-                        Secure = true
+                        Secure = true,
+                        SameSite = SameSiteMode.Strict
                     });
                 }
             }
@@ -112,13 +112,13 @@ builder.Services.AddAuthentication(options =>
 
         OnRedirectToLogin = async context =>
         {
-            context.Response.Headers.Append("Set-Cookie", $"{options.Cookie.Name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; httponly");
             foreach (var cookie in context.Request.Cookies.Keys)
             {
                 context.Response.Cookies.Delete(cookie, new CookieOptions
                 {
                     Path = "/",
-                    Secure = true
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict
                 });
             }
 
@@ -134,13 +134,13 @@ builder.Services.AddAuthentication(options =>
 
         OnRedirectToAccessDenied = async context =>
         {
-            context.Response.Headers.Append("Set-Cookie", $"{options.Cookie.Name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; httponly");
             foreach (var cookie in context.Request.Cookies.Keys)
             {
                 context.Response.Cookies.Delete(cookie, new CookieOptions
                 {
                     Path = "/",
-                    Secure = true
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict
                 });
             }
 
