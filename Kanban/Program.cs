@@ -78,15 +78,7 @@ builder.Services.AddAuthentication(options =>
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
 
-                foreach (var cookie in context.Request.Cookies.Keys)
-                {
-                    context.Response.Cookies.Delete(cookie, new CookieOptions
-                    {
-                        Path = "/",
-                        Secure = true,
-                        SameSite = SameSiteMode.Strict
-                    });
-                }
+                context.Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\"");
                 return;
             }
 
@@ -98,29 +90,13 @@ builder.Services.AddAuthentication(options =>
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
 
-                foreach (var cookie in context.Request.Cookies.Keys)
-                {
-                    context.Response.Cookies.Delete(cookie, new CookieOptions
-                    {
-                        Path = "/",
-                        Secure = true,
-                        SameSite = SameSiteMode.Strict
-                    });
-                }
+                context.Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\"");
             }
         },
 
         OnRedirectToLogin = async context =>
         {
-            foreach (var cookie in context.Request.Cookies.Keys)
-            {
-                context.Response.Cookies.Delete(cookie, new CookieOptions
-                {
-                    Path = "/",
-                    Secure = true,
-                    SameSite = SameSiteMode.Strict
-                });
-            }
+            context.Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\"");
 
             if (IsApiRequest(context.Request))
             {
@@ -134,15 +110,7 @@ builder.Services.AddAuthentication(options =>
 
         OnRedirectToAccessDenied = async context =>
         {
-            foreach (var cookie in context.Request.Cookies.Keys)
-            {
-                context.Response.Cookies.Delete(cookie, new CookieOptions
-                {
-                    Path = "/",
-                    Secure = true,
-                    SameSite = SameSiteMode.Strict
-                });
-            }
+            context.Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\"");
 
             if (IsApiRequest(context.Request))
             {
