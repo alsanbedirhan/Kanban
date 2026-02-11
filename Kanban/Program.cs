@@ -64,6 +64,11 @@ builder.Services.AddAuthentication(options =>
         {
             var path = context.Request.Path.Value?.ToLower() ?? "";
 
+            if ((path == "/" || path.StartsWith("/home")) && context.Request.Query.ContainsKey("logout") && context.Request.Query["logout"] == "true")
+            {
+                return;
+            }
+
             if (path.StartsWith("/avatars") || path.Contains(".svg") ||
                 path.Contains(".png") || path.StartsWith("/css") ||
                 path.StartsWith("/js") || path.StartsWith("/lib") ||

@@ -101,7 +101,7 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
 
         if (response.status === 401 || response.status === 403) {
             console.warn('Session expired or unauthorized. Force clearing and redirecting...');
-            handleLogout();
+            handleLogout(true, 'Session expired. Please log in again.');
             throw new Error('Session expired or unauthorized.');
         }
 
@@ -467,15 +467,15 @@ async function openChangePasswordModal() {
         html: `
             <div style="${containerStyle}">
                 <input id="swal-old-pass" type="password" class="swal2-input" placeholder="Current Password" style="${inputStyle}">
-                <button type="button" class="pass-toggle" data-target="swal-old-pass" style="${iconStyle}">🙈</button>
+                <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-old-pass" style="${iconStyle}">🙈</button>
             </div>
             <div style="${containerStyle}">
                 <input id="swal-new-pass" type="password" class="swal2-input" placeholder="New Password" style="${inputStyle}">
-                <button type="button" class="pass-toggle" data-target="swal-new-pass" style="${iconStyle}">🙈</button>
+                <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-new-pass" style="${iconStyle}">🙈</button>
             </div>
             <div style="${containerStyle}">
                 <input id="swal-conf-pass" type="password" class="swal2-input" placeholder="Confirm New Password" style="${inputStyle}">
-                <button type="button" class="pass-toggle" data-target="swal-conf-pass" style="${iconStyle}">🙈</button>
+                <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-conf-pass" style="${iconStyle}">🙈</button>
             </div>
         `,
         focusConfirm: false,
@@ -535,12 +535,7 @@ async function openChangePasswordModal() {
                     icon: 'success',
                     confirmButtonText: 'Login'
                 });
-
-                AppState.reset();
-                updateAuthUI();
-                const sidebar = document.getElementById('sidebar');
-                if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
-                AppState.stopPolling();
+                handleLogout(false);
                 openLoginModal(temp);
             } else {
                 await Swal.fire('Error', res.errorMessage || 'Failed to update password.', 'error');
@@ -912,26 +907,31 @@ async function handleRegister() {
     }
 }
 
-async function handleLogout() {
+async function handleLogout(refresh = true, message = '') {
+    AppState.reset();
+    updateAuthUI();
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
     try {
         await apiRequest('/Auth/Logout', { method: 'POST' });
-        await Swal.fire({
-            title: 'Success',
-            text: 'Logged out successfully',
-            icon: 'success',
-            timer: 1500,
-            showConfirmButton: false
-        });
+        if (refresh) {
+            const isForced = message.length > 0;
+            await Swal.fire({
+                title: isForced ? 'Session Expired' : 'Success',
+                text: isForced ? message : 'Logged out successfully.',
+                icon: isForced ? 'warning' : 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        }
     } catch (error) {
         console.warn("Logout API error (forcing exit):", error);
     } finally {
-        AppState.reset();
-        updateAuthUI();
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
-        setTimeout(() => {
-            window.location.replace('/?logout=true&t=' + new Date().getTime());
-        }, 100);
+        if (refresh) {
+            setTimeout(() => {
+                window.location.replace('/?logout=true&t=' + new Date().getTime());
+            }, 100);
+        }
     }
 }
 

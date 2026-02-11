@@ -1,6 +1,8 @@
 using Kanban.Models;
 using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 
@@ -17,8 +19,15 @@ namespace Kanban.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> Index(string? token)
+        public async Task<IActionResult> Index(string? token, bool logout = false)
         {
+            if (logout)
+            {
+                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\", \"cache\"");
+                return RedirectToAction("Index");
+            }
+
             if (!string.IsNullOrEmpty(token))
             {
                 var r = await _kanbanService.VerifyActivationToken(User.GetUserId(), token);
