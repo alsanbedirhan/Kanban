@@ -52,6 +52,8 @@ builder.Services.AddAuthentication(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.ExpireTimeSpan = TimeSpan.FromDays(7);
+    options.SlidingExpiration = true;
 
     options.LoginPath = "/";
     options.AccessDeniedPath = "/Error/403";
@@ -65,7 +67,7 @@ builder.Services.AddAuthentication(options =>
             if (path.StartsWith("/avatars") || path.Contains(".svg") ||
                 path.Contains(".png") || path.StartsWith("/css") ||
                 path.StartsWith("/js") || path.StartsWith("/lib") ||
-                path.Contains(".ico"))
+                path.Contains(".ico") || path.StartsWith("/error"))
             {
                 return;
             }

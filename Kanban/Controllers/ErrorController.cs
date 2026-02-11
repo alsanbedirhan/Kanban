@@ -1,5 +1,4 @@
-﻿using Kanban.Models;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 
 namespace Kanban.Controllers
 {
@@ -8,20 +7,17 @@ namespace Kanban.Controllers
         [Route("[controller]/{statusCode}")]
         public IActionResult HandleError(int statusCode)
         {
-            string message = $"Hata oluştu";
-            if (statusCode == 401)
+            return View(new ErrorViewModel
             {
-                message = "Yetkisiz erişim. Lütfen giriş yapın.";
-            }
-            else if (statusCode == 403)
-            {
-                message = "Erişim reddedildi. Bu sayfaya erişim izniniz yok.";
-            }
-            else if (statusCode == 404)
-            {
-                message = "Sayfa bulunamadı. Lütfen URL'yi kontrol edin.";
-            }
-            return View(new ErrorViewModel { ErrorCode = statusCode, Message = message });
+                ErrorCode = statusCode,
+                Message = statusCode switch
+                {
+                    401 => "Unauthorized access. Please log in.",
+                    403 => "Access denied. You do not have permission to access this page.",
+                    404 => "Page not found. Please check the URL.",
+                    _ => "An error occurred"
+                }
+            });
         }
     }
 }

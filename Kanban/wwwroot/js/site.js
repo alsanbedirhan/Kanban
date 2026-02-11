@@ -100,10 +100,8 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
         });
 
         if (response.status === 401 || response.status === 403) {
-            console.warn('Session expired or unauthorized. Redirecting to home...');
-            AppState.reset();
-            updateAuthUI();
-            handleLogout().then(() => { setTimeout(() => { window.location.href = '/'; window.location.reload(); }, 500); });
+            console.warn('Session expired or unauthorized. Force clearing and redirecting...');
+            handleLogout();
             throw new Error('Session expired or unauthorized.');
         }
 
@@ -123,11 +121,12 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
         return await response.text();
 
     } catch (error) {
-        console.error('API Error:', error);
-        if (showload && error.message !== 'Session expired or unauthorized.') {
-            Swal.fire('Error', error.message || 'A connection error occurred.', 'error');
+        if (error.message !== 'Session expired or unauthorized.') {
+            console.error('API Error:', error);
+            if (showload) {
+                Swal.fire('Error', error.message || 'A connection error occurred.', 'error');
+            }
         }
-        throw error;
     } finally {
         if (showload) hideLoading();
         if (!isPooling) {
@@ -916,14 +915,23 @@ async function handleRegister() {
 async function handleLogout() {
     try {
         await apiRequest('/Auth/Logout', { method: 'POST' });
+        await Swal.fire({
+            title: 'Success',
+            text: 'Logged out successfully',
+            icon: 'success',
+            timer: 1500,
+            showConfirmButton: false
+        });
+    } catch (error) {
+        console.warn("Logout API error (forcing exit):", error);
+    } finally {
         AppState.reset();
         updateAuthUI();
         const sidebar = document.getElementById('sidebar');
         if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
-        AppState.stopPolling();
-        Swal.fire('Success', 'Logged out successfully', 'success');
-    } catch {
-        Swal.fire('Error', 'Logout failed', 'error');
+        setTimeout(() => {
+            window.location.replace('/?logout=true&t=' + new Date().getTime());
+        }, 100);
     }
 }
 
@@ -2223,6 +2231,10 @@ function deleteAllCookies() {
 
 window.addEventListener('DOMContentLoaded', async () => {
 
+    if (window.location.search.includes('logout=true')) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     const serverDataEl = document.getElementById('server-data');
     if (serverDataEl) {
         window.SERVER_INVITE_STATUS = serverDataEl.getAttribute('data-invite-status');
@@ -2345,7 +2357,7 @@ function handleInviteStatus() {
                 cancelButtonText: 'Cancel'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    handleLogout().then(() => { setTimeout(() => { window.location.href = '/'; window.location.reload(); }, 500); });
+                    handleLogout();
                 }
             });
             break;
