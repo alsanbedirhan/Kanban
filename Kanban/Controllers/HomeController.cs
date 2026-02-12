@@ -3,6 +3,7 @@ using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kanban.Controllers
@@ -18,11 +19,24 @@ namespace Kanban.Controllers
         }
 
         [HttpGet]
+        [AllowAnonymous]
         public async Task<IActionResult> Index(string? token, bool logout = false)
         {
+            if (!logout)
+            {
+                logout = !(User.Identity?.IsAuthenticated ?? false) && Request.Cookies.ContainsKey("Kanflow.Auth");
+            }
+
             if (logout)
             {
-                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                try
+                {
+                    await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                }
+                catch (Exception)
+                {
+
+                }
                 HttpContext.DeleteCookies();
                 return RedirectToAction("Index");
             }

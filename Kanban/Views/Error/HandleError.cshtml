@@ -2,6 +2,20 @@
 
 @{
     Layout = null;
+    if (!Context.Response.HasStarted)
+    {
+        try
+        {
+            var options = new Microsoft.AspNetCore.Http.CookieOptions { Path = "/" };
+            Context.Response.Cookies.Delete("Kanflow.Auth", options);
+            Context.Response.Cookies.Delete("Kanflow.Antiforgery", options);
+            Context.Response.Cookies.Delete("X-XSRF-TOKEN", options);
+        }
+        catch
+        {
+
+        }
+    }
 }
 <!DOCTYPE html>
 <html lang="tr">

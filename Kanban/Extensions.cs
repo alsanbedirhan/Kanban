@@ -21,18 +21,25 @@ namespace Kanban
         }
         public static void DeleteCookies(this HttpContext context)
         {
-            var options = new CookieOptions { Path = "/" };
-            if (!string.IsNullOrEmpty(context.Request.Cookies["Kanflow.Auth"]))
+            try
             {
-                context.Response.Cookies.Delete("Kanflow.Auth", options);
+                var options = new CookieOptions { Path = "/" };
+                if (!string.IsNullOrEmpty(context.Request.Cookies["Kanflow.Auth"]))
+                {
+                    context.Response.Cookies.Delete("Kanflow.Auth", options);
+                }
+                if (!string.IsNullOrEmpty(context.Request.Cookies["Kanflow.Antiforgery"]))
+                {
+                    context.Response.Cookies.Delete("Kanflow.Antiforgery", options);
+                }
+                if (!string.IsNullOrEmpty(context.Request.Cookies["XSRF-TOKEN"]))
+                {
+                    context.Response.Cookies.Delete("XSRF-TOKEN", options);
+                }
             }
-            if (!string.IsNullOrEmpty(context.Request.Cookies["Kanflow.Antiforgery"]))
+            catch (Exception)
             {
-                context.Response.Cookies.Delete("Kanflow.Antiforgery", options);
-            }
-            if (!string.IsNullOrEmpty(context.Request.Cookies["XSRF-TOKEN"]))
-            {
-                context.Response.Cookies.Delete("XSRF-TOKEN", options);
+
             }
         }
     }
