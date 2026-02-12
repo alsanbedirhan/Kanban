@@ -92,15 +92,8 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> Logout()
         {
-            try
-            {
-                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            }
-            catch (Exception)
-            {
-
-            }
-            Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\", \"cache\"");
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            HttpContext.DeleteCookies();
             return Ok(ServiceResult.Ok());
         }
 

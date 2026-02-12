@@ -19,6 +19,22 @@ namespace Kanban
         {
             return user.FindFirst(ClaimTypes.Name)?.Value ?? "";
         }
+        public static void DeleteCookies(this HttpContext context)
+        {
+            var options = new CookieOptions { Path = "/" };
+            if (!string.IsNullOrEmpty(context.Request.Cookies["Kanflow.Auth"]))
+            {
+                context.Response.Cookies.Delete("Kanflow.Auth", options);
+            }
+            if (!string.IsNullOrEmpty(context.Request.Cookies["Kanflow.Antiforgery"]))
+            {
+                context.Response.Cookies.Delete("Kanflow.Antiforgery", options);
+            }
+            if (!string.IsNullOrEmpty(context.Request.Cookies["XSRF-TOKEN"]))
+            {
+                context.Response.Cookies.Delete("XSRF-TOKEN", options);
+            }
+        }
     }
     public enum InviteStatus
     {
@@ -49,7 +65,7 @@ namespace Kanban
             if (connection.State != System.Data.ConnectionState.Open)
                 await connection.OpenAsync();
 
-            using var command = connection.CreateCommand(); 
+            using var command = connection.CreateCommand();
             command.CommandText = "SELECT GETDATE()";
 
             var result = await command.ExecuteScalarAsync();

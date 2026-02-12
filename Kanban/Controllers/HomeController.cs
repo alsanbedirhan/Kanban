@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
 
 namespace Kanban.Controllers
 {
@@ -24,7 +23,7 @@ namespace Kanban.Controllers
             if (logout)
             {
                 await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\", \"cache\"");
+                HttpContext.DeleteCookies();
                 return RedirectToAction("Index");
             }
 

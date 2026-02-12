@@ -64,7 +64,7 @@ builder.Services.AddAuthentication(options =>
         {
             var path = context.Request.Path.Value?.ToLower() ?? "";
 
-            if ((path == "/" || path.StartsWith("/home")) && context.Request.Query.ContainsKey("logout") && context.Request.Query["logout"] == "true")
+            if ((path == "/" || path == "/home/index") && context.Request.Query.ContainsKey("logout") && context.Request.Query["logout"] == "true")
             {
                 return;
             }
@@ -84,8 +84,14 @@ builder.Services.AddAuthentication(options =>
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
-
-                context.Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\"");
+                if (IsApiRequest(context.Request))
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                }
+                else
+                {
+                    context.Response.Redirect("/Error/401");
+                }
                 return;
             }
 
@@ -96,15 +102,19 @@ builder.Services.AddAuthentication(options =>
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync();
-
-                context.Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\"");
+                if (IsApiRequest(context.Request))
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                }
+                else
+                {
+                    context.Response.Redirect("/Error/403");
+                }
             }
         },
 
         OnRedirectToLogin = async context =>
         {
-            context.Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\"");
-
             if (IsApiRequest(context.Request))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -117,8 +127,6 @@ builder.Services.AddAuthentication(options =>
 
         OnRedirectToAccessDenied = async context =>
         {
-            context.Response.Headers.Append("Clear-Site-Data", "\"cookies\", \"storage\"");
-
             if (IsApiRequest(context.Request))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -210,6 +218,11 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
 
     await next();
+
+    if ((context.Response.StatusCode == 401 || context.Response.StatusCode == 403) && !context.Response.HasStarted)
+    {
+        context.DeleteCookies();
+    }
 });
 
 app.UseStaticFiles();
