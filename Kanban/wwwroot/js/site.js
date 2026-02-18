@@ -2250,14 +2250,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-    if (sidebarOverlay) {
-        sidebarOverlay.addEventListener('click', () => {
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
-        });
-    }
-
     const loginModal = document.getElementById('loginModal');
     if (loginModal) {
         loginModal.addEventListener('submit', (e) => { e.preventDefault(); handleLogin(); });

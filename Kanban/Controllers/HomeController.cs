@@ -24,7 +24,7 @@ namespace Kanban.Controllers
         {
             if (!logout)
             {
-                logout = !(User.Identity?.IsAuthenticated ?? false) && Request.Cookies.ContainsKey("Kanflow.Auth");
+                logout = !(User.Identity?.IsAuthenticated ?? false);
             }
 
             if (logout)
@@ -38,7 +38,7 @@ namespace Kanban.Controllers
 
                 }
                 HttpContext.DeleteCookies();
-                return RedirectToAction("Index");
+                //return RedirectToAction("Index");
             }
 
             if (!string.IsNullOrEmpty(token))

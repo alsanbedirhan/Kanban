@@ -23,18 +23,17 @@ namespace Kanban
         {
             try
             {
-                var options = new CookieOptions { Path = "/" };
-                if (!string.IsNullOrEmpty(context.Request.Cookies["Kanflow.Auth"]))
+                var options = new CookieOptions { Path = "/", SameSite = SameSiteMode.Strict };
+                foreach (var cookie in context.Request.Cookies)
                 {
-                    context.Response.Cookies.Delete("Kanflow.Auth", options);
-                }
-                if (!string.IsNullOrEmpty(context.Request.Cookies["Kanflow.Antiforgery"]))
-                {
-                    context.Response.Cookies.Delete("Kanflow.Antiforgery", options);
-                }
-                if (!string.IsNullOrEmpty(context.Request.Cookies["XSRF-TOKEN"]))
-                {
-                    context.Response.Cookies.Delete("XSRF-TOKEN", options);
+                    try
+                    {
+                        context.Response.Cookies.Delete(cookie.Key, options);
+                    }
+                    catch (Exception)
+                    {
+
+                    }
                 }
             }
             catch (Exception)
