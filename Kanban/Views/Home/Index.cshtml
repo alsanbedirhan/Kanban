@@ -78,10 +78,22 @@
             <div id="authHeaderArea"></div>
         </div>
 
-        <div class="header secondary-header" id="boardHeader" style="margin-top:0px;display:none;">
+        <div class="header secondary-header" id="boardHeader" style="margin-top:0px; display:none; justify-content: space-between; align-items: center;">
             <h1 id="boardHeaderTitle"></h1>
-            <button class="btn btn-primary" id="btnNewColumn" data-action="openNewColumnModal">+ New Column</button>
+
+            <div class="board-actions" style="display: flex; align-items: center; gap: 5px;">
+
+                <button class="btn" data-action="openCalendarView" title="Calendar View" style="cursor: pointer;">
+                    📅
+                </button>
+
+                <button class="btn btn-primary" id="btnNewColumn" data-action="openNewColumnModal" title="Add New Column">
+                    ➕
+                </button>
+
+            </div>
         </div>
+
         <div class="board" id="board">
         </div>
     </div>
@@ -97,6 +109,12 @@
                 <label>Password</label>
                 <input type="password" id="loginPassword" placeholder="••••••••">
                 <button type="button" tabindex="-1" class="toggle-password" data-target="loginPassword">🙈</button>
+
+                <div style="text-align:right; margin-top:5px;">
+                    <button type="button" class="btn-link" style="font-size:12px;" data-action="handleForgotPassword">
+                        Forgot Password?
+                    </button>
+                </div>
             </div>
             <div style="text-align:right;">
                 <button type="button" class="btn btn-secondary" data-action="closeLoginModal">Cancel</button>
@@ -186,12 +204,12 @@
     <button id="quickNoteBtn" class="quick-note-toggle" data-action="toggleQuickNote">📝</button>
 
     <div id="quickNoteContainer" class="quick-note-wrapper">
-        <div class="quick-note-header" style="font-size:20px">
+        <div class="quick-note-header" data-action="toggleQuickNote" style="font-size:20px">
             <span>Quick Notes</span>
             <div style="display:flex; gap:10px; align-items:center;">
                 <span id="saveStatus" style="font-size:10px; color:#666; opacity:0; transition:opacity 0.3s;">Saved ✅</span>
                 <span id="btnTrash" style="cursor:pointer;" data-action="clearQuickNote">🗑️</span>
-                <span style="cursor:pointer;" data-action="toggleQuickNote">✕</span>
+                <span style="cursor:pointer;">✕</span>
             </div>
         </div>
         <textarea id="quickNoteArea" placeholder="Write here..." maxlength="1000"></textarea>

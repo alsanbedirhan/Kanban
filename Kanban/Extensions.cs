@@ -23,7 +23,7 @@ namespace Kanban
         {
             try
             {
-                var options = new CookieOptions { Path = "/", SameSite = SameSiteMode.Strict };
+                var options = new CookieOptions { Path = "/", SameSite = SameSiteMode.Strict, Secure = true };
                 foreach (var cookie in context.Request.Cookies)
                 {
                     try

@@ -10,6 +10,10 @@ namespace Kanban.Models
         public string email { get; set; }
         public string password { get; set; }
     }
+    public class ResetPasswordViewModel : LoginViewModel
+    {
+        public string otpCode { get; set; }
+    }
     public class EmailSettings
     {
         public string Domain { get; set; }

@@ -27,6 +27,9 @@ namespace Kanban.Repositories
         Task MoveCard(long userId, long cardId, long newColumnId, int newOrder);
         Task<bool> ValidateManageBoard(long userId, long boardId);
         Task<bool> ValidateBoardWithBoardId(long userId, long boardId);
+        Task<bool> ValidateBoardColumn(long boardId, long columnId);
+        Task<bool> ValidateBoardCard(long boardId, long cardId);
+        Task<bool> ValidateBoardComment(long boardId, long commentId);
         Task DeleteColumn(long columnId);
         Task DeleteBoard(long userId, long boardId);
         Task DeleteCard(long cardId);

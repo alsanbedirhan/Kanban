@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Rewrite;
 using System.Security.Claims;
 using System.Text;
 
@@ -156,6 +157,9 @@ bool IsApiRequest(HttpRequest request)
 
     return false;
 }
+
+app.UseRewriter(new RewriteOptions()
+    .AddRedirectToNonWwwPermanent());
 
 if (!app.Environment.IsDevelopment())
 {

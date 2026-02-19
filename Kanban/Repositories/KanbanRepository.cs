@@ -441,5 +441,20 @@ namespace Kanban.Repositories
                .Where(b => b.Id == boardId && b.IsActive)
                .ExecuteUpdateAsync(b => b.SetProperty(x => x.Title, title));
         }
+
+        public async Task<bool> ValidateBoardColumn(long boardId, long columnId)
+        {
+            return await _context.BoardColumns.AnyAsync(c => c.Id == columnId && c.BoardId == boardId && c.IsActive);
+        }
+
+        public async Task<bool> ValidateBoardCard(long boardId, long cardId)
+        {
+            return await _context.BoardCards.AnyAsync(c => c.Id == cardId && c.BoardColumn.BoardId == boardId && c.IsActive);
+        }
+
+        public async Task<bool> ValidateBoardComment(long boardId, long commentId)
+        {
+            return await _context.BoardCardComments.AnyAsync(c => c.Id == commentId && c.BoardCard.BoardColumn.BoardId == boardId && !c.IsDeleted);
+        }
     }
 }

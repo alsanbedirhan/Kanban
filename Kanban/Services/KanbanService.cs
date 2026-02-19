@@ -1,10 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Repositories;
-using Mailjet.Client.Resources;
 using Microsoft.IdentityModel.Tokens;
-using System.Collections.Generic;
-using System.ComponentModel.Design;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -40,6 +37,10 @@ namespace Kanban.Services
                     return ServiceResult<BoardCard>.Fail("Due date cannot be in the past.");
                 }
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
+                }
+                if (!await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
                 {
                     return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
                 }
@@ -145,6 +146,10 @@ namespace Kanban.Services
                 {
                     return ServiceResult.Fail("You do not have permission to access this board.");
                 }
+                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                {
+                    return ServiceResult.Fail("You do not have permission to access this board.");
+                }
                 var card = await _kanbanRepository.GetCardAssignee(cardId);
 
                 if (card != null && card > 0 && userId != card)
@@ -212,7 +217,12 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("You do not have permission to access this board.");
+                    return ServiceResult.Fail("You do not have permission to access this board.");
+                }
+
+                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, newColumnId))
+                {
+                    return ServiceResult.Fail("You do not have permission to access this board.");
                 }
 
                 var card = await _kanbanRepository.GetCardAssignee(cardId);
@@ -388,14 +398,19 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
+                    return ServiceResult.Fail("You do not have permission to access this board.");
+                }
+
+                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                {
+                    return ServiceResult.Fail("You do not have permission to access this board.");
                 }
 
                 var card = await _kanbanRepository.GetCardAssignee(cardId);
 
                 if (card != null && card > 0 && userId != card)
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("Only the assigned user can update this card.");
+                    return ServiceResult.Fail("Only the assigned user can update this card.");
                 }
 
                 await _kanbanRepository.UpdateCard(userId, cardId, desc, dueDate, warningDays, highlightColor, assigneeId);
@@ -529,6 +544,11 @@ namespace Kanban.Services
                     return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
                 }
 
+                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                {
+                    return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
+                }
+
                 return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message));
             }
             catch (Exception)
@@ -542,6 +562,11 @@ namespace Kanban.Services
             try
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                {
+                    return ServiceResult.Fail("You do not have permission to access this board.");
+                }
+
+                if (!await _kanbanRepository.ValidateBoardComment(boardId, commentId))
                 {
                     return ServiceResult.Fail("You do not have permission to access this board.");
                 }

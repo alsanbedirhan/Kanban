@@ -305,7 +305,6 @@ input::-ms-reveal, input::-ms-clear {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-
     cursor: grab;
     background: white;
     border: 1px solid var(--border-color);
@@ -399,6 +398,11 @@ input::-ms-reveal, input::-ms-clear {
     overflow-y: auto;
 }
 
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
 .form-group {
     margin-bottom: 15px;
     position: relative;
@@ -490,10 +494,6 @@ input::-ms-reveal, input::-ms-clear {
     background: var(--primary-color);
     color: white;
 }
-
-    .btn-primary:hover {
-        background: var(--primary-dark);
-    }
 
 .add-board-btn {
     width: 100%;
@@ -647,6 +647,11 @@ input::-ms-reveal, input::-ms-clear {
     gap: 6px;
 }
 
+.board-actions .btn {
+    padding: 10px 15px;
+    font-size: 1.2rem;
+}
+
 @media screen and (max-width: 768px) {
     body.sidebar-open {
         padding-left: 0 !important;
@@ -687,13 +692,14 @@ input::-ms-reveal, input::-ms-clear {
         gap: 2px;
     }
 
+    .board-actions .btn {
+        padding: 10px;
+        font-size: 1rem;
+    }
+
     .column-title {
         font-weight: bold;
         font-size: 15px;
-    }
-
-    .btn {
-        padding: 15px 10px;
     }
 
     .header h1 {

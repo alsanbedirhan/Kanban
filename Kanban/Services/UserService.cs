@@ -1,5 +1,4 @@
 ﻿using Kanban.Entities;
-using Kanban.Models;
 using Kanban.Repositories;
 
 namespace Kanban.Services
@@ -17,20 +16,20 @@ namespace Kanban.Services
             _dbDate = dbDate;
         }
 
-        public async Task<ServiceResult<User>> Register(RegisterViewModel model)
+        public async Task<ServiceResult<User>> Register(string email, string password, string fullName)
         {
-            var u = await _userRepository.GetByEmailForUpdate(model.email);
+            var u = await _userRepository.GetByEmailForUpdate(email);
             if (u != null && u.IsActive)
             {
                 return ServiceResult<User>.Fail("A user with this email already exists.");
             }
-            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(model.password);
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
 
             try
             {
                 if (u != null)
                 {
-                    u.FullName = model.fullName;
+                    u.FullName = fullName;
                     u.HashPassword = hashedPassword;
                     u.IsActive = true;
                     await _userRepository.SaveContext();
@@ -40,8 +39,8 @@ namespace Kanban.Services
                 {
                     return ServiceResult<User>.Ok(await _userRepository.Create(new User
                     {
-                        FullName = model.fullName,
-                        Email = model.email,
+                        FullName = fullName,
+                        Email = email,
                         IsActive = true,
                         HashPassword = hashedPassword
                     }));
@@ -173,6 +172,24 @@ namespace Kanban.Services
             try
             {
                 await _userRepository.UpdateQuickNote(userId, quickNote);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("An error occurred.");
+            }
+        }
+
+        public async Task<ServiceResult> ResetPassword(string email, string password)
+        {
+            try
+            {
+                var u = await _userRepository.GetUserIdByEmail(email);
+                if (u == null)
+                {
+                    return ServiceResult.Fail("There is no user with this email.");
+                }
+                await _userRepository.ChangePassword(u.Value, BCrypt.Net.BCrypt.HashPassword(password));
                 return ServiceResult.Ok();
             }
             catch (Exception)

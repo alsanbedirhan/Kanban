@@ -72,7 +72,7 @@ namespace Kanban.Controllers
                 return Ok(ServiceResult.Fail(verify.ErrorMessage));
             }
 
-            var result = await _userService.Register(model);
+            var result = await _userService.Register(model.email, model.password, model.fullName);
             if (!result.Success)
             {
                 return Ok(ServiceResult.Fail(result.ErrorMessage));
@@ -101,6 +101,24 @@ namespace Kanban.Controllers
 
             }
             HttpContext.DeleteCookies();
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordViewModel model)
+        {
+            var verify = await _userService.VerifyCodeAndUpdate(model.email, model.otpCode);
+            if (!verify.Success)
+            {
+                return Ok(ServiceResult.Fail(verify.ErrorMessage));
+            }
+
+            var result = await _userService.ResetPassword(model.email, model.password);
+            if (!result.Success)
+            {
+                return Ok(ServiceResult.Fail(result.ErrorMessage));
+            }
+
             return Ok(ServiceResult.Ok());
         }
 

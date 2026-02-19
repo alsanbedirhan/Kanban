@@ -907,6 +907,196 @@ async function handleRegister() {
     }
 }
 
+async function handleForgotPassword() {
+    closeLoginModal();
+    const turnstileInput = document.querySelector('[name="cf-turnstile-response"]');
+    const turnstileToken = turnstileInput ? turnstileInput.value : null;
+
+    if (!turnstileToken) {
+        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please verify that you are human.' });
+    }
+
+    const { value: email, dismiss: emailDismiss } = await Swal.fire({
+        title: 'Forgot Password',
+        input: 'email',
+        inputLabel: 'Enter your registered Kanflow email address',
+        inputPlaceholder: 'example@email.com',
+        showCancelButton: true,
+        confirmButtonText: 'Send Verification Code',
+        cancelButtonText: 'Cancel',
+        inputValidator: (value) => {
+            value = value.trim();
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!value) return 'Email address cannot be empty!';
+            if (!emailRegex.test(value)) return 'Please enter a valid email address.';
+        },
+        preConfirm: () => {
+            return Swal.getInput().value.trim();
+        }
+    });
+
+    if (!email || emailDismiss) {
+        openLoginModal();
+        return;
+    }
+
+    try {
+        const verify = await apiRequest('/Auth/VerifyWork', {
+            method: 'POST',
+            body: JSON.stringify({ email, turnstileToken })
+        });
+
+        if (!verify.success) {
+            if (window.turnstile) window.turnstile.reset();
+            return Swal.fire('Error', verify.errorMessage || 'Failed to send verification code', 'error');
+        }
+
+        const containerStyle = `position:relative; max-width:100%; width:18em; margin:1em auto; display:flex; align-items:center;`;
+        const inputStyle = `width:100%; margin:0; padding-right:35px; box-sizing:border-box;`;
+        const iconStyle = `position:absolute; right:10px; z-index:2; cursor:pointer; font-size:1.2em; background:transparent; border:none; padding:0;`;
+
+        const otpHtml = document.getElementById('otpTemplate').innerHTML;
+        const combinedHtml = `
+            <div style="margin-bottom: 15px; font-size: 14px;">
+                A 6-digit code has been sent to <b>${escapeHtml(email)}</b>.
+            </div>
+            ${otpHtml}
+            <div style="margin-top: 25px;">
+                <div style="${containerStyle}">
+                    <input id="swal-new-password" type="password" class="swal2-input" placeholder="New Password" style="${inputStyle}">
+                    <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-new-password" style="${iconStyle}">🙈</button>
+                </div>
+                <div style="${containerStyle}">
+                    <input id="swal-confirm-password" type="password" class="swal2-input" placeholder="Confirm New Password" style="${inputStyle}">
+                    <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-confirm-password" style="${iconStyle}">🙈</button>
+                </div>
+            </div>
+        `;
+
+        const { value: formValues, dismiss: formDismiss } = await Swal.fire({
+            title: 'Reset Password',
+            html: combinedHtml,
+            showCancelButton: true,
+            confirmButtonText: 'Reset Password',
+            cancelButtonText: 'Cancel',
+            focusConfirm: false,
+            didOpen: () => {
+                const container = Swal.getHtmlContainer();
+
+                const toggles = container.querySelectorAll('.pass-toggle');
+                toggles.forEach(toggle => {
+                    toggle.addEventListener('click', () => {
+                        const targetId = toggle.getAttribute('data-target');
+                        const input = container.querySelector(`#${targetId}`);
+                        if (input.type === "password") {
+                            input.type = "text";
+                            toggle.textContent = "🙊";
+                        } else {
+                            input.type = "password";
+                            toggle.textContent = "🙈";
+                        }
+                    });
+                });
+
+                const inputs = container.querySelectorAll('.otp-field');
+                const firstPasswordInput = container.querySelector('#swal-new-password');
+
+                if (inputs.length > 0) inputs[0].focus();
+
+                inputs.forEach((input, index) => {
+                    input.addEventListener('input', (e) => {
+                        const value = e.target.value;
+                        if (!/^\d+$/.test(value)) { e.target.value = ''; return; }
+
+                        if (value && index < inputs.length - 1) {
+                            inputs[index + 1].focus();
+                        } else if (value && index === inputs.length - 1) {
+                            firstPasswordInput.focus();
+                        }
+                    });
+
+                    input.addEventListener('keydown', (e) => {
+                        if (e.key === 'Backspace' && !e.target.value && index > 0) inputs[index - 1].focus();
+                        else if (e.key === 'Enter') Swal.clickConfirm();
+                    });
+
+                    input.addEventListener('paste', (e) => {
+                        e.preventDefault();
+                        const data = e.clipboardData.getData('text').trim();
+                        if (data.length === 6 && /^\d+$/.test(data)) {
+                            const digits = data.split('');
+                            inputs.forEach((inp, i) => inp.value = digits[i]);
+                            firstPasswordInput.focus();
+                        }
+                    });
+                });
+            },
+            preConfirm: () => {
+                const container = Swal.getHtmlContainer();
+                const inputs = container.querySelectorAll('.otp-field');
+                let code = "";
+                inputs.forEach(input => code += input.value);
+
+                const pass = document.getElementById('swal-new-password').value;
+                const confirmPass = document.getElementById('swal-confirm-password').value;
+
+                if (code.length !== 6) {
+                    Swal.showValidationMessage('Please enter the complete 6-digit code');
+                    return false;
+                }
+                if (!pass || !confirmPass) {
+                    Swal.showValidationMessage('Please fill the password fields');
+                    return false;
+                }
+                if (pass.length < 6) {
+                    Swal.showValidationMessage('Password must be at least 6 characters');
+                    return false;
+                }
+                if (pass !== confirmPass) {
+                    Swal.showValidationMessage('Passwords do not match');
+                    return false;
+                }
+                if (!/[A-Z]/.test(pass) || !/[a-z]/.test(pass) || !/[0-9]/.test(pass) || !/[!@#$%^&*(),.?:{}|<>]/.test(pass)) {
+                    Swal.showValidationMessage('Password must contain uppercase, lowercase, number, and special character.');
+                    return false;
+                }
+
+                return { otpCode: code, newPassword: pass };
+            }
+        });
+
+        if (window.turnstile) window.turnstile.reset();
+        if (formDismiss) return;
+
+        const resetResponse = await apiRequest('/Auth/ResetPassword', {
+            method: 'POST',
+            body: JSON.stringify({
+                email: email,
+                otpCode: formValues.otpCode,
+                password: formValues.newPassword
+            })
+        });
+
+        if (resetResponse.success) {
+            Swal.fire({
+                title: 'Success!',
+                text: 'Your password has been successfully reset. You can now log in.',
+                icon: 'success',
+                timer: 2500,
+                showConfirmButton: false
+            });
+            openLoginModal(email);
+        } else {
+            Swal.fire('Error', resetResponse.message || 'Password reset failed. The code might be invalid or expired.', 'error');
+        }
+
+    } catch (error) {
+        if (window.turnstile) window.turnstile.reset();
+        console.error(error);
+        Swal.fire('Error', 'An unexpected error occurred.', 'error');
+    }
+}
+
 async function handleLogout(refresh = true, message = '') {
     AppState.reset();
     updateAuthUI();
@@ -1376,6 +1566,18 @@ async function deleteBoard(boardId) {
     }
 }
 
+function openCalendarView() {
+    Swal.fire({
+        title: 'Coming Soon!',
+        text: 'The calendar view is currently under development. It will be available in the Phase 2 update of Kanflow.',
+        icon: 'info',
+        confirmButtonText: 'Got it',
+        background: '#fff',
+        timer: 3000,
+        timerProgressBar: true
+    });
+}
+
 function renderColumns(columns) {
     const boardDiv = document.getElementById('board');
     if (!columns || columns.length === 0) {
@@ -1405,8 +1607,8 @@ function renderColumns(columns) {
 
     boardDiv.innerHTML = columns.map(col => {
         const deleteBtnHtml = isOwner
-            ? `<button class="col-delete-btn" data-col-id="${col.id}" style="padding:5px 10px;" title="Delete Column">🗑️</button>`
-            : `<button style="padding:5px 10px; opacity:0.3; cursor:not-allowed;" disabled title="Only owner can delete">🗑️</button>`;
+            ? `<button class="col-delete-btn btn" data-col-id="${col.id}" style="padding:5px 10px;" title="Delete Column">🗑️</button>`
+            : `<button class="btn" style="padding:5px 10px; opacity:0.3; cursor:not-allowed;" disabled title="Only owner can delete">🗑️</button>`;
 
         return `
         <div class="column">
@@ -1416,7 +1618,7 @@ function renderColumns(columns) {
                     <span class="card-count" style="margin: 0 auto">${col.cards.length}</span>
                 </div>
                 <div style="display:flex; gap:5px;">
-                    <button class="col-add-card-btn btn btn-primary" data-col-id="${col.id}" style="padding:5px 10px;" title="Add Card">＋</button>
+                    <button class="col-add-card-btn btn btn-primary" data-col-id="${col.id}" style="padding:5px 10px;" title="Add Card">➕</button>
                     ${deleteBtnHtml}
                 </div>
             </div>
@@ -2260,24 +2462,38 @@ window.addEventListener('DOMContentLoaded', async () => {
         registerModal.addEventListener('submit', (e) => { e.preventDefault(); handleRegister(); });
     }
 
+    //document.addEventListener('click', (e) => {
+    //    const el = e.target.closest('[data-action]');
+    //    if (!el) return;
+
+    //    const action = el.dataset.action;
+    //    switch (action) {
+    //        case 'toggleSidebar': toggleSidebar(); break;
+    //        case 'openNewBoardModal': openNewBoardModal(); break;
+    //        case 'openNewColumnModal': openNewColumnModal(); break;
+    //        case 'closeLoginModal': closeLoginModal(); break;
+    //        case 'closeRegisterModal': closeRegisterModal(); break;
+    //        case 'switchToRegister': switchToRegister(); break;
+    //        case 'switchToLogin': switchToLogin(); break;
+    //        case 'showPrivacyPolicy': showPrivacyPolicy(e); break;
+    //        case 'showUserAgreement': showUserAgreement(e); break;
+    //        case 'saveMyAvatar': saveMyAvatar(); break;
+    //        case 'toggleQuickNote': toggleQuickNote(); break;
+    //        case 'clearQuickNote': clearQuickNote(); break;
+    //        case 'handleForgotPassword': handleForgotPassword(); break;
+    //    }
+    //});
+
     document.addEventListener('click', (e) => {
         const el = e.target.closest('[data-action]');
         if (!el) return;
 
         const action = el.dataset.action;
-        switch (action) {
-            case 'toggleSidebar': toggleSidebar(); break;
-            case 'openNewBoardModal': openNewBoardModal(); break;
-            case 'openNewColumnModal': openNewColumnModal(); break;
-            case 'closeLoginModal': closeLoginModal(); break;
-            case 'closeRegisterModal': closeRegisterModal(); break;
-            case 'switchToRegister': switchToRegister(); break;
-            case 'switchToLogin': switchToLogin(); break;
-            case 'showPrivacyPolicy': showPrivacyPolicy(e); break;
-            case 'showUserAgreement': showUserAgreement(e); break;
-            case 'saveMyAvatar': saveMyAvatar(); break;
-            case 'toggleQuickNote': toggleQuickNote(); break;
-            case 'clearQuickNote': clearQuickNote(); break;
+
+        if (typeof window[action] === 'function') {
+            window[action](e);
+        } else {
+            console.warn(`[Kanflow Action Dispatcher]: ${action}`);
         }
     });
 

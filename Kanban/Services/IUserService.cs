@@ -5,8 +5,9 @@ namespace Kanban.Services
 {
     public interface IUserService
     {
-        Task<ServiceResult<User>> Register(RegisterViewModel model);
+        Task<ServiceResult<User>> Register(string email, string password, string fullName);
         Task<ServiceResult<User>> Login(string email, string password);
+        Task<ServiceResult> ResetPassword(string email, string password);
         Task<ServiceResult> GenerateAndSaveVerifyCode(string email);
         Task<ServiceResult> VerifyCodeAndUpdate(string email, string code);
         Task<ServiceResult> UpdateAvatar(long userId, string avatar);
