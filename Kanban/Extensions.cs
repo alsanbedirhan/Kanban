@@ -6,6 +6,7 @@ namespace Kanban
 {
     public static class Extensions
     {
+        public static CookieOptions cookieOptions = new CookieOptions { Path = "/", SameSite = SameSiteMode.Strict, Secure = true };
         public static long GetUserId(this ClaimsPrincipal user)
         {
             long.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out long userId);
@@ -23,12 +24,11 @@ namespace Kanban
         {
             try
             {
-                var options = new CookieOptions { Path = "/", SameSite = SameSiteMode.Strict, Secure = true };
                 foreach (var cookie in context.Request.Cookies)
                 {
                     try
                     {
-                        context.Response.Cookies.Delete(cookie.Key, options);
+                        context.Response.Cookies.Delete(cookie.Key, cookieOptions);
                     }
                     catch (Exception)
                     {

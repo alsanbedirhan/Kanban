@@ -6,7 +6,8 @@ namespace Kanban.Services
 {
     public interface IKanbanService
     {
-        Task<ServiceResult<List<BoardColumnResultModel>>> GetBoard(long userId, long boardId);
+        Task<ServiceResult<List<BoardColumnResultModel>>> GetBoardDetail(long userId, long boardId);
+        Task<ServiceResult<List<BoardCardResultModel>>> GetMoreCardsForColumn(long userId, long boardId, long columnId, int skipCount);
         Task<ServiceResult<List<BoardMemberResultModel>>> GetBoardMembers(long userId, long boardId);
         Task<ServiceResult<BoardRefresResultModel>> GetBoardVersion(long userId, long boardId);
         Task<ServiceResult<List<NotificationResultModel>>> GetNotifications(long userId);
@@ -20,8 +21,8 @@ namespace Kanban.Services
         Task<ServiceResult<List<BoardOwnerResultModel>>> GetBoards(long userId);
         Task<ServiceResult<Board>> CreateBoard(long userId, string title);
         Task<ServiceResult<BoardColumn>> AddColumn(long userId, long boardId, string title);
-        Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId);
-        Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId);
+        Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
+        Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
         Task<ServiceResult> MoveCard(long userId, long boardId, long cardId, long newColumnId, int newOrder);
         Task<ServiceResult> DeleteColumn(long userId, long boardId, long columnId);
         Task<ServiceResult> DeleteBoard(long userId, long boardId);

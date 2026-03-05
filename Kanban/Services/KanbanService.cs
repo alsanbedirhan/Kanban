@@ -27,7 +27,7 @@ namespace Kanban.Services
         }
 
         public async Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate,
-            int warningDays, string highlightColor, long assigneeId)
+            int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
             try
             {
@@ -36,15 +36,15 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("Due date cannot be in the past.");
                 }
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
                 {
                     return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
                 }
-                if (!await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
+                if (startDate > dueDate)
                 {
-                    return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
+                    return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
                 }
-                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, desc, dueDate, warningDays, highlightColor, assigneeId));
+                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor));
             }
             catch (Exception)
             {
@@ -142,11 +142,7 @@ namespace Kanban.Services
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId))
                 {
                     return ServiceResult.Fail("You do not have permission to access this board.");
                 }
@@ -182,7 +178,7 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult<List<BoardColumnResultModel>>> GetBoard(long userId, long boardId)
+        public async Task<ServiceResult<List<BoardColumnResultModel>>> GetBoardDetail(long userId, long boardId)
         {
             try
             {
@@ -191,7 +187,7 @@ namespace Kanban.Services
                     return ServiceResult<List<BoardColumnResultModel>>.Fail("You do not have permission to access this board.");
                 }
 
-                return ServiceResult<List<BoardColumnResultModel>>.Ok(await _kanbanRepository.GetBoardColumns_Cards(boardId));
+                return ServiceResult<List<BoardColumnResultModel>>.Ok(await _kanbanRepository.GetBoardDetail(boardId));
             }
             catch (Exception)
             {
@@ -208,6 +204,22 @@ namespace Kanban.Services
             catch (Exception)
             {
                 return ServiceResult<List<BoardOwnerResultModel>>.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult<List<BoardCardResultModel>>> GetMoreCardsForColumn(long userId, long boardId, long columnId, int skipCount)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
+                {
+                    return ServiceResult<List<BoardCardResultModel>>.Fail("You do not have permission to access this board.");
+                }
+                return ServiceResult<List<BoardCardResultModel>>.Ok(await _kanbanRepository.GetMoreCardsForColumn(columnId, skipCount));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<List<BoardCardResultModel>>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -288,7 +300,7 @@ namespace Kanban.Services
                 {
                     InviteId = long.Parse(claims.FindFirst("InviteId")!.Value),
                     Email = claims.FindFirst(ClaimTypes.Email)!.Value,
-                    BoardId = long.Parse(claims.FindFirst("BoardId")!.Value),
+                    BoardId = long.Parse(claims.FindFirst("BoardId")!.Value)
                 };
                 var now = await _dbDate.Now();
                 var i = await _userRepository.GetInvite(v.InviteId);
@@ -392,16 +404,12 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
+        public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor,
+            long assigneeId, DateOnly startDate, string calendarColor)
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-
-                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId))
                 {
                     return ServiceResult.Fail("You do not have permission to access this board.");
                 }
@@ -413,7 +421,12 @@ namespace Kanban.Services
                     return ServiceResult.Fail("Only the assigned user can update this card.");
                 }
 
-                await _kanbanRepository.UpdateCard(userId, cardId, desc, dueDate, warningDays, highlightColor, assigneeId);
+                if (startDate > dueDate)
+                {
+                    return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
+                }
+
+                await _kanbanRepository.UpdateCard(userId, cardId, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor);
                 return ServiceResult.Ok();
             }
             catch (Exception)
@@ -539,12 +552,7 @@ namespace Kanban.Services
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
-                }
-
-                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId))
                 {
                     return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
                 }
@@ -561,12 +569,7 @@ namespace Kanban.Services
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-
-                if (!await _kanbanRepository.ValidateBoardComment(boardId, commentId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardComment(boardId, commentId))
                 {
                     return ServiceResult.Fail("You do not have permission to access this board.");
                 }

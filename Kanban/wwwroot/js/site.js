@@ -1240,6 +1240,75 @@ async function openNewBoardModal() {
     }
 }
 
+function createCardHtml(card, colId, currentUserId) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let cardBgColor = '#ffffff';
+    if (card.dueDate && card.warningDays && card.highlightColor) {
+        const dueDate = new Date(card.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        const diffTime = dueDate - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays <= card.warningDays && diffDays >= 0) {
+            cardBgColor = card.highlightColor;
+        } else if (diffDays < 0) {
+            cardBgColor = '#fee2e2';
+        }
+    }
+
+    const isLocked = card.assigneeId && card.assigneeId !== currentUserId;
+    const cursorStyle = isLocked ? 'not-allowed' : 'grab';
+    const lockedClass = isLocked ? 'locked-card' : '';
+    const lockIcon = isLocked ? '<span title="Locked by another user">🔒</span>' : '';
+    const opacityStyle = isLocked ? 'opacity:0.8;' : '';
+
+    const avatarHtml = card.assigneeAvatar
+        ? `<img src="${getAvatarPath(card.assigneeAvatar)}" title="${escapeHtml(card.assigneeName)}" class="card-avatar-small">`
+        : `<span class="card-avatar-empty" title="Unassigned">👤</span>`;
+
+    const moveButtonsHtml = isLocked ? '' : `
+        <div style="display:flex; flex-direction:column; margin-right:6px; justify-content:center;">
+            <button class="move-card-top-btn" data-card-id="${card.id}" data-col-id="${colId}" 
+                    title="Move to Top" 
+                    style="border:none; background:transparent; cursor:pointer; font-size:10px; line-height:10px; padding:1px; color:#cbd5e0; transition:color 0.2s;"
+                    onmouseover="this.style.color='#4a5568'" onmouseout="this.style.color='#cbd5e0'">▲</button>
+            <button class="move-card-bottom-btn" data-card-id="${card.id}" data-col-id="${colId}" 
+                    title="Move to Bottom" 
+                    style="border:none; background:transparent; cursor:pointer; font-size:10px; line-height:10px; padding:1px; color:#cbd5e0; transition:color 0.2s;"
+                    onmouseover="this.style.color='#4a5568'" onmouseout="this.style.color='#cbd5e0'">▼</button>
+        </div>
+    `;
+
+    return `
+        <div class="card ${lockedClass}"
+             data-card-id="${card.id}"
+             data-col-id="${colId}"
+             style="background-color:${cardBgColor}; transition:background-color 0.3s; cursor:${cursorStyle}; ${opacityStyle}">
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                <div style="display:flex; align-items:center; gap:5px;">
+                    ${lockIcon}
+                    <span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString('tr-TR')}</span>
+                </div>
+                <span class="card-delete-btn" data-card-id="${card.id}" style="cursor:pointer; font-weight:bold; font-size:16px; color:#cbd5e0;" onmouseover="this.style.color='#e53e3e'" onmouseout="this.style.color='#cbd5e0'">×</span>
+            </div>
+
+            <p class="card-desc-truncate">${escapeHtml(stripHtml(card.desc))}</p>
+
+            <div class="card-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:auto;">
+                <div style="font-size:10px; color:#999; font-weight:600;">
+                    ${card.assigneeName ? escapeHtml(card.assigneeName.split(' ')[0]) : 'Unassigned'}
+                </div>
+                <div style="display:flex; align-items:center;">
+                    ${moveButtonsHtml}
+                    ${avatarHtml}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 async function loadBoardData(showLoad = true) {
     if (!AppState.currentBoardId) return;
     try {
@@ -1261,6 +1330,48 @@ async function loadBoardData(showLoad = true) {
     } catch (e) {
         console.error(e);
         if (showLoad) Swal.fire('Error', 'Data could not be loaded', 'error');
+    }
+}
+
+async function handleLoadMore(colId, btnElement) {
+    if (!checkAuth()) return;
+    const col = AppState.currentColumns.find(c => c.id === colId);
+    if (!col) return;
+
+    const skipCount = col.cards.length;
+    const currentUserId = AppState.currentUser ? AppState.currentUser.userId : 0;
+
+    const originalText = btnElement.textContent;
+    btnElement.disabled = true;
+    btnElement.textContent = "Loading...";
+
+    try {
+        const res = await apiRequest(`/Kanban/GetMoreCards?boardId=${AppState.currentBoardId}&columnId=${colId}&skipCount=${skipCount}`, {}, false);
+        const newCards = res.data;
+
+        if (newCards && newCards.length > 0) {
+            col.cards.push(...newCards);
+
+            const container = document.querySelector(`.cards-container[data-column-id="${colId}"]`);
+            if (container) {
+                const newCardsHtml = newCards.map(card => createCardHtml(card, colId, currentUserId)).join('');
+                container.insertAdjacentHTML('beforeend', newCardsHtml);
+            }
+
+            if (col.cards.length >= col.totalCards) {
+                btnElement.remove();
+            } else {
+                btnElement.disabled = false;
+                btnElement.textContent = "Show More";
+            }
+
+            initSortable();
+        } else {
+            btnElement.remove();
+        }
+    } catch (e) {
+        btnElement.disabled = false;
+        btnElement.textContent = originalText;
     }
 }
 
@@ -1585,9 +1696,6 @@ function renderColumns(columns) {
         return;
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     const currentUserId = AppState.currentUser ? AppState.currentUser.userId : 0;
     const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
     const isOwner = currentBoard && currentBoard.isOwner === true;
@@ -1610,12 +1718,19 @@ function renderColumns(columns) {
             ? `<button class="col-delete-btn btn" data-col-id="${col.id}" style="padding:5px 10px;" title="Delete Column">🗑️</button>`
             : `<button class="btn" style="padding:5px 10px; opacity:0.3; cursor:not-allowed;" disabled title="Only owner can delete">🗑️</button>`;
 
+        const totalCards = col.totalCards || col.cards.length;
+        const showLoadMore = totalCards > col.cards.length;
+
+        const loadMoreHtml = showLoadMore
+            ? `<button class="load-more-btn btn btn-secondary" data-col-id="${col.id}" style="opacity: 0; pointer-events: none; transition: opacity 0.3s ease; width:100%; font-size:12px; padding:5px; border-radius:4px;">Show More</button>`
+            : '';
+
         return `
         <div class="column">
             <div class="column-header">
                 <div style="display:flex; align-items:center; gap:5px; width: 100%">
                     <span class="column-title">${escapeHtml(col.title)}</span>
-                    <span class="card-count" style="margin: 0 auto">${col.cards.length}</span>
+                    <span class="card-count" style="margin: 0 auto">${totalCards}</span>
                 </div>
                 <div style="display:flex; gap:5px;">
                     <button class="col-add-card-btn btn btn-primary" data-col-id="${col.id}" style="padding:5px 10px;" title="Add Card">➕</button>
@@ -1624,80 +1739,52 @@ function renderColumns(columns) {
             </div>
 
             <div class="cards-container" data-column-id="${col.id}">
-                ${col.cards.map((card) => {
-            let cardBgColor = '#ffffff';
-            if (card.dueDate && card.warningDays && card.highlightColor) {
-                const dueDate = new Date(card.dueDate);
-                dueDate.setHours(0, 0, 0, 0);
-                const diffTime = dueDate - today;
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                if (diffDays <= card.warningDays && diffDays >= 0) {
-                    cardBgColor = card.highlightColor;
-                } else if (diffDays < 0) {
-                    cardBgColor = '#fee2e2';
-                }
-            }
-
-            const isLocked = card.assigneeId && card.assigneeId !== currentUserId;
-            const cursorStyle = isLocked ? 'not-allowed' : 'grab';
-            const lockedClass = isLocked ? 'locked-card' : '';
-            const lockIcon = isLocked ? '<span title="Locked by another user">🔒</span>' : '';
-            const opacityStyle = isLocked ? 'opacity:0.8;' : '';
-
-            const avatarHtml = card.assigneeAvatar
-                ? `<img src="${getAvatarPath(card.assigneeAvatar)}" title="${escapeHtml(card.assigneeName)}" class="card-avatar-small">`
-                : `<span class="card-avatar-empty" title="Unassigned">👤</span>`;
-
-            const moveButtonsHtml = isLocked ? '' : `
-                <div style="display:flex; flex-direction:column; margin-right:6px; justify-content:center;">
-                    <button class="move-card-top-btn" data-card-id="${card.id}" data-col-id="${col.id}" 
-                            title="Move to Top" 
-                            style="border:none; background:transparent; cursor:pointer; font-size:10px; line-height:10px; padding:1px; color:#cbd5e0; transition:color 0.2s;"
-                            onmouseover="this.style.color='#4a5568'" onmouseout="this.style.color='#cbd5e0'">▲</button>
-                    <button class="move-card-bottom-btn" data-card-id="${card.id}" data-col-id="${col.id}" 
-                            title="Move to Bottom" 
-                            style="border:none; background:transparent; cursor:pointer; font-size:10px; line-height:10px; padding:1px; color:#cbd5e0; transition:color 0.2s;"
-                            onmouseover="this.style.color='#4a5568'" onmouseout="this.style.color='#cbd5e0'">▼</button>
-                </div>
-            `;
-
-            return `
-                        <div class="card ${lockedClass}"
-                             data-card-id="${card.id}"
-                             data-col-id="${col.id}"
-                             style="background-color:${cardBgColor}; transition:background-color 0.3s; cursor:${cursorStyle}; ${opacityStyle}">
-
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                <div style="display:flex; align-items:center; gap:5px;">
-                                    ${lockIcon}
-                                    <span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString('tr-TR')}</span>
-                                </div>
-                                <span class="card-delete-btn" data-card-id="${card.id}" style="cursor:pointer; font-weight:bold; font-size:16px; color:#cbd5e0;" onmouseover="this.style.color='#e53e3e'" onmouseout="this.style.color='#cbd5e0'">×</span>
-                            </div>
-
-                            <p class="card-desc-truncate">${escapeHtml(stripHtml(card.desc))}</p>
-
-                            <div class="card-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:auto;">
-                                <div style="font-size:10px; color:#999; font-weight:600;">
-                                    ${card.assigneeName ? escapeHtml(card.assigneeName.split(' ')[0]) : 'Unassigned'}
-                                </div>
-                                <div style="display:flex; align-items:center;">
-                                    ${moveButtonsHtml}
-                                    ${avatarHtml}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-        }).join('')}
+                ${col.cards.map((card) => createCardHtml(card, col.id, currentUserId)).join('')}
             </div>
-            <button class="col-add-card-bottom btn btn-success" data-col-id="${col.id}" style="width:100%;">+ Add Card</button>
+            
+            ${loadMoreHtml}
+
+            <button class="col-add-card-bottom btn btn-success" data-col-id="${col.id}" style="width:100%; margin-top:10px;">+ Add Card</button>
         </div>
     `}).join('');
 
     const newBoardDiv = boardDiv.cloneNode(true);
     boardDiv.parentNode.replaceChild(newBoardDiv, boardDiv);
 
+    newBoardDiv.querySelectorAll('.cards-container').forEach(container => {
+        const handleScroll = () => {
+            const loadMoreBtn = container.parentElement.querySelector('.load-more-btn');
+            if (!loadMoreBtn) return;
+
+            const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 10;
+
+            if (isAtBottom) {
+                loadMoreBtn.style.opacity = '1';
+                loadMoreBtn.style.pointerEvents = 'auto';
+            } else {
+                loadMoreBtn.style.opacity = '0';
+                loadMoreBtn.style.pointerEvents = 'none';
+            }
+        };
+
+        container.addEventListener('scroll', handleScroll);
+
+        setTimeout(handleScroll, 0);
+    });
+
     newBoardDiv.addEventListener('click', (e) => {
+        const loadMoreBtn = e.target.closest('.load-more-btn');
+        if (loadMoreBtn) {
+            e.stopPropagation();
+            const colId = Number(loadMoreBtn.dataset.colId);
+            if (colId) {
+                handleLoadMore(colId, loadMoreBtn);
+                loadMoreBtn.style.opacity = '0';
+                loadMoreBtn.style.pointerEvents = 'none'; 
+            }
+            return;
+        }
+
         const deleteBtn = e.target.closest('.card-delete-btn');
         if (deleteBtn) {
             e.stopPropagation();
@@ -2108,7 +2195,10 @@ async function openCardModal(columnId, cardId = null) {
         date: isEditMode ? new Date(card.dueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         hasWarning: isEditMode ? (card.warningDays > 0) : false,
         warningDays: isEditMode ? card.warningDays : 1,
-        color: isEditMode ? (card.highlightColor || '#ff0000') : '#ff0000'
+        color: isEditMode ? (card.highlightColor || '#ff0000') : '#ff0000',
+
+        startDate: isEditMode && card.startDate ? new Date(card.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        calendarColor: isEditMode ? (card.calendarColor || '#3b82f6') : '#3b82f6'
     };
 
     const warningDisplay = defaults.hasWarning ? 'block' : 'none';
@@ -2145,18 +2235,33 @@ async function openCardModal(columnId, cardId = null) {
                 </div>
 
                 <div style="display:flex; flex-wrap:wrap; gap:15px;">
-                    <div style="flex:1 1 200px;">
-                        <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">ASSIGN TO</label>
-                        <select id="modal-assignee" class="swal2-select" ${disabledAttr} style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}">
-                            ${membersOptions}
-                        </select>
+                     <div style="flex:1 1 200px;">
+                        <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">START DATE</label>
+                        <input type="date" id="modal-start-date" class="swal2-input" ${disabledAttr}
+                               style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}"
+                               value="${defaults.startDate}">
                     </div>
+
                     <div style="flex:1 1 200px;">
                         <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">DUE DATE</label>
                         <input type="date" id="modal-date" class="swal2-input" ${disabledAttr}
                                style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}"
                                value="${defaults.date}" min="${minDate}">
                     </div>
+
+                     <div style="flex:1 1 200px;">
+                        <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">ASSIGN TO</label>
+                        <select id="modal-assignee" class="swal2-select" ${disabledAttr} style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}">
+                            ${membersOptions}
+                        </select>
+                    </div>
+
+                    <div style="flex:1 1 200px;">
+                        <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">CALENDAR COLOR</label>
+                        <input type="color" id="modal-calendar-color" value="${defaults.calendarColor}" 
+                               style="width:100%; height:40px; padding:2px; border:1px solid #d1d5db; border-radius:4px; cursor:pointer; margin:0;">
+                    </div>
+                   
                 </div>
 
                 <div style="display:flex; align-items:center; gap:8px; margin-top:5px;">
@@ -2176,7 +2281,7 @@ async function openCardModal(columnId, cardId = null) {
                             </select>
                         </div>
                         <div style="flex:1;">
-                            <label style="font-size:11px; font-weight:bold; display:block;">Color</label>
+                            <label style="font-size:11px; font-weight:bold; display:block;">Warning Color</label>
                             <input type="color" id="modal-color" value="${defaults.color}" style="width:100%; height:35px; padding:2px; border:1px solid #d1d5db; border-radius:4px; cursor:pointer; margin-top:5px;">
                         </div>
                     </div>
@@ -2218,11 +2323,11 @@ async function openCardModal(columnId, cardId = null) {
                 }, 100);
             }
 
-            const checkbox = document.getElementById('modal-reminder-check');
-            const area = document.getElementById('warning-area');
-            if (checkbox && area) {
-                checkbox.addEventListener('change', (e) => {
-                    area.style.display = e.target.checked ? 'block' : 'none';
+            const warningCheckbox = document.getElementById('modal-reminder-check');
+            const warningArea = document.getElementById('warning-area');
+            if (warningCheckbox && warningArea) {
+                warningCheckbox.addEventListener('change', (e) => {
+                    warningArea.style.display = e.target.checked ? 'block' : 'none';
                 });
             }
 
@@ -2252,15 +2357,25 @@ async function openCardModal(columnId, cardId = null) {
             const description = quill.root.innerHTML;
             const assigneeId = document.getElementById('modal-assignee').value;
             const dueDate = document.getElementById('modal-date').value;
+
             const hasWarning = document.getElementById('modal-reminder-check').checked;
             const warningDays = hasWarning ? document.getElementById('modal-days').value : 0;
             const highlightColor = hasWarning ? document.getElementById('modal-color').value : null;
+
+            const startDate = document.getElementById('modal-start-date').value || null;
+            const calendarColor = document.getElementById('modal-calendar-color').value;
 
             if (!dueDate) {
                 Swal.showValidationMessage('Due Date is required');
                 return false;
             }
-            return { description, assigneeId, dueDate, warningDays, highlightColor };
+
+            if (startDate && startDate > dueDate) {
+                Swal.showValidationMessage('Start Date cannot be after the Due Date');
+                return false;
+            }
+
+            return { description, assigneeId, dueDate, warningDays, highlightColor, startDate, calendarColor };
         }
     });
 
@@ -2270,6 +2385,8 @@ async function openCardModal(columnId, cardId = null) {
             dueDate: formValues.dueDate,
             warningDays: parseInt(formValues.warningDays),
             highlightColor: formValues.highlightColor,
+            startDate: formValues.startDate,
+            calendarColor: formValues.calendarColor,
             assigneeId: formValues.assigneeId ? parseInt(formValues.assigneeId) : 0,
             boardId: AppState.currentBoardId
         };

@@ -77,6 +77,8 @@ namespace Kanban.Models
         public string Description { get; set; }
         public DateOnly DueDate { get; set; }
         public long AssigneeId { get; set; }
+        public DateOnly StartDate { get; set; }
+        public string CalendarColor { get; set; }
     }
     public class BoardDeleteModel
     {
@@ -130,6 +132,7 @@ namespace Kanban.Models
         public long Id { get; set; }
         public string Title { get; set; }
         public List<BoardCardResultModel> Cards { get; set; }
+        public int TotalCards { get; set; }
     }
     public class NotificationResultModel
     {

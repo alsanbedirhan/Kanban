@@ -48,6 +48,7 @@ public partial class KanbanDbContext : DbContext
 
         modelBuilder.Entity<BoardCard>(entity =>
         {
+            entity.Property(e => e.CalendarColor).HasMaxLength(10);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
             entity.Property(e => e.Desc).HasColumnType("text");
             entity.Property(e => e.HighlightColor).HasMaxLength(10);

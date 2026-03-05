@@ -2,7 +2,6 @@
 using Kanban.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using System.Linq;
 
 namespace Kanban.Repositories
 {
@@ -89,7 +88,7 @@ namespace Kanban.Repositories
             }
         }
 
-        public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
+        public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
             var lastOrder = await _context.BoardCards
                 .Where(c => c.BoardColumnId == columnId && c.IsActive)
@@ -105,7 +104,9 @@ namespace Kanban.Repositories
                 DueDate = dueDate,
                 WarningDays = warningDays,
                 HighlightColor = highlightColor,
-                AssigneeUserId = assigneeId > 0 ? assigneeId : null
+                AssigneeUserId = assigneeId > 0 ? assigneeId : null,
+                CalendarColor = calendarColor,
+                StartDate = startDate
             };
 
             await _context.BoardCards.AddAsync(b);
@@ -201,7 +202,7 @@ namespace Kanban.Repositories
                 .FirstOrDefaultAsync();
         }
 
-        public async Task<List<BoardColumnResultModel>> GetBoardColumns_Cards(long boardId)
+        public async Task<List<BoardColumnResultModel>> GetBoardDetail(long boardId, int pageSize)
         {
             return await _context.BoardColumns.AsNoTracking()
                 .Where(bc => bc.BoardId == boardId && bc.IsActive)
@@ -209,18 +210,42 @@ namespace Kanban.Repositories
                 {
                     Id = x.Id,
                     Title = x.Title,
-                    Cards = x.BoardCards.Where(y => y.IsActive).Select(c => new BoardCardResultModel
-                    {
-                        Id = c.Id,
-                        Desc = c.Desc,
-                        Order = c.OrderNo,
-                        DueDate = c.DueDate,
-                        WarningDays = c.WarningDays,
-                        HighlightColor = c.HighlightColor ?? "",
-                        AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
-                        AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
-                        AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
-                    }).OrderBy(y => y.Order).ToList()
+                    TotalCards = x.BoardCards.Count(y => y.IsActive),
+                    Cards = x.BoardCards.Where(y => y.IsActive)
+                        .OrderBy(y => y.OrderNo)
+                        .Take(pageSize)
+                        .Select(c => new BoardCardResultModel
+                        {
+                            Id = c.Id,
+                            Desc = c.Desc,
+                            Order = c.OrderNo,
+                            DueDate = c.DueDate,
+                            WarningDays = c.WarningDays,
+                            HighlightColor = c.HighlightColor ?? "",
+                            AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
+                            AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
+                            AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
+                        }).ToList()
+                }).ToListAsync();
+        }
+        public async Task<List<BoardCardResultModel>> GetMoreCardsForColumn(long columnId, int skipCount, int pageSize)
+        {
+            return await _context.BoardCards.AsNoTracking()
+                .Where(c => c.BoardColumnId == columnId && c.IsActive)
+                .OrderBy(c => c.OrderNo)
+                .Skip(skipCount)
+                .Take(pageSize)
+                .Select(c => new BoardCardResultModel
+                {
+                    Id = c.Id,
+                    Desc = c.Desc,
+                    Order = c.OrderNo,
+                    DueDate = c.DueDate,
+                    WarningDays = c.WarningDays,
+                    HighlightColor = c.HighlightColor ?? "",
+                    AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
+                    AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
+                    AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
                 }).ToListAsync();
         }
 
@@ -368,7 +393,7 @@ namespace Kanban.Repositories
             return members;
         }
 
-        public async Task UpdateCard(long userId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId)
+        public async Task UpdateCard(long userId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
             var board = await _context.BoardCards.Where(x => x.Id == cardId)
                 .Select(c => new { c.BoardColumn.BoardId }).FirstOrDefaultAsync();
@@ -381,6 +406,8 @@ namespace Kanban.Repositories
                 .SetProperty(x => x.AssigneeUserId, assigneeId > 0 ? assigneeId : null)
                 .SetProperty(x => x.WarningDays, warningDays)
                 .SetProperty(x => x.HighlightColor, highlightColor)
+                .SetProperty(x => x.StartDate, startDate)
+                .SetProperty(x => x.CalendarColor, calendarColor)
             );
 
             if (board != null) await TouchBoard(board.BoardId);

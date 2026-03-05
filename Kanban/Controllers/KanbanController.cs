@@ -1,5 +1,4 @@
-﻿using Kanban.Entities;
-using Kanban.Models;
+﻿using Kanban.Models;
 using Kanban.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +20,7 @@ namespace Kanban.Controllers
         public async Task<IActionResult> GetBoard(long boardId)
         {
             var userId = User.GetUserId();
-            var r = await _kanbanService.GetBoard(userId, boardId);
+            var r = await _kanbanService.GetBoardDetail(userId, boardId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -45,7 +44,7 @@ namespace Kanban.Controllers
         public async Task<IActionResult> UpdateCard([FromBody] BoardCardUpdateModel model)
         {
             var r = await _kanbanService.UpdateCard(User.GetUserId(), model.BoardId, model.CardId, model.Description,
-                model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId);
+                model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId, model.StartDate, model.CalendarColor);
 
             if (!r.Success)
             {
@@ -152,7 +151,7 @@ namespace Kanban.Controllers
         public async Task<IActionResult> AddCard([FromBody] BoardCardInsertModel model)
         {
             var r = await _kanbanService.AddCard(User.GetUserId(), model.BoardId, model.ColumnId, model.Description,
-                model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId);
+                model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId, model.StartDate, model.CalendarColor);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -304,5 +303,18 @@ namespace Kanban.Controllers
             }
             return Ok(ServiceResult.Ok());
         }
+
+        [HttpGet]
+        public async Task<IActionResult> GetMoreCards(long boardId, long columnId, int skipCount)
+        {
+            var userId = User.GetUserId();
+            var r = await _kanbanService.GetMoreCardsForColumn(userId, boardId, columnId, skipCount);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<List<BoardCardResultModel>>.Ok(r.Data));
+        }
+
     }
 }

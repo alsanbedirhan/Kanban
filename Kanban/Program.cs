@@ -63,31 +63,12 @@ builder.Services.AddAuthentication(options =>
     {
         OnValidatePrincipal = async context =>
         {
-            var path = context.Request.Path.Value?.ToLower() ?? "";
-
-            if (path.StartsWith("/avatars") || path.Contains(".svg") ||
-                path.Contains(".png") || path.StartsWith("/css") ||
-                path.StartsWith("/js") || path.StartsWith("/lib") ||
-                path.Contains(".ico"))
-            {
-                return;
-            }
-
             var userIdClaim = context.Principal.FindFirst(ClaimTypes.NameIdentifier);
             var stampClaim = context.Principal.FindFirst("SecurityStamp");
 
             if (userIdClaim == null || stampClaim == null)
             {
                 context.RejectPrincipal();
-                await context.HttpContext.SignOutAsync();
-                if (IsApiRequest(context.Request))
-                {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                }
-                else
-                {
-                    context.Response.Redirect("/Error/401");
-                }
                 return;
             }
 
@@ -97,19 +78,10 @@ builder.Services.AddAuthentication(options =>
             if (!isValid)
             {
                 context.RejectPrincipal();
-                await context.HttpContext.SignOutAsync();
-                if (IsApiRequest(context.Request))
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                }
-                else
-                {
-                    context.Response.Redirect("/Error/403");
-                }
             }
         },
 
-        OnRedirectToLogin = async context =>
+        OnRedirectToLogin = context =>
         {
             if (IsApiRequest(context.Request))
             {
@@ -117,11 +89,14 @@ builder.Services.AddAuthentication(options =>
             }
             else
             {
-                context.Response.Redirect("/Error/401");
+                context.Response.Cookies.Delete("Kanflow.Auth", Extensions.cookieOptions);
+                context.Response.Cookies.Delete("Kanflow.Antiforgery", Extensions.cookieOptions);
+                context.Response.Redirect("/");
             }
+            return Task.CompletedTask;
         },
 
-        OnRedirectToAccessDenied = async context =>
+        OnRedirectToAccessDenied = context =>
         {
             if (IsApiRequest(context.Request))
             {
@@ -129,8 +104,11 @@ builder.Services.AddAuthentication(options =>
             }
             else
             {
-                context.Response.Redirect("/Error/403");
+                context.Response.Cookies.Delete("Kanflow.Auth", Extensions.cookieOptions);
+                context.Response.Cookies.Delete("Kanflow.Antiforgery", Extensions.cookieOptions);
+                context.Response.Redirect("/");
             }
+            return Task.CompletedTask;
         }
     };
 });
@@ -145,21 +123,13 @@ var app = builder.Build();
 bool IsApiRequest(HttpRequest request)
 {
     var path = request.Path.Value?.ToLower() ?? "";
-
-    if (path.StartsWith("/auth") || path.StartsWith("/kanban"))
-        return true;
-
-    if (request.Headers["X-Requested-With"] == "XMLHttpRequest")
-        return true;
-
-    if (request.Headers.Accept.Any(x => x != null && x.Contains("application/json")))
-        return true;
-
+    if (path.StartsWith("/auth") || path.StartsWith("/kanban")) return true;
+    if (request.Headers["X-Requested-With"] == "XMLHttpRequest") return true;
+    if (request.Headers.Accept.Any(x => x != null && x.Contains("application/json"))) return true;
     return false;
 }
 
-app.UseRewriter(new RewriteOptions()
-    .AddRedirectToNonWwwPermanent());
+app.UseRewriter(new RewriteOptions().AddRedirectToNonWwwPermanent());
 
 if (!app.Environment.IsDevelopment())
 {
@@ -175,33 +145,19 @@ app.UseCors(x => x
 
 app.UseHttpsRedirection();
 
+app.UseStaticFiles();
+
 app.Use(async (context, next) =>
 {
     var csp = new StringBuilder();
-
     csp.Append("default-src 'self'; ");
+    csp.Append("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.quilljs.com; ");
+    csp.Append("script-src-elem 'self' 'unsafe-inline' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.quilljs.com; ");
+    csp.Append("style-src 'self' 'unsafe-inline' https://cdn.quilljs.com https://cdn.jsdelivr.net; ");
+    csp.Append("style-src-elem 'self' 'unsafe-inline' https://cdn.quilljs.com https://cdn.jsdelivr.net; ");
+    csp.Append("frame-src 'self' https://challenges.cloudflare.com; ");
 
-    csp.Append("script-src 'self' 'unsafe-inline' 'unsafe-eval' ");
-    csp.Append("https://challenges.cloudflare.com ");
-    csp.Append("https://cdn.jsdelivr.net ");
-    csp.Append("https://cdn.quilljs.com; ");
-
-    csp.Append("script-src-elem 'self' 'unsafe-inline' ");
-    csp.Append("https://challenges.cloudflare.com ");
-    csp.Append("https://cdn.jsdelivr.net ");
-    csp.Append("https://cdn.quilljs.com; ");
-
-    csp.Append("style-src 'self' 'unsafe-inline' ");
-    csp.Append("https://cdn.quilljs.com; ");
-
-    csp.Append("style-src-elem 'self' 'unsafe-inline' ");
-    csp.Append("https://cdn.quilljs.com; ");
-
-    csp.Append("frame-src 'self' ");
-    csp.Append("https://challenges.cloudflare.com; ");
-
-    csp.Append("connect-src 'self' ");
-    csp.Append("https://challenges.cloudflare.com");
+    csp.Append("connect-src 'self' https://challenges.cloudflare.com");
     if (app.Environment.IsDevelopment())
     {
         csp.Append(" ws://localhost:* http://localhost:*");
@@ -209,7 +165,6 @@ app.Use(async (context, next) =>
     csp.Append("; ");
 
     csp.Append("img-src 'self' data: blob: https:; ");
-
     csp.Append("font-src 'self' data:;");
 
     context.Response.Headers.Append("Content-Security-Policy", csp.ToString());
@@ -218,13 +173,11 @@ app.Use(async (context, next) =>
 
     await next();
 
-    if ((context.Response.StatusCode == 401 || context.Response.StatusCode == 403) && !context.Response.HasStarted)
+    if ((context.Response.StatusCode == 400 || context.Response.StatusCode == 401 || context.Response.StatusCode == 403) && !context.Response.HasStarted)
     {
         context.DeleteCookies();
     }
 });
-
-app.UseStaticFiles();
 
 app.UseRouting();
 

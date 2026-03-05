@@ -1,13 +1,12 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
-using Mailjet.Client.Resources;
-using System.ComponentModel.Design;
 
 namespace Kanban.Repositories
 {
     public interface IKanbanRepository
     {
-        Task<List<BoardColumnResultModel>> GetBoardColumns_Cards(long boardId);
+        Task<List<BoardColumnResultModel>> GetBoardDetail(long boardId, int pageSize = 15);
+        Task<List<BoardCardResultModel>> GetMoreCardsForColumn(long columnId, int skipCount, int pageSize = 15);
         Task<BoardRefresResultModel> GetBoardVersion(long boardId);
         Task<List<BoardOwnerResultModel>> GetBoards(long userId);
         Task<List<CommentResutModel>> GetComments(long cardId);
@@ -21,8 +20,8 @@ namespace Kanban.Repositories
         Task<string> GetBoardTitle(long boardId);
         Task<Board?> GetBoard(long boardId);
         Task<Board> AddBoard(long userId, string title);
-        Task<BoardCard> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId);
-        Task UpdateCard(long userId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId);
+        Task<BoardCard> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
+        Task UpdateCard(long userId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
         Task AddUserToBoard(long userId, long boardId, string roleCode);
         Task MoveCard(long userId, long cardId, long newColumnId, int newOrder);
         Task<bool> ValidateManageBoard(long userId, long boardId);
