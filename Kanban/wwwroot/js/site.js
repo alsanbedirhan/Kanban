@@ -2674,17 +2674,12 @@ function handleInviteStatus() {
 }
 
 document.addEventListener('click', (e) => {
-    const quickNoteContainer = document.getElementById('quickNoteContainer');
-    const quickNoteBtn = document.getElementById('quickNoteBtn');
-
     if (e.target.closest('.swal2-container')) return;
 
-    if (quickNoteContainer && quickNoteContainer.classList.contains('active')) {
-
-        if (!quickNoteContainer.contains(e.target) && (!quickNoteBtn || !quickNoteBtn.contains(e.target))) {
-            const overlay = document.getElementById('noteListOverlay');
-            if (overlay) overlay.classList.remove('active');
-        }
+    const quickNoteContainer = document.getElementById('quickNoteContainer');
+    const quickNoteBtn = document.getElementById('quickNoteBtn');
+    if (quickNoteContainer && quickNoteContainer.classList.contains('active') && !quickNoteContainer.contains(e.target) && !quickNoteBtn.contains(e.target)) {
+        quickNoteContainer.classList.toggle('active');
     }
 });
 
