@@ -24,6 +24,7 @@ const AppState = {
         renderBoardList();
         renderColumns([]);
         deleteAllCookies();
+        QuickNoteState.reset();
     }
 };
 
@@ -205,6 +206,7 @@ async function fetchCurrentUser() {
                     if (modal) modal.classList.add('active');
                 }, 500);
             }
+            initQuickNotes();
         } else {
             AppState.reset();
         }
@@ -1780,7 +1782,7 @@ function renderColumns(columns) {
             if (colId) {
                 handleLoadMore(colId, loadMoreBtn);
                 loadMoreBtn.style.opacity = '0';
-                loadMoreBtn.style.pointerEvents = 'none'; 
+                loadMoreBtn.style.pointerEvents = 'none';
             }
             return;
         }
@@ -2579,28 +2581,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         registerModal.addEventListener('submit', (e) => { e.preventDefault(); handleRegister(); });
     }
 
-    //document.addEventListener('click', (e) => {
-    //    const el = e.target.closest('[data-action]');
-    //    if (!el) return;
-
-    //    const action = el.dataset.action;
-    //    switch (action) {
-    //        case 'toggleSidebar': toggleSidebar(); break;
-    //        case 'openNewBoardModal': openNewBoardModal(); break;
-    //        case 'openNewColumnModal': openNewColumnModal(); break;
-    //        case 'closeLoginModal': closeLoginModal(); break;
-    //        case 'closeRegisterModal': closeRegisterModal(); break;
-    //        case 'switchToRegister': switchToRegister(); break;
-    //        case 'switchToLogin': switchToLogin(); break;
-    //        case 'showPrivacyPolicy': showPrivacyPolicy(e); break;
-    //        case 'showUserAgreement': showUserAgreement(e); break;
-    //        case 'saveMyAvatar': saveMyAvatar(); break;
-    //        case 'toggleQuickNote': toggleQuickNote(); break;
-    //        case 'clearQuickNote': clearQuickNote(); break;
-    //        case 'handleForgotPassword': handleForgotPassword(); break;
-    //    }
-    //});
-
     document.addEventListener('click', (e) => {
         const el = e.target.closest('[data-action]');
         if (!el) return;
@@ -2693,9 +2673,34 @@ function handleInviteStatus() {
     }
 }
 
+document.addEventListener('click', (e) => {
+    const quickNoteContainer = document.getElementById('quickNoteContainer');
+    const quickNoteBtn = document.getElementById('quickNoteBtn');
+
+    if (e.target.closest('.swal2-container')) return;
+
+    if (quickNoteContainer && quickNoteContainer.classList.contains('active')) {
+
+        if (!quickNoteContainer.contains(e.target) && (!quickNoteBtn || !quickNoteBtn.contains(e.target))) {
+            const overlay = document.getElementById('noteListOverlay');
+            if (overlay) overlay.classList.remove('active');
+        }
+    }
+});
+
 let quickNoteTimeout;
 const quickNoteArea = document.getElementById('quickNoteArea');
 const saveStatus = document.getElementById('saveStatus');
+
+const QuickNoteState = {
+    notes: [],
+    activeNoteId: null,
+
+    reset() {
+        this.notes = [];
+        this.activeNoteId = null;
+    }
+};
 
 function toggleQuickNote() {
     if (!checkAuth()) return;
@@ -2704,29 +2709,54 @@ function toggleQuickNote() {
     container.classList.toggle('active');
 
     if (container.classList.contains('active')) {
-        if (AppState.currentUser) {
-            quickNoteArea.value = AppState.currentUser.quickNote || "";
-        }
+        initQuickNotes();
         quickNoteArea.focus();
     }
 }
 
-quickNoteArea.addEventListener('input', () => {
+async function initQuickNotes() {
+    if (!checkAuth()) return;
+
+    const data = await apiRequest('/Auth/GetQuickNotes', {}, false);
+    if (!data.success) return;
+
+    QuickNoteState.notes = data.data;
+
+    if (QuickNoteState.activeNoteId == null || !QuickNoteState.notes.some(n => n.id === QuickNoteState.activeNoteId)) {
+        QuickNoteState.activeNoteId = data.data.length > 0 ? data.data[0].id : null;
+    }
+
+    updateMainView();
+}
+
+function updateMainView() {
+    const note = QuickNoteState.notes.find(n => n.id === QuickNoteState.activeNoteId);
+
+    const currentTitleEl = document.getElementById('currentNoteTitle');
+    if (currentTitleEl) {
+        currentTitleEl.textContent = note ? note.title : 'No Notes';
+    }
+
+    quickNoteArea.value = note?.note ?? '';
+}
+
+function saveActiveNote() {
     saveStatus.style.opacity = '1';
     saveStatus.innerText = 'Typing...';
-
-    if (AppState.currentUser) {
-        AppState.currentUser.quickNote = quickNoteArea.value;
-    }
 
     clearTimeout(quickNoteTimeout);
 
     quickNoteTimeout = setTimeout(async () => {
+        const activeNote = QuickNoteState.notes.find(n => n.id === QuickNoteState.activeNoteId);
+        if (!activeNote) return;
+
+        activeNote.note = quickNoteArea.value;
         saveStatus.innerText = 'Saving...';
+
         try {
             await apiRequest('/Auth/UpdateQuickNote', {
                 method: 'POST',
-                body: JSON.stringify({ quickNote: quickNoteArea.value })
+                body: JSON.stringify({ userNoteId: QuickNoteState.activeNoteId, note: quickNoteArea.value })
             }, false);
             saveStatus.innerText = 'Saved ✅';
             setTimeout(() => { saveStatus.style.opacity = '0'; }, 2000);
@@ -2734,49 +2764,211 @@ quickNoteArea.addEventListener('input', () => {
             saveStatus.innerText = 'Error! ❌';
         }
     }, 1000);
+}
+
+quickNoteArea.addEventListener('input', () => {
+    saveActiveNote();
 });
 
-let deleteTimeout;
+document.getElementById('btnTrash').addEventListener('click', async () => {
+    const note = QuickNoteState.notes.find(n => n.id === QuickNoteState.activeNoteId);
+    if (!note) return;
 
-async function clearQuickNote() {
-    if (!quickNoteArea.value.trim()) return;
+    quickNoteArea.value = '';
+    note.note = '';
+    await saveActiveNote();
+});
 
-    const btn = document.getElementById('btnTrash');
+document.getElementById('btnOpenNoteTable').addEventListener('click', () => {
+    document.getElementById('noteListOverlay').classList.add('active');
+    renderNoteTable();
+});
 
-    if (btn.innerText === '🗑️') {
-        btn.innerText = '❓';
-        btn.style.color = 'red';
+document.getElementById('btnCloseNoteTable').addEventListener('click', () => {
+    document.getElementById('noteListOverlay').classList.remove('active');
+});
 
-        deleteTimeout = setTimeout(() => {
-            btn.innerText = '🗑️';
-            btn.style.color = '';
-        }, 3000);
-    } else {
-        clearTimeout(deleteTimeout);
-        quickNoteArea.value = "";
+['btnAddNote', 'btnAddNote2'].forEach(id => {
+    document.getElementById(id).addEventListener('click', addNote);
+});
 
-        if (AppState.currentUser) {
-            AppState.currentUser.quickNote = "";
-        }
+async function addNote() {
+    const title = `Note ${QuickNoteState.notes.length + 1}`;
+    const data = await apiRequest('/Auth/AddQuickNote', {
+        method: 'POST',
+        body: JSON.stringify({ title, note: '' })
+    });
 
-        try {
-            saveStatus.style.opacity = '1';
-            saveStatus.innerText = 'Clearing...';
-
-            await apiRequest('/Auth/UpdateQuickNote', {
-                method: 'POST',
-                body: JSON.stringify({ quickNote: "" })
-            }, false);
-
-            saveStatus.innerText = 'Cleared ✨';
-            setTimeout(() => { saveStatus.style.opacity = '0'; }, 2000);
-        } catch (error) {
-            console.error("Clear error", error);
-        }
-
-        btn.innerText = '🗑️';
-        btn.style.color = '';
+    if (!data.success) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'Failed to add note',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1000
+        });
+        return;
     }
+    else {
+        await Swal.fire({
+            icon: 'success',
+            title: 'Note added',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1000
+        });
+    }
+
+    QuickNoteState.notes.unshift(data.data);
+    switchNote(data.data.id);
+}
+
+function renderNoteTable() {
+    const tbody = document.getElementById('noteListTableBody');
+    tbody.innerHTML = '';
+
+    QuickNoteState.notes.forEach(note => {
+        const tr = document.createElement('tr');
+
+        const tdName = document.createElement('td');
+        tdName.textContent = note.title;
+        tdName.style.cursor = 'pointer';
+        tdName.style.width = '100%';
+
+        tdName.style.whiteSpace = 'normal';
+        tdName.style.wordBreak = 'break-word';
+        tdName.style.overflowWrap = 'break-word';
+
+        if (note.id === QuickNoteState.activeNoteId) tdName.style.fontWeight = 'bold';
+        tdName.addEventListener('click', () => switchNote(note.id));
+        tr.appendChild(tdName);
+
+        const tdActions = document.createElement('td');
+        tdActions.style.whiteSpace = 'nowrap';
+        tdActions.style.textAlign = 'right';
+
+        const btnEdit = document.createElement('button');
+        btnEdit.innerHTML = '✏️';
+        btnEdit.className = 'btn-edit-row';
+        btnEdit.style.marginRight = '8px';
+        btnEdit.addEventListener('click', () => renameNoteFromTable(note.id));
+        tdActions.appendChild(btnEdit);
+
+        const btnDelete = document.createElement('button');
+        btnDelete.innerHTML = '🗑️';
+        btnDelete.className = 'btn-delete-row';
+        btnDelete.addEventListener('click', () => deleteNoteFromTable(note.id));
+        tdActions.appendChild(btnDelete);
+
+        tr.appendChild(tdActions);
+        tbody.appendChild(tr);
+    });
+}
+function switchNote(id) {
+    QuickNoteState.activeNoteId = id;
+    updateMainView();
+    document.getElementById('noteListOverlay').classList.remove('active');
+}
+
+async function renameNoteFromTable(id) {
+    const note = QuickNoteState.notes.find(n => n.id === id);
+    const { value: newTitle } = await Swal.fire({
+        title: 'Rename Note',
+        input: 'text',
+        inputValue: note.title,
+        showCancelButton: true,
+        inputAttributes: { maxlength: 30 }
+    });
+
+    if (!newTitle || newTitle.trim() === '' || newTitle.trim() === note.title) return;
+
+    const ok = await apiRequest('/Auth/RenameQuickNote', {
+        method: 'POST',
+        body: JSON.stringify({ userNoteId: id, title: newTitle.trim() })
+    });
+
+    if (!ok.success) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'Failed to rename note',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1000
+        });
+        return;
+    }
+    else {
+        await Swal.fire({
+            icon: 'success',
+            title: 'Note renamed',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1000
+        });
+    }
+
+    note.title = newTitle.trim();
+    renderNoteTable();
+
+    if (QuickNoteState.activeNoteId === id) {
+        updateMainView();
+    }
+}
+
+async function deleteNoteFromTable(id) {
+    if (QuickNoteState.notes.length <= 1) {
+        Swal.fire({ title: 'Oops', text: 'You must have at least one note.', icon: 'warning', timer: 1500, showConfirmButton: false });
+        return;
+    }
+
+    const result = await Swal.fire({
+        title: 'Delete note?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Delete',
+    });
+
+    if (!result.isConfirmed) return;
+
+    const ok = await apiRequest('/Auth/DeleteQuickNote', {
+        method: 'POST',
+        body: JSON.stringify({ userNoteId: id })
+    });
+
+    if (!ok.success) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'Failed to delete note',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1000
+        });
+        return;
+    }
+    else {
+        await Swal.fire({
+            icon: 'success',
+            title: 'Note deleted',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1000
+        });
+    }
+
+    QuickNoteState.notes = QuickNoteState.notes.filter(n => n.id !== id);
+
+    if (QuickNoteState.activeNoteId === id) {
+        QuickNoteState.activeNoteId = QuickNoteState.notes[0].id;
+        updateMainView();
+    }
+
+    renderNoteTable();
 }
 
 const AVATAR_OPTIONS = [

@@ -21,7 +21,6 @@ namespace Kanban.Models
     public class FetchResultModel : UserResultModel
     {
         public string Avatar { get; set; }
-        public string QuickNote { get; set; }
     }
     public class QuickNoteModel
     {
@@ -163,5 +162,28 @@ namespace Kanban.Models
         public string AssigneeName { get; set; }
         public string AssigneeAvatar { get; set; }
         public long AssigneeId { get; set; }
+    }
+    public class QuickNoteResultModel : QuickNoteInputModel
+    {
+        public long Id { get; set; }
+    }
+    public class QuickNoteInputModel
+    {
+        public string Title { get; set; }
+        public string Note { get; set; }
+    }
+    public class QuickNoteRenameModel
+    {
+        public long UserNoteId { get; set; }
+        public string Title { get; set; }
+    }
+    public class QuickNoteDeleteModel
+    {
+        public long UserNoteId { get; set; }
+    }
+    public class QuickNoteUpdateModel
+    {
+        public long UserNoteId { get; set; }
+        public string Note { get; set; }
     }
 }

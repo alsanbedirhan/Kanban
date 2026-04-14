@@ -150,11 +150,59 @@ namespace Kanban.Controllers
         }
 
         [Authorize]
-        [HttpPost]
-        public async Task<IActionResult> UpdateQuickNote([FromBody] QuickNoteModel model)
+        [HttpGet]
+        public async Task<IActionResult> GetQuickNotes()
         {
             var userId = User.GetUserId();
-            var r = await _userService.UpdateQuickNote(userId, model.QuickNote);
+            var r = await _userService.GetQuickNotes(userId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<List<QuickNoteResultModel>>.Ok(r.Data));
+        }
+
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> AddQuickNote([FromBody] QuickNoteInputModel model)
+        {
+            var r = await _userService.AddQuickNote(User.GetUserId(), model.Title, model.Note);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult<QuickNoteResultModel>.Ok(new QuickNoteResultModel { Id = r.Data.Id, Note = r.Data.Note, Title = r.Data.Title }));
+        }
+
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> RenameQuickNote([FromBody] QuickNoteRenameModel model)
+        {
+            var r = await _userService.RenameQuickNote(User.GetUserId(), model.UserNoteId, model.Title);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> DeleteQuickNote([FromBody] QuickNoteDeleteModel model)
+        {
+            var r = await _userService.DeleteQuickNote(User.GetUserId(), model.UserNoteId);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> UpdateQuickNote([FromBody] QuickNoteUpdateModel model)
+        {
+            var r = await _userService.UpdateQuickNote(User.GetUserId(), model.UserNoteId, model.Note);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));

@@ -1,5 +1,5 @@
 :root {
-    --primary-color: #1a6b36;
+    --primary-color: #289f51;
     --primary-dark: #124d26;
     --bg-gradient: linear-gradient(90deg, #1a6b36 0%, #207d41 40%, #2b4e91 100%);
     --sidebar-width: 260px;
@@ -527,6 +527,18 @@ input::-ms-reveal, input::-ms-clear {
     font-size: 18px;
 }
 
+.quick-note-footer {
+    padding: 5px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fcd34d;
+    font-size: 10px;
+    color: #4b5563;
+    font-weight: bold;
+    font-size: 15px;
+}
+
 .quick-note-toggle {
     position: fixed;
     bottom: 30px;
@@ -552,7 +564,7 @@ input::-ms-reveal, input::-ms-clear {
     bottom: 100px;
     right: 30px;
     width: 300px;
-    height: 350px;
+    height: 400px;
     background: #fffbeb;
     border-radius: 12px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.15);
@@ -593,8 +605,46 @@ input::-ms-reveal, input::-ms-clear {
     font-size: 15px;
     color: #374151;
     outline: none;
-    margin-top: 10px;
 }
+
+.note-list-overlay {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #fffbeb;
+    z-index: 10;
+    flex-direction: column;
+}
+
+    .note-list-overlay.active {
+        display: flex;
+    }
+
+#noteListTableBody td {
+    padding: 10px 5px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    color: #374151;
+}
+
+#noteListTableBody tr:hover {
+    background-color: rgba(0,0,0,0.04);
+}
+
+.btn-edit-row, .btn-delete-row {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 5px;
+    transition: transform 0.2s;
+}
+
+    .btn-edit-row:hover, .btn-delete-row:hover {
+        transform: scale(1.1);
+    }
 
 @keyframes slideUp {
     from {

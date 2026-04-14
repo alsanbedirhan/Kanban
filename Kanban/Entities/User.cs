@@ -33,5 +33,7 @@ public partial class User
 
     public virtual ICollection<UserInvite> UserInvites { get; set; } = new List<UserInvite>();
 
+    public virtual ICollection<UserNote> UserNotes { get; set; } = new List<UserNote>();
+
     public virtual ICollection<UserNotification> UserNotifications { get; set; } = new List<UserNotification>();
 }

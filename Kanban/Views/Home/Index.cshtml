@@ -204,15 +204,46 @@
     <button id="quickNoteBtn" class="quick-note-toggle" data-action="toggleQuickNote">📝</button>
 
     <div id="quickNoteContainer" class="quick-note-wrapper">
-        <div class="quick-note-header" data-action="toggleQuickNote" style="font-size:20px">
-            <span>Quick Notes</span>
+    
+        <div class="quick-note-header" style="font-size:20px">
+            <div style="display:flex; gap:12px; align-items:center;">
+                <span style="cursor:pointer;" id="btnOpenNoteTable" title="Not Listesi">☰</span>
+                <span>Quick Notes</span>
+            </div>
             <div style="display:flex; gap:10px; align-items:center;">
-                <span id="saveStatus" style="font-size:10px; color:#666; opacity:0; transition:opacity 0.3s;">Saved ✅</span>
-                <span id="btnTrash" style="cursor:pointer;" data-action="clearQuickNote">🗑️</span>
-                <span style="cursor:pointer;">✕</span>
+                <span style="cursor:pointer;" id="btnAddNote" title="New note">➕</span>
+                <span style="cursor:pointer;" data-action="toggleQuickNote">✕</span>
             </div>
         </div>
+    
+        <div style="padding: 8px 15px; background-color: rgba(0,0,0,0.03); border-bottom: 1px solid #fcd34d; font-weight: bold; font-size: 14px; color: #4b5563;">
+            <span id="currentNoteTitle">Loading...</span>
+        </div>
+    
         <textarea id="quickNoteArea" placeholder="Write here..." maxlength="1000"></textarea>
+    
+        <div class="quick-note-footer">
+            <span id="saveStatus" style="opacity:0; transition:opacity 0.3s;">Saved ✅</span>
+            <span id="btnTrash" style="cursor:pointer;" title="Clear note">🧹 Clear</span>
+        </div>
+
+        <div id="noteListOverlay" class="note-list-overlay">
+            <div class="quick-note-header" style="font-size:20px; border-bottom: 1px solid #fcd34d;">
+                <span>My Notes</span>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <span style="cursor:pointer;" id="btnAddNote2" title="New note">➕</span>
+                    <span style="cursor:pointer;" id="btnCloseNoteTable" title="Close">✕</span>
+                </div>
+            </div>
+        
+            <div style="flex: 1; overflow-y: auto; padding: 10px;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 14px;">
+                    <tbody id="noteListTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 
     <script src="~/js/site.js" asp-append-version="true"></script>

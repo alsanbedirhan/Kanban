@@ -1,4 +1,5 @@
 ﻿using Kanban.Entities;
+using Kanban.Models;
 using Kanban.Repositories;
 
 namespace Kanban.Services
@@ -124,7 +125,6 @@ namespace Kanban.Services
             }
         }
 
-
         public async Task<ServiceResult> ChangePassword(long userId, string email, string currentPassword, string newPassword)
         {
             try
@@ -155,31 +155,6 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult<string>> GetQuickNote(long userId)
-        {
-            try
-            {
-                return ServiceResult<string>.Ok(await _userRepository.GetQuickNote(userId));
-            }
-            catch (Exception)
-            {
-                return ServiceResult<string>.Fail("An error occurred.");
-            }
-        }
-
-        public async Task<ServiceResult> UpdateQuickNote(long userId, string quickNote)
-        {
-            try
-            {
-                await _userRepository.UpdateQuickNote(userId, quickNote);
-                return ServiceResult.Ok();
-            }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("An error occurred.");
-            }
-        }
-
         public async Task<ServiceResult> ResetPassword(string email, string password)
         {
             try
@@ -195,6 +170,91 @@ namespace Kanban.Services
             catch (Exception)
             {
                 return ServiceResult.Fail("An error occurred.");
+            }
+        }
+
+        public async Task<ServiceResult<List<QuickNoteResultModel>>> GetQuickNotes(long userId)
+        {
+            try
+            {
+                var r = await _userRepository.GetQuickNotes(userId);
+                if (r.Count <= 0)
+                {
+                    var v = await _userRepository.AddQuickNote(userId, "Note 1", "");
+                    r.Add(new QuickNoteResultModel { Id = v.Id, Title = v.Title, Note = v.Note });
+                }
+                return ServiceResult<List<QuickNoteResultModel>>.Ok(r);
+            }
+            catch (Exception)
+            {
+                return ServiceResult<List<QuickNoteResultModel>>.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult<UserNote>> AddQuickNote(long userId, string title, string note)
+        {
+            try
+            {
+                return ServiceResult<UserNote>.Ok(await _userRepository.AddQuickNote(userId, title, note));
+            }
+            catch (Exception)
+            {
+                return ServiceResult<UserNote>.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult> RenameQuickNote(long userId, long noteId, string title)
+        {
+            try
+            {
+                if (!await _userRepository.ValidateQuickNote(userId, noteId))
+                {
+                    return ServiceResult.Fail("You do not have permission to manage this note.");
+                }
+                await _userRepository.RenameQuickNote(noteId, title);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult> DeleteQuickNote(long userId, long noteId)
+        {
+            try
+            {
+                if (!await _userRepository.ValidateQuickNote(userId, noteId))
+                {
+                    return ServiceResult.Fail("You do not have permission to manage this note.");
+                }
+                if (await _userRepository.GetQuickNoteCount(userId) <= 1)
+                {
+                    return ServiceResult.Fail("You must have at least one note.");
+                }
+                await _userRepository.DeleteQuickNote(noteId);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult> UpdateQuickNote(long userId, long noteId, string note)
+        {
+            try
+            {
+                if (!await _userRepository.ValidateQuickNote(userId, noteId))
+                {
+                    return ServiceResult.Fail("You do not have permission to manage this note.");
+                }
+                await _userRepository.UpdateQuickNote(userId, noteId, note);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
     }

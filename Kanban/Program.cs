@@ -186,6 +186,21 @@ app.UseStatusCodePagesWithReExecute("/Error/{0}");
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value?.ToLower() ?? "";
+    var isHomePage = path == "/" || path == "";
+
+    if (isHomePage
+        && !context.User.Identity.IsAuthenticated
+        && context.Request.Cookies.ContainsKey("Kanflow.Auth"))
+    {
+        context.DeleteCookies();
+    }
+
+    await next();
+});
+
 app.MapStaticAssets();
 
 app.MapControllerRoute(

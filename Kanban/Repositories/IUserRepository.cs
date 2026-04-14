@@ -23,8 +23,6 @@ namespace Kanban.Repositories
         Task ChangePassword(long userId, string pass);
         Task UpdateAvatar(long userId, string avatar);
         Task<string> GetAvatar(long userId);
-        Task<string> GetQuickNote(long userId);
-        Task UpdateQuickNote(long userId, string quickNote);
         Task<User?> GetById(long userId);
         Task<User?> GetByIdForUpdate(long userId);
         Task SaveContext();
@@ -33,5 +31,12 @@ namespace Kanban.Repositories
         Task SaveVerifyCode(string email, string code);
         Task SetCodeUsed(long id);
         Task<UserVerification?> GetLastVerify(string email);
+        Task<List<QuickNoteResultModel>> GetQuickNotes(long userId);
+        Task<UserNote> AddQuickNote(long userId, string title, string note);
+        Task RenameQuickNote(long noteId, string title);
+        Task UpdateQuickNote(long userId, long noteId, string note);
+        Task DeleteQuickNote(long noteId);
+        Task<int> GetQuickNoteCount(long userId);
+        Task<bool> ValidateQuickNote(long userId, long noteId);
     }
 }

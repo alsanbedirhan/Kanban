@@ -25,6 +25,8 @@ public partial class KanbanDbContext : DbContext
 
     public virtual DbSet<UserInvite> UserInvites { get; set; }
 
+    public virtual DbSet<UserNote> UserNotes { get; set; }
+
     public virtual DbSet<UserNotification> UserNotifications { get; set; }
 
     public virtual DbSet<UserVerification> UserVerifications { get; set; }
@@ -143,6 +145,19 @@ public partial class KanbanDbContext : DbContext
                 .HasForeignKey(d => d.SenderUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_UserInvites_Users");
+        });
+
+        modelBuilder.Entity<UserNote>(entity =>
+        {
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Note).HasMaxLength(1000);
+            entity.Property(e => e.Title).HasMaxLength(100);
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("(getdate())");
+
+            entity.HasOne(d => d.User).WithMany(p => p.UserNotes)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UserNotes_Users");
         });
 
         modelBuilder.Entity<UserNotification>(entity =>

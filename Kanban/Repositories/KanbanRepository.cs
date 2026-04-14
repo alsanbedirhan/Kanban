@@ -1,6 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Kanban.Repositories

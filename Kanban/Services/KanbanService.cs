@@ -1,6 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Repositories;
+using Mailjet.Client.Resources;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;

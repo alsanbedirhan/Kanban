@@ -61,6 +61,14 @@ namespace Kanban.Repositories
             await _context.Users.AddAsync(user);
             await SaveContext();
 
+            await _context.UserNotes.AddAsync(new UserNote
+            {
+                UserId = user.Id,
+                Title = "Note 1",
+                Note = "",
+                IsDeleted = false
+            });
+
             var l = await _context.UserInvites.Where(x => x.Email == user.Email && x.IsAccepted && !x.IsUsed).ToListAsync();
 
             if (l.Any())
@@ -78,19 +86,16 @@ namespace Kanban.Repositories
             await SaveContext();
             return user;
         }
-
         public async Task<int> VerifyCountToday(string email)
         {
             var now = await _dbDate.Now();
             return await _context.UserVerifications.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
         }
-
         public async Task<int> CheckInviteCountToday(string email)
         {
             var now = await _dbDate.Now();
             return await _context.UserInvites.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
         }
-
         public async Task SaveVerifyCode(string email, string code)
         {
             var now = await _dbDate.Now();
@@ -114,7 +119,6 @@ namespace Kanban.Repositories
             return await _context.Users.AsNoTracking().Where(u => u.Email == email && u.IsActive)
                 .Select(u => (long?)u.Id).FirstOrDefaultAsync();
         }
-
         public async Task UpdateAvatar(long userId, string avatar)
         {
             await _context.Users.Where(u => u.Id == userId && u.IsActive)
@@ -122,13 +126,11 @@ namespace Kanban.Repositories
             _cache.Remove($"AVATAR:{userId}");
             _cache.Set($"AVATAR:{userId}", avatar, TimeSpan.FromHours(6));
         }
-
         public async Task<bool> CheckInvite(long userId, long boardId, string email)
         {
             return await _context.UserInvites.AsNoTracking()
                 .AnyAsync(i => i.BoardId == boardId && i.Email == email && !i.IsUsed);
         }
-
         public async Task<List<InviteResultModel>> GetInvites(string email)
         {
             return await _context.UserInvites.AsNoTracking()
@@ -141,7 +143,6 @@ namespace Kanban.Repositories
                 })
                 .ToListAsync();
         }
-
         public async Task<List<NotificationResultModel>> GetNotifications(long userId)
         {
             return await _context.UserNotifications.AsNoTracking()
@@ -155,20 +156,17 @@ namespace Kanban.Repositories
                 .OrderByDescending(n => n.CreatedAt)
                 .ToListAsync();
         }
-
         public async Task<bool> CheckNotification(long userId, long id)
         {
             return await _context.UserNotifications
                 .AnyAsync(n => n.UserId == userId && n.Id == id && !n.IsDeleted);
         }
-
         public async Task DeleteNotification(long id, long userId)
         {
             await _context.UserNotifications.Where(n => n.Id == id)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
             _cache.Remove($"User_HasUpdates_{userId}");
         }
-
         public async Task DeleteNotifications(long userId)
         {
             await _context.UserNotifications.Where(n => n.UserId == userId && !n.IsDeleted)
@@ -179,14 +177,12 @@ namespace Kanban.Repositories
         {
             return await _context.UserInvites.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
         }
-
         public async Task SetAcceptedInvite(long inviteId, long userId)
         {
             await _context.UserInvites.Where(bc => bc.Id == inviteId)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsAccepted, true));
             _cache.Remove($"User_HasUpdates_{userId}");
         }
-
         public async Task<UserInvite> AddInvite(long senderUserId, long boardId, string email, long userId)
         {
             var now = await _dbDate.Now();
@@ -206,7 +202,6 @@ namespace Kanban.Repositories
             }
             return invite;
         }
-
         public async Task<bool> CheckUpdates(long userId, string email)
         {
             string cacheKey = $"User_HasUpdates_{userId}";
@@ -229,7 +224,6 @@ namespace Kanban.Repositories
 
             return hasUpdates;
         }
-
         public async Task<string> GetHashPasswordByEmail(string email)
         {
             return await _context.Users.AsNoTracking()
@@ -237,7 +231,6 @@ namespace Kanban.Repositories
                 .Select(u => u.HashPassword)
                 .FirstOrDefaultAsync() ?? string.Empty;
         }
-
         public async Task<string> GetAvatar(long userId)
         {
             string key = $"AVATAR:{userId}";
@@ -252,28 +245,60 @@ namespace Kanban.Repositories
             }
             return avatar;
         }
-
-        public async Task<string> GetQuickNote(long userId)
+        public async Task<List<QuickNoteResultModel>> GetQuickNotes(long userId)
         {
             string key = $"NOTE:{userId}";
-            if (!_cache.TryGetValue(key, out string? quickNote) || string.IsNullOrEmpty(quickNote))
+            if (!_cache.TryGetValue(key, out List<QuickNoteResultModel>? notes) || notes == null)
             {
-                quickNote = await _context.Users.AsNoTracking()
-                .Where(u => u.Id == userId && u.IsActive)
-                .Select(u => u.QuickNote)
-                .FirstOrDefaultAsync() ?? string.Empty;
+                notes = await _context.UserNotes.AsNoTracking()
+                    .Where(q => q.UserId == userId && !q.IsDeleted)
+                    .OrderByDescending(x => x.Id)
+                    .Select(q => new QuickNoteResultModel { Id = q.Id, Note = q.Note ?? "", Title = q.Title ?? "" })
+                    .ToListAsync();
 
-                _cache.Set(key, quickNote, TimeSpan.FromHours(6));
+                _cache.Set(key, notes, TimeSpan.FromHours(6));
             }
-            return quickNote;
-        }
 
-        public async Task UpdateQuickNote(long userId, string quickNote)
+            return notes;
+        }
+        public async Task<UserNote> AddQuickNote(long userId, string title, string note)
         {
-            await _context.Users.Where(u => u.Id == userId && u.IsActive)
-                .ExecuteUpdateAsync(u => u.SetProperty(user => user.QuickNote, quickNote));
+            var n = new UserNote
+            {
+                UserId = userId,
+                Title = title,
+                Note = note,
+                IsDeleted = false
+            };
+            await _context.UserNotes.AddAsync(n);
+            await _context.SaveChangesAsync();
+            return n;
+        }
+        public async Task RenameQuickNote(long noteId, string title)
+        {
+            await _context.UserNotes.Where(n => n.Id == noteId)
+                .ExecuteUpdateAsync(n => n.SetProperty(x => x.Title, title));
+        }
+        public async Task UpdateQuickNote(long userId, long noteId, string note)
+        {
+            await _context.UserNotes.Where(n => n.Id == noteId)
+                .ExecuteUpdateAsync(n => n.SetProperty(x => x.Note, note));
+
             _cache.Remove($"NOTE:{userId}");
-            _cache.Set($"NOTE:{userId}", quickNote, TimeSpan.FromHours(6));
+        }
+        public async Task<bool> ValidateQuickNote(long userId, long noteId)
+        {
+            return await _context.UserNotes.AnyAsync(c => c.Id == noteId && c.UserId == userId && !c.IsDeleted);
+        }
+        public async Task DeleteQuickNote(long noteId)
+        {
+            await _context.UserNotes.Where(n => n.Id == noteId)
+                .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
+        }
+        public async Task<int> GetQuickNoteCount(long userId)
+        {
+            var c = await GetQuickNotes(userId);
+            return c.Count;
         }
     }
 }
