@@ -274,10 +274,12 @@ namespace Kanban.Repositories
             await _context.SaveChangesAsync();
             return n;
         }
-        public async Task RenameQuickNote(long noteId, string title)
+        public async Task RenameQuickNote(long userId, long noteId, string title)
         {
             await _context.UserNotes.Where(n => n.Id == noteId)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.Title, title));
+
+            _cache.Remove($"NOTE:{userId}");
         }
         public async Task UpdateQuickNote(long userId, long noteId, string note)
         {
@@ -290,10 +292,12 @@ namespace Kanban.Repositories
         {
             return await _context.UserNotes.AnyAsync(c => c.Id == noteId && c.UserId == userId && !c.IsDeleted);
         }
-        public async Task DeleteQuickNote(long noteId)
+        public async Task DeleteQuickNote(long userId, long noteId)
         {
             await _context.UserNotes.Where(n => n.Id == noteId)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
+
+            _cache.Remove($"NOTE:{userId}");
         }
         public async Task<int> GetQuickNoteCount(long userId)
         {

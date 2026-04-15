@@ -211,7 +211,7 @@ namespace Kanban.Services
                 {
                     return ServiceResult.Fail("You do not have permission to manage this note.");
                 }
-                await _userRepository.RenameQuickNote(noteId, title);
+                await _userRepository.RenameQuickNote(userId, noteId, title);
                 return ServiceResult.Ok();
             }
             catch (Exception)
@@ -232,7 +232,7 @@ namespace Kanban.Services
                 {
                     return ServiceResult.Fail("You must have at least one note.");
                 }
-                await _userRepository.DeleteQuickNote(noteId);
+                await _userRepository.DeleteQuickNote(userId, noteId);
                 return ServiceResult.Ok();
             }
             catch (Exception)

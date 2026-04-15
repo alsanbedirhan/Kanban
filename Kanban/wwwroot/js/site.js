@@ -2765,6 +2765,14 @@ quickNoteArea.addEventListener('input', () => {
     saveActiveNote();
 });
 
+document.getElementById('noteHeader').addEventListener('click', async () => {
+    if (!checkAuth()) return;
+
+    if (QuickNoteState?.activeNoteId > 0) {
+        await renameNoteFromTable(QuickNoteState.activeNoteId);
+    }
+});
+
 document.getElementById('btnTrash').addEventListener('click', async () => {
     const note = QuickNoteState.notes.find(n => n.id === QuickNoteState.activeNoteId);
     if (!note) return;

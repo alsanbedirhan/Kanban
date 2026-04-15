@@ -33,9 +33,9 @@ namespace Kanban.Repositories
         Task<UserVerification?> GetLastVerify(string email);
         Task<List<QuickNoteResultModel>> GetQuickNotes(long userId);
         Task<UserNote> AddQuickNote(long userId, string title, string note);
-        Task RenameQuickNote(long noteId, string title);
+        Task RenameQuickNote(long userId, long noteId, string title);
         Task UpdateQuickNote(long userId, long noteId, string note);
-        Task DeleteQuickNote(long noteId);
+        Task DeleteQuickNote(long userId, long noteId);
         Task<int> GetQuickNoteCount(long userId);
         Task<bool> ValidateQuickNote(long userId, long noteId);
     }
