@@ -2,10 +2,11 @@ using Kanban;
 using Kanban.Entities;
 using Kanban.Repositories;
 using Kanban.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Rewrite;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Text;
 
@@ -66,13 +67,19 @@ builder.Services.AddAuthentication(options =>
             if (userIdClaim == null || stampClaim == null)
             {
                 context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 return;
             }
 
             var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
             var isValid = await securityService.IsUserValidAsync(int.Parse(userIdClaim.Value), stampClaim.Value);
 
-            if (!isValid) context.RejectPrincipal();
+            if (!isValid)
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                context.HttpContext.Response.Redirect("/");
+            }
         },
         OnRedirectToAccessDenied = context =>
         {

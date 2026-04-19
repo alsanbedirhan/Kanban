@@ -1105,24 +1105,39 @@ async function handleLogout(refresh = true, message = '') {
     const sidebar = document.getElementById('sidebar');
     if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
     try {
-        await apiRequest('/Auth/Logout', { method: 'POST' });
-        if (refresh) {
-            const isForced = message.length > 0;
-            await Swal.fire({
-                title: isForced ? 'Session Expired' : 'Success',
-                text: isForced ? message : 'Logged out successfully.',
-                icon: isForced ? 'warning' : 'success',
-                timer: 1500,
-                showConfirmButton: false
-            });
-        }
+        await fetch('/Auth/Logout', {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-XSRF-TOKEN': getXsrfToken() || ''
+            },
+            credentials: 'same-origin'
+        });
     } catch (error) {
         console.warn("Logout API error (forcing exit):", error);
     } finally {
         if (refresh) {
-            setTimeout(() => {
-                window.location.replace('/?logout=true&t=' + new Date().getTime());
-            }, 100);
+            if (message.length > 0) {
+                await Swal.fire({
+                    title: 'Session Expired',
+                    text: message,
+                    icon: 'warning',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+                setTimeout(() => {
+                    window.location.replace('/?logout=true&t=' + new Date().getTime());
+                }, 100);
+            }
+            else {
+                toastr.success('Logged out successfully.', 'Success', {
+                    timeOut: 1500,
+                    positionClass: 'toast-bottom-right'
+                });
+                setTimeout(() => {
+                    window.location.replace('/?logout=true&t=' + new Date().getTime());
+                }, 1600);
+            }
         }
     }
 }
