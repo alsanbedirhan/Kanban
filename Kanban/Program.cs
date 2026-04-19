@@ -2,7 +2,6 @@ using Kanban;
 using Kanban.Entities;
 using Kanban.Repositories;
 using Kanban.Services;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +27,6 @@ builder.Services.AddHttpClient<ITurnstileService, TurnstileService>();
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-XSRF-TOKEN";
-    options.SuppressXFrameOptionsHeader = false;
     options.Cookie.Name = "Kanflow.Antiforgery";
     options.Cookie.HttpOnly = false;
     options.Cookie.SameSite = SameSiteMode.Strict;
@@ -55,7 +53,6 @@ builder.Services.AddAuthentication(options =>
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;
-
     options.LoginPath = "/";
     options.AccessDeniedPath = "/Error/403";
 
@@ -75,38 +72,21 @@ builder.Services.AddAuthentication(options =>
             var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
             var isValid = await securityService.IsUserValidAsync(int.Parse(userIdClaim.Value), stampClaim.Value);
 
-            if (!isValid)
-            {
-                context.RejectPrincipal();
-            }
+            if (!isValid) context.RejectPrincipal();
         },
-
-        OnRedirectToLogin = context =>
-        {
-            if (IsApiRequest(context.Request))
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            }
-            else
-            {
-                context.Response.Cookies.Delete("Kanflow.Auth", Extensions.cookieOptions);
-                context.Response.Cookies.Delete("Kanflow.Antiforgery", Extensions.cookieOptions);
-                context.Response.Redirect("/");
-            }
-            return Task.CompletedTask;
-        },
-
         OnRedirectToAccessDenied = context =>
         {
             if (IsApiRequest(context.Request))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
             }
-            else
+            return Task.CompletedTask;
+        },
+        OnRedirectToLogin = context =>
+        {
+            if (IsApiRequest(context.Request))
             {
-                context.Response.Cookies.Delete("Kanflow.Auth", Extensions.cookieOptions);
-                context.Response.Cookies.Delete("Kanflow.Antiforgery", Extensions.cookieOptions);
-                context.Response.Redirect("/");
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             }
             return Task.CompletedTask;
         }
@@ -123,30 +103,18 @@ var app = builder.Build();
 bool IsApiRequest(HttpRequest request)
 {
     var path = request.Path.Value?.ToLower() ?? "";
-    if (path.StartsWith("/auth") || path.StartsWith("/kanban")) return true;
-    if (request.Headers["X-Requested-With"] == "XMLHttpRequest") return true;
-    if (request.Headers.Accept.Any(x => x != null && x.Contains("application/json"))) return true;
-    return false;
+    return path.StartsWith("/auth") || path.StartsWith("/kanban") ||
+        request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
+        (request.Headers.Accept.Any(x => x != null && x.Contains("application/json")));
 }
-
-app.UseRewriter(new RewriteOptions().AddRedirectToNonWwwPermanent());
 
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
 }
 
-app.UseCors(x => x
-    .WithOrigins("https://kanflow.online", "https://www.kanflow.online")
-    .AllowCredentials()
-    .AllowAnyMethod()
-    .AllowAnyHeader()
-    .SetPreflightMaxAge(TimeSpan.FromHours(24)));
-
+app.UseRewriter(new RewriteOptions().AddRedirectToNonWwwPermanent());
 app.UseHttpsRedirection();
-
-app.UseStaticFiles();
-
 app.Use(async (context, next) =>
 {
     var csp = new StringBuilder();
@@ -172,16 +140,31 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
 
     await next();
+});
+
+app.Use(async (context, next) =>
+{
+    await next();
 
     if ((context.Response.StatusCode == 400 || context.Response.StatusCode == 401 || context.Response.StatusCode == 403) && !context.Response.HasStarted)
     {
         context.DeleteCookies();
+
+        if (!IsApiRequest(context.Request))
+        {
+            context.Response.Redirect("/");
+        }
     }
 });
 
+app.UseStatusCodePagesWithReExecute("/Error/{0}");
 app.UseRouting();
 
-app.UseStatusCodePagesWithReExecute("/Error/{0}");
+app.UseCors(x => x
+    .WithOrigins("https://kanflow.online", "https://www.kanflow.online")
+    .AllowCredentials()
+    .AllowAnyMethod()
+    .AllowAnyHeader());
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -189,23 +172,18 @@ app.UseAuthorization();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value?.ToLower() ?? "";
-    var isHomePage = path == "/" || path == "";
-
-    if (isHomePage
-        && !context.User.Identity.IsAuthenticated
-        && context.Request.Cookies.ContainsKey("Kanflow.Auth"))
+    if ((path == "/" || path == "") && !(context.User?.Identity?.IsAuthenticated ?? false))
     {
         context.DeleteCookies();
     }
-
     await next();
 });
 
 app.MapStaticAssets();
 
 app.MapControllerRoute(
-  name: "default",
-  pattern: "{controller=Home}/{action=Index}/{id?}")
-  .WithStaticAssets();
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}")
+    .WithStaticAssets();
 
 app.Run();
