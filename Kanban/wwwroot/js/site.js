@@ -1130,13 +1130,16 @@ async function handleLogout(refresh = true, message = '') {
                 }, 100);
             }
             else {
-                toastr.success('Logged out successfully.', 'Success', {
-                    timeOut: 1500,
-                    positionClass: 'toast-bottom-right'
+                await Swal.fire({
+                    title: 'Logged Out',
+                    text: 'Logged out successfully.',
+                    icon: 'success',
+                    timer: 500,
+                    showConfirmButton: false
                 });
                 setTimeout(() => {
                     window.location.replace('/?logout=true&t=' + new Date().getTime());
-                }, 1600);
+                }, 600);
             }
         }
     }
@@ -1662,6 +1665,7 @@ async function addUserToBoard(boardId) {
             Swal.fire('Error', 'User could not be invited.', 'error');
         }
     }
+    openManageUsersModal(boardId);
 }
 
 async function deleteBoard(boardId) {

@@ -54,8 +54,6 @@ builder.Services.AddAuthentication(options =>
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;
-    options.LoginPath = "/";
-    options.AccessDeniedPath = "/Error/403";
 
     options.Events = new CookieAuthenticationEvents
     {
@@ -78,22 +76,32 @@ builder.Services.AddAuthentication(options =>
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                context.HttpContext.Response.Redirect("/");
             }
         },
         OnRedirectToAccessDenied = context =>
         {
+            context.HttpContext.DeleteCookies();
             if (IsApiRequest(context.Request))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
             }
+            else
+            {
+                context.Response.Redirect("/");
+            }
+
             return Task.CompletedTask;
         },
         OnRedirectToLogin = context =>
         {
+            context.HttpContext.DeleteCookies();
             if (IsApiRequest(context.Request))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            }
+            else
+            {
+                context.Response.Redirect("/");
             }
             return Task.CompletedTask;
         }
@@ -147,21 +155,6 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
 
     await next();
-});
-
-app.Use(async (context, next) =>
-{
-    await next();
-
-    if ((context.Response.StatusCode == 400 || context.Response.StatusCode == 401 || context.Response.StatusCode == 403) && !context.Response.HasStarted)
-    {
-        context.DeleteCookies();
-
-        if (!IsApiRequest(context.Request))
-        {
-            context.Response.Redirect("/");
-        }
-    }
 });
 
 app.UseStatusCodePagesWithReExecute("/Error/{0}");
