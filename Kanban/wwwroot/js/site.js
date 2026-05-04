@@ -1347,6 +1347,9 @@ async function loadBoardData(showLoad = true) {
             if (header) header.style.display = "flex";
             document.getElementById("boardHeaderTitle").textContent = currentBoard.title;
         }
+        if (kanflowCalendar && document.getElementById('calendar').style.display === 'flex') {
+            kanflowCalendar.refetchEvents();
+        }
     } catch (e) {
         console.error(e);
         if (showLoad) Swal.fire('Error', 'Data could not be loaded', 'error');
@@ -1698,18 +1701,89 @@ async function deleteBoard(boardId) {
     }
 }
 
-function openCalendarView() {
-    Swal.fire({
-        title: 'Coming Soon!',
-        text: 'The calendar view is currently under development. It will be available in the Phase 2 update of Kanflow.',
-        icon: 'info',
-        confirmButtonText: 'Got it',
-        background: '#fff',
-        timer: 3000,
-        timerProgressBar: true
-    });
+let kanflowCalendar = null;
+
+function changeView(e) {
+    const boardEl = document.getElementById('board');
+    const calendarEl = document.getElementById('calendar');
+
+    let btn = null;
+    if (e && e.target) {
+        btn = e.target.closest('button');
+    }
+
+    const isCalendarHidden = calendarEl.style.display === 'none' || calendarEl.style.display === '';
+
+    if (isCalendarHidden) {
+        openCalendarView();
+
+        if (btn) {
+            btn.innerHTML = '📋';
+            btn.title = 'Board View';
+        }
+    } else {
+        calendarEl.style.display = 'none';
+        boardEl.style.display = '';
+
+        if (btn) {
+            btn.innerHTML = '📅';
+            btn.title = 'Calendar View';
+        }
+    }
 }
 
+function openCalendarView() {
+    const boardEl = document.getElementById('board');
+    const calendarEl = document.getElementById('calendar');
+
+    boardEl.style.display = 'none';
+    calendarEl.style.display = 'flex';
+
+    setTimeout(() => {
+        if (kanflowCalendar) {
+            kanflowCalendar.updateSize();
+            kanflowCalendar.refetchEvents();
+            return;
+        }
+
+        kanflowCalendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            height: '100%',
+            expandRows: true,
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek'
+            },
+            events: function (info, successCallback, failureCallback) {
+                let calendarEvents = [];
+                AppState.currentColumns.forEach(col => {
+                    col.cards.forEach(card => {
+                        if (card.dueDate || card.startDate) {
+                            calendarEvents.push({
+                                id: card.id,
+                                title: stripHtml(card.desc).substring(0, 30) + '...',
+                                start: card.startDate || card.dueDate,
+                                end: card.dueDate,
+                                backgroundColor: card.calendarColor || '#3b82f6',
+                                borderColor: card.calendarColor || '#3b82f6',
+                                extendedProps: { columnId: col.id }
+                            });
+                        }
+                    });
+                });
+                successCallback(calendarEvents);
+            },
+            eventClick: function (info) {
+                const cardId = info.event.id;
+                const colId = info.event.extendedProps.columnId;
+                openCardModal(colId, cardId);
+            }
+        });
+
+        kanflowCalendar.render();
+    }, 10);
+}
 function renderColumns(columns) {
     const boardDiv = document.getElementById('board');
     if (!columns || columns.length === 0) {

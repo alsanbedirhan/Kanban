@@ -4,6 +4,7 @@ using Kanban.Repositories;
 using Kanban.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Rewrite;
 using Microsoft.EntityFrameworkCore;
@@ -83,6 +84,11 @@ builder.Services.AddAuthentication(options =>
             context.HttpContext.DeleteCookies();
             if (IsApiRequest(context.Request))
             {
+                var statusCodePagesFeature = context.HttpContext.Features.Get<IStatusCodePagesFeature>();
+                if (statusCodePagesFeature != null)
+                {
+                    statusCodePagesFeature.Enabled = false;
+                }
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
             }
             else
@@ -97,6 +103,11 @@ builder.Services.AddAuthentication(options =>
             context.HttpContext.DeleteCookies();
             if (IsApiRequest(context.Request))
             {
+                var statusCodePagesFeature = context.HttpContext.Features.Get<IStatusCodePagesFeature>();
+                if (statusCodePagesFeature != null)
+                {
+                    statusCodePagesFeature.Enabled = false;
+                }
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             }
             else
@@ -167,17 +178,29 @@ app.UseCors(x => x
     .AllowAnyHeader());
 
 app.UseAuthentication();
-app.UseAuthorization();
-
 app.Use(async (context, next) =>
 {
-    var path = context.Request.Path.Value?.ToLower() ?? "";
-    if ((path == "/" || path == "") && !(context.User?.Identity?.IsAuthenticated ?? false))
+    if (context.Request.Cookies.ContainsKey("Kanflow.Auth") &&
+        !(context.User?.Identity?.IsAuthenticated ?? false))
     {
         context.DeleteCookies();
+
+        if (IsApiRequest(context.Request))
+        {
+            var statusCodePagesFeature = context.Features.Get<IStatusCodePagesFeature>();
+            if (statusCodePagesFeature != null)
+            {
+                statusCodePagesFeature.Enabled = false;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
     }
+
     await next();
 });
+app.UseAuthorization();
 
 app.MapStaticAssets();
 
