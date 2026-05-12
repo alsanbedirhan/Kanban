@@ -60,23 +60,34 @@ builder.Services.AddAuthentication(options =>
     {
         OnValidatePrincipal = async context =>
         {
-            var userIdClaim = context.Principal.FindFirst(ClaimTypes.NameIdentifier);
-            var stampClaim = context.Principal.FindFirst("SecurityStamp");
-
-            if (userIdClaim == null || stampClaim == null)
+            try
             {
-                context.RejectPrincipal();
-                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                return;
+                var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier);
+                var stampClaim = context.Principal?.FindFirst("SecurityStamp");
+
+                if (userIdClaim == null || stampClaim == null)
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                    context.HttpContext.DeleteCookies();
+                    return;
+                }
+
+                var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
+                var isValid = await securityService.IsUserValidAsync(int.Parse(userIdClaim.Value), stampClaim.Value);
+
+                if (!isValid)
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                    context.HttpContext.DeleteCookies();
+                }
             }
-
-            var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
-            var isValid = await securityService.IsUserValidAsync(int.Parse(userIdClaim.Value), stampClaim.Value);
-
-            if (!isValid)
+            catch (Exception ex)
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                context.HttpContext.DeleteCookies();
             }
         },
         OnRedirectToAccessDenied = context =>
@@ -178,28 +189,6 @@ app.UseCors(x => x
     .AllowAnyHeader());
 
 app.UseAuthentication();
-app.Use(async (context, next) =>
-{
-    if (context.Request.Cookies.ContainsKey("Kanflow.Auth") &&
-        !(context.User?.Identity?.IsAuthenticated ?? false))
-    {
-        context.DeleteCookies();
-
-        if (IsApiRequest(context.Request))
-        {
-            var statusCodePagesFeature = context.Features.Get<IStatusCodePagesFeature>();
-            if (statusCodePagesFeature != null)
-            {
-                statusCodePagesFeature.Enabled = false;
-            }
-
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return;
-        }
-    }
-
-    await next();
-});
 app.UseAuthorization();
 
 app.MapStaticAssets();
