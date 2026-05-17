@@ -1,12 +1,13 @@
 ﻿using Kanban.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace Kanban
 {
     public static class Extensions
     {
-        public static CookieOptions cookieOptions = new CookieOptions { Path = "/", SameSite = SameSiteMode.Strict, Secure = true };
+        public static CookieOptions cookieOptions = new CookieOptions { Path = "/", SameSite = SameSiteMode.Strict, Secure = true, Expires = DateTimeOffset.UtcNow.AddYears(-1) };
         public static long GetUserId(this ClaimsPrincipal user)
         {
             long.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out long userId);
@@ -24,16 +25,14 @@ namespace Kanban
         {
             try
             {
-                foreach (var cookie in context.Request.Cookies)
+                if (context.Request.Cookies.ContainsKey("Kanflow.Antiforgery"))
                 {
-                    try
-                    {
-                        context.Response.Cookies.Delete(cookie.Key, cookieOptions);
-                    }
-                    catch (Exception)
-                    {
+                    context.Response.Cookies.Delete("Kanflow.Antiforgery", cookieOptions);
+                }
 
-                    }
+                if (context.Request.Cookies.ContainsKey("Kanflow.Auth"))
+                {
+                    context.Response.Cookies.Delete("Kanflow.Auth", cookieOptions);
                 }
             }
             catch (Exception)

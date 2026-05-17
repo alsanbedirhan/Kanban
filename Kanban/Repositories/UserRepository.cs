@@ -211,8 +211,7 @@ namespace Kanban.Repositories
                 bool hasNotif = await _context.UserNotifications.AnyAsync(x => x.UserId == userId && !x.IsDeleted);
                 if (!hasNotif)
                 {
-                    bool hasInvite = await _context.UserInvites.AnyAsync(x => x.Email == email && !x.IsUsed);
-                    hasUpdates = hasInvite;
+                    hasUpdates = await _context.UserInvites.AnyAsync(x => x.Email == email && !x.IsUsed);
                 }
                 else
                 {

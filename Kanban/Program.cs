@@ -60,30 +60,21 @@ builder.Services.AddAuthentication(options =>
     {
         OnValidatePrincipal = async context =>
         {
-            try
+            var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier);
+            var stampClaim = context.Principal?.FindFirst("SecurityStamp");
+
+            if (userIdClaim == null || stampClaim == null)
             {
-                var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier);
-                var stampClaim = context.Principal?.FindFirst("SecurityStamp");
-
-                if (userIdClaim == null || stampClaim == null)
-                {
-                    context.RejectPrincipal();
-                    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                    context.HttpContext.DeleteCookies();
-                    return;
-                }
-
-                var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
-                var isValid = await securityService.IsUserValidAsync(int.Parse(userIdClaim.Value), stampClaim.Value);
-
-                if (!isValid)
-                {
-                    context.RejectPrincipal();
-                    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                    context.HttpContext.DeleteCookies();
-                }
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                context.HttpContext.DeleteCookies();
+                return;
             }
-            catch (Exception ex)
+
+            var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
+            var isValid = await securityService.IsUserValidAsync(int.Parse(userIdClaim.Value), stampClaim.Value);
+
+            if (!isValid)
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
