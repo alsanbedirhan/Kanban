@@ -909,7 +909,7 @@ async function handleRegister() {
                 });
                 loadBoards();
             } else {
-                await Swal.fire('Registration Failed', response.message || 'Invalid code, please try again.', 'error');
+                await Swal.fire('Registration Failed', response.errorMessage || 'Invalid code, please try again.', 'error');
             }
         }
     } catch (error) {
@@ -1099,7 +1099,7 @@ async function handleForgotPassword() {
             });
             openLoginModal(email);
         } else {
-            Swal.fire('Error', resetResponse.message || 'Password reset failed. The code might be invalid or expired.', 'error');
+            Swal.fire('Error', resetResponse.errorMessage || 'Password reset failed. The code might be invalid or expired.', 'error');
         }
 
     } catch (error) {
