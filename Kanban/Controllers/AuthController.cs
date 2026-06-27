@@ -1,18 +1,17 @@
-﻿using Kanban.Entities;
+﻿using Kanban;
 using Kanban.Models;
 using Kanban.Services;
-using Mailjet.Client.Resources;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 
 namespace Kanban.Controllers
 {
+    [EnableRateLimiting("auth")]
     public class AuthController : Controller
     {
         private readonly IUserService _userService;
@@ -24,8 +23,12 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        [EnableRateLimiting("auth-strict")]
         public async Task<IActionResult> Login([FromBody] LoginViewModel model)
         {
+            if (!ModelState.IsValid)
+                return Ok(ServiceResult.Fail("Invalid email or password."));
+
             var result = await _userService.Login(model.email, model.password);
 
             if (!result.Success)
@@ -45,8 +48,12 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        [EnableRateLimiting("auth-otp")]
         public async Task<IActionResult> VerifyWork([FromBody] VerifyViewModel model)
         {
+            if (!ModelState.IsValid)
+                return Ok(ServiceResult.Fail("Invalid request."));
+
             var isHuman = await _turnstileService.VerifyAsync(model.turnstileToken);
             if (!isHuman)
             {
@@ -66,6 +73,9 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> Register([FromBody] RegisterViewModel model)
         {
+            if (!ModelState.IsValid)
+                return Ok(ServiceResult.Fail("Invalid registration data."));
+
             var verify = await _userService.VerifyCodeAndUpdate(model.email, model.otpCode);
             if (!verify.Success)
             {
@@ -90,6 +100,7 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        [DisableRateLimiting]
         public async Task<IActionResult> Logout()
         {
             try
@@ -105,8 +116,12 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        [EnableRateLimiting("auth-strict")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordViewModel model)
         {
+            if (!ModelState.IsValid)
+                return Ok(ServiceResult.Fail("Invalid request."));
+
             var verify = await _userService.VerifyCodeAndUpdate(model.email, model.otpCode);
             if (!verify.Success)
             {
@@ -126,6 +141,9 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordViewModel model)
         {
+            if (!ModelState.IsValid)
+                return Ok(ServiceResult.Fail("Invalid password."));
+
             var result = await _userService.ChangePassword(User.GetUserId(), User.GetEmail(), model.currentPassword, model.newPassword);
 
             if (!result.Success)

@@ -10,8 +10,20 @@ using Microsoft.AspNetCore.Rewrite;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+static bool IsApiRequest(HttpRequest request)
+{
+    var path = request.Path.Value?.ToLower() ?? "";
+    return path.StartsWith("/auth") || path.StartsWith("/kanban") ||
+        request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
+        request.Headers.Accept.Any(x => x != null && x.Contains("application/json"));
+}
+
+static string GetClientPartitionKey(HttpContext context) =>
+    context.Connection.RemoteIpAddress?.ToString() ?? context.TraceIdentifier;
 
 builder.Services.AddDbContext<KanbanDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -25,6 +37,53 @@ builder.Services.AddScoped<IKanbanService, KanbanService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddHttpClient<ITurnstileService, TurnstileService>();
+
+builder.Services.AddMemoryCache();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        if (IsApiRequest(context.HttpContext.Request))
+        {
+            context.HttpContext.Response.ContentType = "application/json";
+            await context.HttpContext.Response.WriteAsJsonAsync(
+                ServiceResult.Fail("Too many requests. Please try again later."), token);
+        }
+    };
+
+    options.AddPolicy("auth-strict", context =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            GetClientPartitionKey(context),
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 4,
+                QueueLimit = 0
+            }));
+
+    options.AddPolicy("auth-otp", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientPartitionKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(15),
+                QueueLimit = 0
+            }));
+
+    options.AddPolicy("auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientPartitionKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
 
 builder.Services.AddAntiforgery(options =>
 {
@@ -128,14 +187,6 @@ builder.Services.AddControllersWithViews(options =>
 
 var app = builder.Build();
 
-bool IsApiRequest(HttpRequest request)
-{
-    var path = request.Path.Value?.ToLower() ?? "";
-    return path.StartsWith("/auth") || path.StartsWith("/kanban") ||
-        request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
-        (request.Headers.Accept.Any(x => x != null && x.Contains("application/json")));
-}
-
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
@@ -147,25 +198,31 @@ app.Use(async (context, next) =>
 {
     var csp = new StringBuilder();
     csp.Append("default-src 'self'; ");
-    csp.Append("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.quilljs.com; ");
-    csp.Append("script-src-elem 'self' 'unsafe-inline' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.quilljs.com; ");
+    csp.Append("script-src 'self' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.quilljs.com; ");
+    csp.Append("script-src-elem 'self' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.quilljs.com; ");
     csp.Append("style-src 'self' 'unsafe-inline' https://cdn.quilljs.com https://cdn.jsdelivr.net; ");
     csp.Append("style-src-elem 'self' 'unsafe-inline' https://cdn.quilljs.com https://cdn.jsdelivr.net; ");
     csp.Append("frame-src 'self' https://challenges.cloudflare.com; ");
-
     csp.Append("connect-src 'self' https://challenges.cloudflare.com");
     if (app.Environment.IsDevelopment())
     {
         csp.Append(" ws://localhost:* http://localhost:*");
     }
     csp.Append("; ");
-
     csp.Append("img-src 'self' data: blob: https:; ");
-    csp.Append("font-src 'self' data:;");
+    csp.Append("font-src 'self' data:; ");
+    csp.Append("object-src 'none'; ");
+    csp.Append("base-uri 'self'; ");
+    csp.Append("form-action 'self'; ");
+    csp.Append("frame-ancestors 'self'");
+    if (!app.Environment.IsDevelopment())
+    {
+        csp.Append("; upgrade-insecure-requests");
+    }
 
-    context.Response.Headers.Append("Content-Security-Policy", csp.ToString());
-    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+    context.Response.Headers.ContentSecurityPolicy = csp.ToString();
+    context.Response.Headers.XContentTypeOptions = "nosniff";
+    context.Response.Headers.XFrameOptions = "SAMEORIGIN";
 
     await next();
 });
@@ -173,12 +230,20 @@ app.Use(async (context, next) =>
 app.UseStatusCodePagesWithReExecute("/Error/{0}");
 app.UseRouting();
 
-app.UseCors(x => x
-    .WithOrigins("https://kanflow.online", "https://www.kanflow.online")
-    .AllowCredentials()
-    .AllowAnyMethod()
-    .AllowAnyHeader());
+app.UseCors(x =>
+{
+    var origins = new List<string> { "https://kanflow.online", "https://www.kanflow.online" };
+    if (app.Environment.IsDevelopment())
+    {
+        origins.AddRange(["http://localhost:5000", "https://localhost:5001", "http://localhost:5173"]);
+    }
+    x.WithOrigins(origins.ToArray())
+        .AllowCredentials()
+        .AllowAnyMethod()
+        .AllowAnyHeader();
+});
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

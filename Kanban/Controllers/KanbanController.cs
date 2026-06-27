@@ -83,7 +83,7 @@ namespace Kanban.Controllers
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
-            return Ok(ServiceResult<BoardRefresResultModel>.Ok(r.Data));
+            return Ok(ServiceResult<BoardRefreshResultModel>.Ok(r.Data));
         }
 
         [HttpGet]
@@ -267,7 +267,7 @@ namespace Kanban.Controllers
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
-            return Ok(ServiceResult<List<CommentResutModel>>.Ok(r.Data));
+            return Ok(ServiceResult<List<CommentResultModel>>.Ok(r.Data));
         }
 
         [HttpPost]

@@ -26,14 +26,13 @@ namespace Kanban
             try
             {
                 if (context.Request.Cookies.ContainsKey("Kanflow.Antiforgery"))
-                {
                     context.Response.Cookies.Delete("Kanflow.Antiforgery", cookieOptions);
-                }
 
                 if (context.Request.Cookies.ContainsKey("Kanflow.Auth"))
-                {
                     context.Response.Cookies.Delete("Kanflow.Auth", cookieOptions);
-                }
+
+                if (context.Request.Cookies.ContainsKey("XSRF-TOKEN"))
+                    context.Response.Cookies.Delete("XSRF-TOKEN", cookieOptions);
             }
             catch (Exception)
             {

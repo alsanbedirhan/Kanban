@@ -7,7 +7,7 @@ namespace Kanban.Models
         public string? FullName { get; set; }
         public string Email { get; set; }
     }
-    public class BoardRefresResultModel
+    public class BoardRefreshResultModel
     {
         public DateTime LastUpdate { get; set; }
         public DateTime Now { get; set; }
@@ -139,7 +139,7 @@ namespace Kanban.Models
         public string Message { get; set; }
         public DateTime CreatedAt { get; set; }
     }
-    public class CommentResutModel : NotificationResultModel
+    public class CommentResultModel : NotificationResultModel
     {
         public string FullName { get; set; }
         public long UserId { get; set; }

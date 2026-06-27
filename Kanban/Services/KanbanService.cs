@@ -1,7 +1,6 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Repositories;
-using Mailjet.Client.Resources;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -75,23 +74,23 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(senderUserId, boardId))
                 {
-                    return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
+                    return ServiceResult.Fail("You do not have permission to access this board.");
                 }
 
                 if (await _userRepository.CheckInvite(senderUserId, boardId, email))
                 {
-                    return ServiceResult<BoardCard>.Fail("An invitation has already been sent for this board.");
+                    return ServiceResult.Fail("An invitation has already been sent for this board.");
                 }
 
                 var u = await _userRepository.GetUserIdByEmail(email);
                 if (u != null && await _kanbanRepository.CheckBoardMembers(u.Value, boardId))
                 {
-                    return ServiceResult<BoardCard>.Fail("User is already a member.");
+                    return ServiceResult.Fail("User is already a member.");
                 }
 
                 if (u == null && await _userRepository.CheckInviteCountToday(email) > 0)
                 {
-                    return ServiceResult<BoardCard>.Fail("You have exceeded the daily invitation limit for non-members.");
+                    return ServiceResult.Fail("You have exceeded the daily invitation limit for non-members.");
                 }
 
                 var i = await _userRepository.AddInvite(senderUserId, boardId, email, (u != null ? u.Value : 0));
@@ -128,7 +127,7 @@ namespace Kanban.Services
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<BoardColumn>>.Fail("You do not have permission to access this board.");
+                    return ServiceResult.Fail("You do not have permission to access this board.");
                 }
                 await _kanbanRepository.DeleteBoard(userId, boardId);
                 return ServiceResult.Ok();
@@ -389,19 +388,19 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult<BoardRefresResultModel>> GetBoardVersion(long userId, long boardId)
+        public async Task<ServiceResult<BoardRefreshResultModel>> GetBoardVersion(long userId, long boardId)
         {
             try
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<BoardRefresResultModel>.Fail("You do not have permission to access this board.");
+                    return ServiceResult<BoardRefreshResultModel>.Fail("You do not have permission to access this board.");
                 }
-                return ServiceResult<BoardRefresResultModel>.Ok(await _kanbanRepository.GetBoardVersion(boardId));
+                return ServiceResult<BoardRefreshResultModel>.Ok(await _kanbanRepository.GetBoardVersion(boardId));
             }
             catch (Exception)
             {
-                return ServiceResult<BoardRefresResultModel>.Fail("A database error occurred, please try again.");
+                return ServiceResult<BoardRefreshResultModel>.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -532,20 +531,20 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult<List<CommentResutModel>>> GetComments(long userId, long boardId, long cardId)
+        public async Task<ServiceResult<List<CommentResultModel>>> GetComments(long userId, long boardId, long cardId)
         {
             try
             {
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
                 {
-                    return ServiceResult<List<CommentResutModel>>.Fail("You do not have permission to access this board.");
+                    return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
                 }
 
-                return ServiceResult<List<CommentResutModel>>.Ok(await _kanbanRepository.GetComments(cardId));
+                return ServiceResult<List<CommentResultModel>>.Ok(await _kanbanRepository.GetComments(cardId));
             }
             catch (Exception)
             {
-                return ServiceResult<List<CommentResutModel>>.Fail("A database error occurred, please try again.");
+                return ServiceResult<List<CommentResultModel>>.Fail("A database error occurred, please try again.");
             }
         }
 

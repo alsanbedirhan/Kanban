@@ -349,7 +349,7 @@ namespace Kanban.Repositories
             await TouchBoard(boardId);
         }
 
-        public async Task<BoardRefresResultModel> GetBoardVersion(long boardId)
+        public async Task<BoardRefreshResultModel> GetBoardVersion(long boardId)
         {
             var now = await _dbDate.Now();
             string cacheKey = $"Board_{boardId}_Version";
@@ -364,7 +364,7 @@ namespace Kanban.Repositories
                 _cache.Set(cacheKey, lastActivity, TimeSpan.FromHours(1));
             }
 
-            return new BoardRefresResultModel { LastUpdate = lastActivity, Now = now };
+            return new BoardRefreshResultModel { LastUpdate = lastActivity, Now = now };
         }
 
         private async Task TouchBoard(long boardId)
@@ -414,11 +414,11 @@ namespace Kanban.Repositories
             if (board != null) await TouchBoard(board.BoardId);
         }
 
-        public async Task<List<CommentResutModel>> GetComments(long cardId)
+        public async Task<List<CommentResultModel>> GetComments(long cardId)
         {
             return await _context.BoardCardComments.AsNoTracking()
                 .Where(c => c.BoardCardId == cardId && !c.IsDeleted)
-                .Select(c => new CommentResutModel
+                .Select(c => new CommentResultModel
                 {
                     Id = c.Id,
                     Message = c.Message,

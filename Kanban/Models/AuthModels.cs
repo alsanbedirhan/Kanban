@@ -1,4 +1,6 @@
 ﻿
+using System.ComponentModel.DataAnnotations;
+
 namespace Kanban.Models
 {
     public class MyClaims : UserResultModel
@@ -7,44 +9,56 @@ namespace Kanban.Models
     }
     public class LoginViewModel 
     {
-        public string email { get; set; }
-        public string password { get; set; }
+        [Required, EmailAddress, MaxLength(100)]
+        public string email { get; set; } = string.Empty;
+
+        [Required, MinLength(8), MaxLength(128)]
+        public string password { get; set; } = string.Empty;
     }
     public class ResetPasswordViewModel : LoginViewModel
     {
-        public string otpCode { get; set; }
+        [Required, StringLength(6, MinimumLength = 6)]
+        public string otpCode { get; set; } = string.Empty;
     }
     public class EmailSettings
     {
-        public string Domain { get; set; }
-        public string Address { get; set; }
-        public string API_Key { get; set; }
-        public string Secret_Key { get; set; }
+        public string ConnectionString { get; set; } = string.Empty;
+        public string SenderEmail { get; set; } = string.Empty;
+        public string Domain { get; set; } = string.Empty;
     }
     public class JwtSettings
     {
-        public string Key { get; set; }
-        public string Issuer { get; set; }
-        public string Audience { get; set; }
+        public string Key { get; set; } = string.Empty;
+        public string Issuer { get; set; } = string.Empty;
+        public string Audience { get; set; } = string.Empty;
         public int ExpireMinutes { get; set; }
     }
     public class TurnstileSettings
     {
-        public string SecretKey { get; set; }
+        public string SecretKey { get; set; } = string.Empty;
     }
     public class RegisterViewModel : LoginViewModel
     {
-        public string fullName { get; set; }
-        public string otpCode { get; set; }
+        [Required, MaxLength(100)]
+        public string fullName { get; set; } = string.Empty;
+
+        [Required, StringLength(6, MinimumLength = 6)]
+        public string otpCode { get; set; } = string.Empty;
     }
     public class VerifyViewModel
     {
-        public string email { get; set; }
-        public string turnstileToken { get; set; }
+        [Required, EmailAddress, MaxLength(100)]
+        public string email { get; set; } = string.Empty;
+
+        [Required]
+        public string turnstileToken { get; set; } = string.Empty;
     }
     public class ChangePasswordViewModel
     {
-        public string currentPassword { get; set; }
-        public string newPassword { get; set; }
+        [Required, MinLength(8), MaxLength(128)]
+        public string currentPassword { get; set; } = string.Empty;
+
+        [Required, MinLength(8), MaxLength(128)]
+        public string newPassword { get; set; } = string.Empty;
     }
 }

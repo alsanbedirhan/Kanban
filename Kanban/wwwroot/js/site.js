@@ -100,6 +100,16 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
             credentials: 'same-origin'
         });
 
+        if (response.status === 429) {
+            let rateLimitMsg = 'Too many requests. Please try again later.';
+            try {
+                const errData = await response.json();
+                if (errData.errorMessage) rateLimitMsg = errData.errorMessage;
+            } catch (e) { }
+            if (showload) Swal.fire('Slow down', rateLimitMsg, 'warning');
+            throw new Error(rateLimitMsg);
+        }
+
         if (response.status === 401 || response.status === 403) {
             console.warn('Session expired or unauthorized. Force clearing and redirecting...');
             handleLogout(true, 'Session expired. Please log in again.');

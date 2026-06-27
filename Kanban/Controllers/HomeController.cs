@@ -38,7 +38,10 @@ namespace Kanban.Controllers
 
                 }
                 HttpContext.DeleteCookies();
-                //return RedirectToAction("Index");
+                if (Request.Query.ContainsKey("logout") || Request.Query.ContainsKey("t"))
+                {
+                    return RedirectToAction("Index");
+                }
             }
 
             if (!string.IsNullOrEmpty(token))

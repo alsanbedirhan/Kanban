@@ -7,9 +7,9 @@ namespace Kanban.Repositories
     {
         Task<List<BoardColumnResultModel>> GetBoardDetail(long boardId, int pageSize = 15);
         Task<List<BoardCardResultModel>> GetMoreCardsForColumn(long columnId, int skipCount, int pageSize = 15);
-        Task<BoardRefresResultModel> GetBoardVersion(long boardId);
+        Task<BoardRefreshResultModel> GetBoardVersion(long boardId);
         Task<List<BoardOwnerResultModel>> GetBoards(long userId);
-        Task<List<CommentResutModel>> GetComments(long cardId);
+        Task<List<CommentResultModel>> GetComments(long cardId);
         Task DeleteComment(long commentId);
         Task<bool> ValidateComment(long userId, long commentId);
         Task WorkInvite(long inviteId, long userId, long boardId, bool isAccepted);

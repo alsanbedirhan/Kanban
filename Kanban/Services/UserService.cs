@@ -1,11 +1,14 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Repositories;
+using System.Security.Cryptography;
 
 namespace Kanban.Services
 {
     public class UserService : IUserService
     {
+        private static string GenerateOtpCode() =>
+            RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
         private readonly IUserRepository _userRepository;
         private readonly IEmailService _mailService;
         private readonly IDBDateTimeProvider _dbDate;
@@ -79,7 +82,7 @@ namespace Kanban.Services
                     return ServiceResult.Fail("Daily limit exceeded.");
                 }
 
-                string code = new Random().Next(100000, 999999).ToString();
+                string code = GenerateOtpCode();
 
                 await _mailService.SendVerificationCode(email, code);
 
@@ -87,9 +90,9 @@ namespace Kanban.Services
 
                 return ServiceResult.Ok();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return ServiceResult<User>.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -108,7 +111,7 @@ namespace Kanban.Services
             }
             catch (Exception)
             {
-                return ServiceResult<User>.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
