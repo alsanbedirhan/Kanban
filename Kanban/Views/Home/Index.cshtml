@@ -238,23 +238,11 @@
 
                 <button type="button" tabindex="-1" class="toggle-password" data-target="loginPassword" aria-label="Show password">🙈</button>
 
-
-
-                <div class="form-link-row">
-
-                    <button type="button" class="btn-link btn-link-sm" data-action="handleForgotPassword">
-
-                        Forgot Password?
-
-                    </button>
-
-                </div>
-
             </div>
 
-            <div class="turnstile-wrap turnstile-wrap-compact">
+            <div class="turnstile-wrap">
 
-                <div class="cf-turnstile" data-sitekey="0x4AAAAAACWAgmX9pAp9Li7E" data-size="compact"></div>
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAACWAgmX9pAp9Li7E"></div>
 
             </div>
 
@@ -266,11 +254,13 @@
 
             </div>
 
-            <div class="modal-footer-link">
+            <div class="modal-footer-link login-modal-footer">
 
-                Don’t have an account?
+                <button type="button" class="btn-link" data-action="handleForgotPassword">Forgot password?</button>
 
-                <button type="button" class="btn-link" data-action="switchToRegister">Register</button>
+                <span class="modal-footer-sep">·</span>
+
+                <span>Don’t have an account? <button type="button" class="btn-link" data-action="switchToRegister">Register</button></span>
 
             </div>
 

@@ -63,6 +63,41 @@ function swalWidth(desktop = '650px') {
     return window.innerWidth <= 768 ? undefined : desktop;
 }
 
+function formSwalOptions(overrides = {}) {
+    return {
+        width: swalWidth('440px'),
+        showCancelButton: true,
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#289f51',
+        cancelButtonColor: '#718096',
+        reverseButtons: true,
+        ...overrides
+    };
+}
+
+function swalPasswordField(id, placeholder) {
+    const wrap = 'position:relative; max-width:100%; width:100%; margin:0.75em 0 0; display:flex; align-items:center;';
+    const input = 'width:100%; margin:0; padding-right:35px; box-sizing:border-box;';
+    const icon = 'position:absolute; right:10px; z-index:2; cursor:pointer; font-size:1.2em; background:transparent; border:none; padding:0;';
+    return `
+        <div style="${wrap}">
+            <input id="${id}" type="password" class="swal2-input" placeholder="${placeholder}" style="${input}">
+            <button type="button" class="pass-toggle" tabindex="-1" data-target="${id}" style="${icon}">🙈</button>
+        </div>`;
+}
+
+function bindSwalPasswordToggles(root = Swal.getPopup()) {
+    root?.querySelectorAll('.pass-toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => {
+            const input = root.querySelector(`#${toggle.getAttribute('data-target')}`);
+            if (!input) return;
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            toggle.textContent = show ? '🙊' : '🙈';
+        });
+    });
+}
+
 function showToast(title, icon = 'info', timer = 2500) {
     const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer });
     Toast.fire({ icon, title });
@@ -597,47 +632,16 @@ async function handleInviteResponse(inviteId, isAccepted) {
 async function openChangePasswordModal() {
     if (!checkAuth()) return;
 
-    const containerStyle = `position:relative; max-width:100%; width:18em; margin:1em auto; display:flex; align-items:center;`;
-    const inputStyle = `width:100%; margin:0; padding-right:35px; box-sizing:border-box;`;
-    const iconStyle = `position:absolute; right:10px; z-index:2; cursor:pointer; font-size:1.2em; background:transparent; border:none; padding:0;`;
-
-    const { value: passwordData } = await Swal.fire({
+    const { value: passwordData } = await Swal.fire(formSwalOptions({
         title: 'Change Password',
         html: `
-            <div style="${containerStyle}">
-                <input id="swal-old-pass" type="password" class="swal2-input" placeholder="Current Password" style="${inputStyle}">
-                <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-old-pass" style="${iconStyle}">🙈</button>
-            </div>
-            <div style="${containerStyle}">
-                <input id="swal-new-pass" type="password" class="swal2-input" placeholder="New Password" style="${inputStyle}">
-                <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-new-pass" style="${iconStyle}">🙈</button>
-            </div>
-            <div style="${containerStyle}">
-                <input id="swal-conf-pass" type="password" class="swal2-input" placeholder="Confirm New Password" style="${inputStyle}">
-                <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-conf-pass" style="${iconStyle}">🙈</button>
-            </div>
+            ${swalPasswordField('swal-old-pass', 'Current Password')}
+            ${swalPasswordField('swal-new-pass', 'New Password')}
+            ${swalPasswordField('swal-conf-pass', 'Confirm New Password')}
         `,
         focusConfirm: false,
-        showCancelButton: true,
         confirmButtonText: 'Update',
-        cancelButtonText: 'Cancel',
-        didOpen: () => {
-            const popup = Swal.getPopup();
-            const toggles = popup.querySelectorAll('.pass-toggle');
-            toggles.forEach(toggle => {
-                toggle.addEventListener('click', () => {
-                    const targetId = toggle.getAttribute('data-target');
-                    const input = popup.querySelector(`#${targetId}`);
-                    if (input.type === "password") {
-                        input.type = "text";
-                        toggle.textContent = "🙊";
-                    } else {
-                        input.type = "password";
-                        toggle.textContent = "🙈";
-                    }
-                });
-            });
-        },
+        didOpen: () => bindSwalPasswordToggles(),
         preConfirm: () => {
             const currentPassword = document.getElementById('swal-old-pass').value;
             const newPassword = document.getElementById('swal-new-pass').value;
@@ -657,7 +661,7 @@ async function openChangePasswordModal() {
             }
             return { currentPassword, newPassword };
         }
-    });
+    }));
 
     if (passwordData) {
         try {
@@ -820,7 +824,7 @@ function updateAuthUI() {
         document.getElementById("boardHeaderTitle").textContent = "";
         document.getElementById("board").innerHTML = "";
 
-        area.innerHTML = `<button id="header-login-btn" class="btn btn-primary btn-login-header">Login</button>`;
+        area.innerHTML = `<button id="header-login-btn" class="btn btn-primary btn-login-header" type="button" title="Login" aria-label="Login">🔐</button>`;
         authSection.innerHTML = `
             <button id="sidebar-login-btn" class="btn btn-primary" style="width:100%; margin-bottom:10px;">Login</button>
             <button id="sidebar-register-btn" class="btn btn-secondary" style="width:100%;">Register</button>
@@ -852,6 +856,7 @@ function closeLoginModal() {
     document.getElementById('loginModal').classList.remove('active');
     document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
+    if (window.turnstile) window.turnstile.reset();
 }
 
 function openRegisterModal(prefillEmail = null) {
@@ -977,13 +982,11 @@ async function handleRegister() {
         const templateContent = document.getElementById('otpTemplate').innerHTML;
 
         while (!isRegistered) {
-            const { value: otpCode, dismiss } = await Swal.fire({
+            const { value: otpCode, dismiss } = await Swal.fire(formSwalOptions({
                 title: 'Email Verification',
                 text: `A 6-digit code has been sent to ${escapeHtml(email)}.`,
                 html: templateContent,
-                showCancelButton: true,
                 confirmButtonText: 'Verify & Register',
-                cancelButtonText: 'Cancel',
                 didOpen: () => {
                     const container = Swal.getHtmlContainer().querySelector('#otp-inputs');
                     const inputs = container.querySelectorAll('.otp-field');
@@ -1022,7 +1025,7 @@ async function handleRegister() {
                     }
                     return code;
                 }
-            });
+            }));
 
             if (window.turnstile) window.turnstile.reset();
             if (dismiss === Swal.DismissReason.cancel || dismiss === Swal.DismissReason.backdrop) return;
@@ -1063,29 +1066,27 @@ async function handleForgotPassword() {
     const turnstileToken = getTurnstileToken();
 
     if (!turnstileToken) {
-        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please complete the captcha in the login window.' });
+        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please complete the captcha below.' });
     }
 
+    const loginEmail = document.getElementById('loginEmail')?.value.trim() || '';
     closeLoginModal();
 
-    const { value: email, dismiss: emailDismiss } = await Swal.fire({
+    const { value: email, dismiss: emailDismiss } = await Swal.fire(formSwalOptions({
         title: 'Forgot Password',
         input: 'email',
+        inputValue: loginEmail,
         inputLabel: 'Enter your registered Kanflow email address',
         inputPlaceholder: 'example@email.com',
-        showCancelButton: true,
-        confirmButtonText: 'Send Verification Code',
-        cancelButtonText: 'Cancel',
+        confirmButtonText: 'Send Code',
         inputValidator: (value) => {
             value = value.trim();
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!value) return 'Email address cannot be empty!';
             if (!emailRegex.test(value)) return 'Please enter a valid email address.';
         },
-        preConfirm: () => {
-            return Swal.getInput().value.trim();
-        }
-    });
+        preConfirm: () => Swal.getInput().value.trim()
+    }));
 
     if (!email || emailDismiss) {
         openLoginModal();
@@ -1103,52 +1104,24 @@ async function handleForgotPassword() {
             return Swal.fire('Error', verify?.errorMessage || 'Failed to send verification code', 'error');
         }
 
-        const containerStyle = `position:relative; max-width:100%; width:18em; margin:1em auto; display:flex; align-items:center;`;
-        const inputStyle = `width:100%; margin:0; padding-right:35px; box-sizing:border-box;`;
-        const iconStyle = `position:absolute; right:10px; z-index:2; cursor:pointer; font-size:1.2em; background:transparent; border:none; padding:0;`;
-
         const otpHtml = document.getElementById('otpTemplate').innerHTML;
         const combinedHtml = `
-            <div style="margin-bottom: 15px; font-size: 14px;">
+            <div style="margin-bottom: 12px; font-size: 14px; color: #4a5568; text-align: center;">
                 A 6-digit code has been sent to <b>${escapeHtml(email)}</b>.
             </div>
             ${otpHtml}
-            <div style="margin-top: 25px;">
-                <div style="${containerStyle}">
-                    <input id="swal-new-password" type="password" class="swal2-input" placeholder="New Password" style="${inputStyle}">
-                    <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-new-password" style="${iconStyle}">🙈</button>
-                </div>
-                <div style="${containerStyle}">
-                    <input id="swal-confirm-password" type="password" class="swal2-input" placeholder="Confirm New Password" style="${inputStyle}">
-                    <button type="button" class="pass-toggle" tabindex="-1" data-target="swal-confirm-password" style="${iconStyle}">🙈</button>
-                </div>
-            </div>
+            ${swalPasswordField('swal-new-password', 'New Password')}
+            ${swalPasswordField('swal-confirm-password', 'Confirm New Password')}
         `;
 
-        const { value: formValues, dismiss: formDismiss } = await Swal.fire({
+        const { value: formValues, dismiss: formDismiss } = await Swal.fire(formSwalOptions({
             title: 'Reset Password',
             html: combinedHtml,
-            showCancelButton: true,
             confirmButtonText: 'Reset Password',
-            cancelButtonText: 'Cancel',
             focusConfirm: false,
             didOpen: () => {
                 const container = Swal.getHtmlContainer();
-
-                const toggles = container.querySelectorAll('.pass-toggle');
-                toggles.forEach(toggle => {
-                    toggle.addEventListener('click', () => {
-                        const targetId = toggle.getAttribute('data-target');
-                        const input = container.querySelector(`#${targetId}`);
-                        if (input.type === "password") {
-                            input.type = "text";
-                            toggle.textContent = "🙊";
-                        } else {
-                            input.type = "password";
-                            toggle.textContent = "🙈";
-                        }
-                    });
-                });
+                bindSwalPasswordToggles(container);
 
                 const inputs = container.querySelectorAll('.otp-field');
                 const firstPasswordInput = container.querySelector('#swal-new-password');
@@ -1215,7 +1188,7 @@ async function handleForgotPassword() {
 
                 return { otpCode: code, newPassword: pass };
             }
-        });
+        }));
 
         if (window.turnstile) window.turnstile.reset();
         if (formDismiss) return;

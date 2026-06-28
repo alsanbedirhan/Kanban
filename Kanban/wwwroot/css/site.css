@@ -164,6 +164,22 @@
     margin-top: 5px;
 }
 
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.btn-link:hover {
+    color: var(--primary-dark);
+}
+
 .btn-link-sm {
     font-size: 12px;
 }
@@ -195,16 +211,41 @@
 }
 
 .turnstile-wrap {
-    margin-bottom: 15px;
+    margin: 16px auto 12px;
+    width: fit-content;
+    max-width: 100%;
+    line-height: 0;
     display: flex;
     justify-content: center;
-    width: 100%;
 }
 
-.turnstile-wrap-compact {
-    margin: 8px 0 4px;
-    transform: scale(0.92);
-    transform-origin: center top;
+.turnstile-wrap .cf-turnstile {
+    display: inline-block;
+}
+
+.login-modal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 10px;
+    line-height: 1.5;
+}
+
+.modal-footer-sep {
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.btn-login-header {
+    padding: 12px 18px;
+    font-size: 1.65rem;
+    line-height: 1;
+    min-width: 52px;
+    min-height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn-full {
@@ -306,11 +347,6 @@
 
 .board-search-toggle {
     display: none;
-}
-
-.btn-login-header {
-    padding: 10px 16px;
-    font-size: 14px;
 }
 
 @media (max-width: 768px) {
@@ -438,8 +474,19 @@
     }
 
     .btn-login-header {
-        padding: 8px 12px;
-        font-size: 13px;
+        min-width: 36px;
+        min-height: 36px;
+        padding: 6px 8px;
+        font-size: 1.1rem;
+    }
+
+    .login-modal-footer {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .modal-footer-sep {
+        display: none;
     }
 
     #header-avatar-img {
@@ -474,6 +521,27 @@ input::-ms-reveal, input::-ms-clear {
 
 .swal2-container {
     z-index: 10000 !important;
+}
+
+@media (max-width: 768px) {
+    .swal2-popup {
+        width: min(440px, calc(100vw - 24px)) !important;
+        padding: 1.1em 1em 1.25em;
+        font-size: 0.95rem;
+    }
+
+    .swal2-actions {
+        flex-direction: column-reverse;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .swal2-actions .swal2-styled {
+        width: 100%;
+        margin: 0;
+        min-height: 44px;
+        font-size: 14px;
+    }
 }
 
 #sidebarOverlay {
