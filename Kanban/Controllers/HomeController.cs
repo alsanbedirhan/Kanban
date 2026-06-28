@@ -1,4 +1,5 @@
 using Kanban.Models;
+using Kanban.Security;
 using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -66,7 +67,7 @@ namespace Kanban.Controllers
                     UserId = User.GetUserId(),
                     FullName = User.Identity?.Name ?? "",
                     Email = User.GetEmail(),
-                    Avatar = avatar.Data ?? ""
+                    Avatar = AvatarNames.Normalize(avatar.Data, "def")
                 }));
             }
             return Ok(ServiceResult.Fail(""));

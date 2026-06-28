@@ -1,256 +1,524 @@
 ﻿@model Kanban.Services.ServiceResult<InviteStatus>
 
+
+
 @{
+
     Layout = null;
+
 }
 
+
+
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
     <title>kanflow</title>
 
+
+
     <meta name="description" content="Manage projects effortlessly with Kanflow. Organize tasks, collaborate with your team, and boost productivity. The fast, secure, and free Kanban tool." />
+
     <meta name="keywords" content="kanban, project management, task tracking, agile, scrum, workflow, productivity, kanflow, bedirhan alşan, bedirhan alsan, todo list" />
+
     <meta name="author" content="Bedirhan Alsan" />
+
     <meta name="robots" content="index, follow" />
 
+
+
     <meta property="og:type" content="website" />
+
     <meta property="og:url" content="https://www.kanflow.online/" />
+
     <meta property="og:title" content="Kanflow - Streamline Your Workflow" />
+
     <meta property="og:description" content="The modern way to manage tasks. Create boards, invite your team, and get things done. Simple, fast, and effective." />
+
     <meta property="og:image" content="https://www.kanflow.online/logo.png" />
+
     <meta property="og:image:alt" content="Kanflow Dashboard Preview" />
+
     <meta property="og:site_name" content="Kanflow" />
+
     <meta property="og:locale" content="en_US" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
     
+
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 
+
+
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
     
+
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
+
     <script src="https://cdn.quilljs.com/1.3.6/quill.js" defer></script>
+
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js' defer></script>
+
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
 
+
+
     <script src="~/js/site.js" asp-append-version="true" defer></script>
+
 </head>
+
 <body>
-    <div id="server-data"
-         style="display:none;"
+
+    <div id="server-data" class="u-hidden"
+
          data-invite-status="@Model.Data.ToString()"
+
          data-server-message="@Model.ErrorMessage">
+
     </div>
 
-    <button class="menu-toggle" data-action="toggleSidebar">☰</button>
-    <div class="sidebar-overlay" id="sidebarOverlay" data-action="toggleSidebar"></div>
 
-    <div class="sidebar" id="sidebar">
+
+    <button class="menu-toggle" data-action="toggleSidebar" aria-label="Open menu" aria-expanded="false">☰</button>
+
+    <div class="sidebar-overlay" id="sidebarOverlay" data-action="toggleSidebar" aria-hidden="true"></div>
+
+
+
+    <aside class="sidebar" id="sidebar" aria-label="Board navigation">
+
         <div class="sidebar-header">
+
             <h2>kanflow.online</h2>
-            <button class="close-sidebar-btn" data-action="toggleSidebar">×</button>
+
+            <button class="close-sidebar-btn" data-action="toggleSidebar" aria-label="Close menu">×</button>
+
         </div>
+
+
 
         <div class="sidebar-content">
-            <div style="padding: 0 20px;">
+
+            <div class="sidebar-board-action">
+
                 <button class="add-board-btn" data-action="openNewBoardModal">
+
                     + New Board
+
                 </button>
+
             </div>
 
+
+
             <div class="sidebar-section-title">📋 My Boards</div>
+
             <ul class="board-list" id="boardList"></ul>
 
+
+
             <div class="sidebar-section-title">📋 Shared With Me</div>
+
             <ul class="board-list" id="sharedBoardList"></ul>
+
         </div>
+
+
 
         <div class="sidebar-footer" id="authSection"></div>
 
-        <div class="developer-footer" style="padding: 15px; text-align: center; font-size: 0.85rem; border-top: 1px solid #eee; color: #666;">
-            Developed by <a href="https://bedirhanalsan.com" target="_blank" style="color: #333; text-decoration: none; font-weight: bold;">Bedirhan Alşan</a>
-        </div>
-    </div>
 
-    <div class="container">
+
+        <div class="developer-footer">
+
+            Developed by <a href="https://bedirhanalsan.com" target="_blank" rel="noopener">Bedirhan Alşan</a>
+
+        </div>
+
+    </aside>
+
+
+
+    <main class="container">
+
         <div class="header" id="kanflowheader">
-            <h1 style="display: flex; align-items: center;" id="kanflowheadertitle">
-                <img src="/favicon.svg" alt="Kanflow Logo" style="height: 36px; width: auto;">
+
+            <h1 class="brand-title" id="kanflowheadertitle">
+
+                <img src="/favicon.svg" alt="Kanflow Logo" class="brand-logo">
+
                 kanflow
+
             </h1>
-            <div id="authHeaderArea"></div>
+
+            <div class="header-actions" id="authHeaderArea"></div>
+
         </div>
 
-        <div class="header secondary-header" id="boardHeader" style="margin-top:0px; display:none; justify-content: space-between; align-items: center;">
-            <h1 id="boardHeaderTitle"></h1>
 
-            <div class="board-actions" style="display: flex; align-items: center; gap: 5px;">
 
-                <button class="btn" data-action="changeView" title="Calendar View" style="cursor: pointer;">
-                    📅
-                </button>
+        <div class="header secondary-header u-hidden" id="boardHeader">
 
-                <button class="btn btn-primary" id="btnNewColumn" data-action="openNewColumnModal" title="Add New Column">
-                    ➕
-                </button>
+            <div class="board-header-row">
+
+                <h1 id="boardHeaderTitle"></h1>
+
+                <div class="board-search-wrap" id="boardSearchWrap">
+
+                    <input type="search" id="boardSearchInput" class="board-search-input"
+
+                           placeholder="Search cards… (/)" aria-label="Search cards" autocomplete="off">
+
+                    <button type="button" id="boardSearchClear" class="board-search-clear" data-action="clearBoardSearch"
+
+                            hidden aria-label="Clear search">×</button>
+
+                </div>
+
+                <div class="board-toolbar">
+
+                    <button type="button" class="btn btn-icon board-search-toggle" id="boardSearchToggleBtn"
+
+                            data-action="toggleBoardSearch" title="Search cards" aria-label="Search cards" aria-expanded="false">🔍</button>
+
+                    <button type="button" class="btn btn-icon" data-action="changeView" title="Calendar View" aria-label="Calendar view">📅</button>
+
+                    <button type="button" class="btn btn-primary btn-icon" id="btnNewColumn" data-action="openNewColumnModal"
+
+                            title="Add New Column" aria-label="Add column">➕</button>
+
+                </div>
 
             </div>
+
         </div>
+
+
 
         <div class="board" id="board"></div>
 
-        <div id="calendar" style="display: none; padding: 20px; height: calc(100vh - 150px); overflow-y: hidden; box-sizing: border-box;"></div>
-    </div>
 
-    <form class="modal" id="loginModal">
+
+        <div id="calendar" class="calendar-panel u-hidden"></div>
+
+    </main>
+
+
+
+    <form class="modal" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
+
         <div class="modal-content">
-            <h3>Login</h3><br>
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="loginEmail" placeholder="your@email.com">
-            </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="loginPassword" placeholder="••••••••">
-                <button type="button" tabindex="-1" class="toggle-password" data-target="loginPassword">🙈</button>
 
-                <div style="text-align:right; margin-top:5px;">
-                    <button type="button" class="btn-link" style="font-size:12px;" data-action="handleForgotPassword">
+            <h3 id="loginModalTitle">Login</h3>
+
+            <div class="form-group">
+
+                <label for="loginEmail">Email</label>
+
+                <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email">
+
+            </div>
+
+            <div class="form-group">
+
+                <label for="loginPassword">Password</label>
+
+                <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+
+                <button type="button" tabindex="-1" class="toggle-password" data-target="loginPassword" aria-label="Show password">🙈</button>
+
+
+
+                <div class="form-link-row">
+
+                    <button type="button" class="btn-link btn-link-sm" data-action="handleForgotPassword">
+
                         Forgot Password?
+
                     </button>
+
                 </div>
+
             </div>
-            <div style="text-align:right;">
+
+            <div class="turnstile-wrap turnstile-wrap-compact">
+
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAACWAgmX9pAp9Li7E" data-size="compact"></div>
+
+            </div>
+
+            <div class="modal-actions">
+
                 <button type="button" class="btn btn-secondary" data-action="closeLoginModal">Cancel</button>
+
                 <button type="submit" class="btn btn-primary">Login</button>
+
             </div>
-            <div style="margin-top:20px; text-align:center; font-size:14px;">
+
+            <div class="modal-footer-link">
+
                 Don’t have an account?
+
                 <button type="button" class="btn-link" data-action="switchToRegister">Register</button>
+
             </div>
+
         </div>
+
     </form>
 
-    <form class="modal" id="registerModal">
+
+
+    <form class="modal" id="registerModal" role="dialog" aria-modal="true" aria-labelledby="registerModalTitle">
+
         <div class="modal-content">
-            <h3>Register</h3><br>
+
+            <h3 id="registerModalTitle">Register</h3>
+
             <div class="form-group">
-                <label>Full Name</label>
-                <input type="text" id="registerFullName" placeholder="Your full name">
+
+                <label for="registerFullName">Full Name</label>
+
+                <input type="text" id="registerFullName" placeholder="Your full name" autocomplete="name">
+
             </div>
+
             <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="registerEmail" placeholder="your@email.com">
+
+                <label for="registerEmail">Email</label>
+
+                <input type="email" id="registerEmail" placeholder="your@email.com" autocomplete="email">
+
             </div>
+
             <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="registerPassword" placeholder="••••••••">
-                <button type="button" tabindex="-1" class="toggle-password" data-target="registerPassword">🙈</button>
+
+                <label for="registerPassword">Password</label>
+
+                <input type="password" id="registerPassword" placeholder="••••••••" autocomplete="new-password">
+
+                <button type="button" tabindex="-1" class="toggle-password" data-target="registerPassword" aria-label="Show password">🙈</button>
+
             </div>
+
             <div class="form-group">
-                <label>Confirm Password</label>
-                <input type="password" id="registerConfirmPassword" placeholder="••••••••">
-                <button type="button" tabindex="-1" class="toggle-password" data-target="registerConfirmPassword">🙈</button>
+
+                <label for="registerConfirmPassword">Confirm Password</label>
+
+                <input type="password" id="registerConfirmPassword" placeholder="••••••••" autocomplete="new-password">
+
+                <button type="button" tabindex="-1" class="toggle-password" data-target="registerConfirmPassword" aria-label="Show password">🙈</button>
+
             </div>
-            <div style="display: flex; align-items: flex-start; gap: 10px; margin-top: 15px; margin-bottom: 15px;">
-                <input type="checkbox" id="registerAgreement" style="width: 20px; height: 20px; cursor: pointer; margin-top: 2px;">
-                <label for="registerAgreement" style="font-size: 13px; color: #4a5568; cursor: pointer;">
+
+            <div class="agreement-row">
+
+                <input type="checkbox" id="registerAgreement">
+
+                <label for="registerAgreement" class="agreement-label">
+
                     I have read and agree to the
-                    <a href="#" data-action="showPrivacyPolicy" style="color: var(--primary-color); text-decoration: underline;">Privacy Policy</a> and
-                    <a href="#" data-action="showUserAgreement" style="color: var(--primary-color); text-decoration: underline;">User Agreement</a>.
+
+                    <a href="#" data-action="showPrivacyPolicy" class="text-link">Privacy Policy</a> and
+
+                    <a href="#" data-action="showUserAgreement" class="text-link">User Agreement</a>.
+
                 </label>
+
             </div>
 
-            <div style="margin-bottom: 15px; display: flex; justify-content: center; width: 100%">
+
+
+            <div class="turnstile-wrap">
+
                 <div class="cf-turnstile" data-sitekey="0x4AAAAAACWAgmX9pAp9Li7E"></div>
+
             </div>
 
-            <div style="text-align:right;">
+
+
+            <div class="modal-actions">
+
                 <button type="button" class="btn btn-secondary" data-action="closeRegisterModal">Cancel</button>
+
                 <button type="submit" class="btn btn-primary">Register</button>
+
             </div>
-            <div style="margin-top:20px; text-align:center; font-size:14px;">
+
+            <div class="modal-footer-link">
+
                 Already have an account?
+
                 <button type="button" class="btn-link" data-action="switchToLogin">Login</button>
+
             </div>
+
         </div>
+
     </form>
 
-    <div class="modal" id="avatarModal">
-        <div class="modal-content" style="text-align:center; max-width: 500px;">
-            <h3>Select Your Look</h3>
-            <p style="color:#666; margin-bottom:20px;">Choose an avatar to personalize your profile.</p>
+
+
+    <div class="modal" id="avatarModal" role="dialog" aria-modal="true" aria-labelledby="avatarModalTitle">
+
+        <div class="modal-content modal-content-centered">
+
+            <h3 id="avatarModalTitle">Select Your Look</h3>
+
+            <p class="modal-subtitle">Choose an avatar to personalize your profile.</p>
+
+
 
             <div id="avatarSelectionArea"></div>
 
-            <button class="btn btn-primary" style="width:100%; margin-top:20px;" data-action="saveMyAvatar">
+
+
+            <button type="button" class="btn btn-primary btn-full" data-action="saveMyAvatar">
+
                 Let's Go!
+
             </button>
+
         </div>
+
     </div>
 
-    <div id="loadingOverlay" class="loading-overlay">
-        <div class="spinner"></div>
+
+
+    <div id="loadingOverlay" class="loading-overlay" role="status" aria-live="polite" aria-busy="false">
+
+        <div class="spinner" aria-hidden="true"></div>
+
         <span>Just a moment...</span>
+
     </div>
+
+
 
     <template id="otpTemplate">
+
         <div id="otp-inputs" class="otp-container">
-            <input type="text" class="otp-field" maxlength="1">
-            <input type="text" class="otp-field" maxlength="1">
-            <input type="text" class="otp-field" maxlength="1">
-            <input type="text" class="otp-field" maxlength="1">
-            <input type="text" class="otp-field" maxlength="1">
-            <input type="text" class="otp-field" maxlength="1">
+
+            <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
+
+            <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
+
+            <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
+
+            <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
+
+            <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
+
+            <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
+
         </div>
+
     </template>
 
-    <button id="quickNoteBtn" class="quick-note-toggle" data-action="toggleQuickNote">📝</button>
+
+
+    <button type="button" id="quickNoteBtn" class="quick-note-toggle" data-action="toggleQuickNote" aria-label="Quick notes">📝</button>
+
+
 
     <div id="quickNoteContainer" class="quick-note-wrapper">
-    
-        <div class="quick-note-header" style="font-size:20px">
-            <div style="display:flex; gap:12px; align-items:center;">
-                <span style="cursor:pointer;" id="btnOpenNoteTable" title="Note list">☰</span>
+
+        <div class="quick-note-header quick-note-header-lg">
+
+            <div class="quick-note-header-left">
+
+                <span class="quick-note-icon-btn" id="btnOpenNoteTable" title="Note list" role="button" tabindex="0">☰</span>
+
                 <span>Quick Notes</span>
+
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <span style="cursor:pointer;" id="btnAddNote" title="New note">➕</span>
-                <span style="cursor:pointer;" data-action="toggleQuickNote">✕</span>
+
+            <div class="quick-note-header-right">
+
+                <span class="quick-note-icon-btn" id="btnAddNote" title="New note" role="button" tabindex="0">➕</span>
+
+                <span class="quick-note-icon-btn" data-action="toggleQuickNote" role="button" tabindex="0">✕</span>
+
             </div>
-        </div>
-    
-        <div id="noteHeader" title="Click for rename" style="padding: 8px 15px; background-color: rgba(0,0,0,0.03); border-bottom: 1px solid #fcd34d; font-weight: bold; font-size: 14px; color: #4b5563;">
-            <span id="currentNoteTitle">Loading...</span>
-        </div>
-    
-        <textarea id="quickNoteArea" placeholder="Write here..." maxlength="1000"></textarea>
-    
-        <div class="quick-note-footer">
-            <span id="saveStatus" style="opacity:0; transition:opacity 0.3s;">Saved ✅</span>
-            <span id="btnTrash" style="cursor:pointer;" title="Clear note">🧹 Clear</span>
+
         </div>
 
+
+
+        <div id="noteHeader" class="note-title-bar" title="Click for rename">
+
+            <span id="currentNoteTitle">Loading...</span>
+
+        </div>
+
+
+
+        <textarea id="quickNoteArea" placeholder="Write here..." maxlength="1000"></textarea>
+
+
+
+        <div class="quick-note-footer">
+
+            <span id="saveStatus" class="save-status">Saved ✅</span>
+
+            <span id="btnTrash" class="quick-note-icon-btn" title="Clear note" role="button" tabindex="0">🧹 Clear</span>
+
+        </div>
+
+
+
         <div id="noteListOverlay" class="note-list-overlay">
-            <div class="quick-note-header" style="font-size:20px; border-bottom: 1px solid #fcd34d;">
+
+            <div class="quick-note-header quick-note-header-lg note-list-header">
+
                 <span>My Notes</span>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <span style="cursor:pointer;" id="btnAddNote2" title="New note">➕</span>
-                    <span style="cursor:pointer;" id="btnCloseNoteTable" title="Close">✕</span>
+
+                <div class="quick-note-header-right">
+
+                    <span class="quick-note-icon-btn" id="btnAddNote2" title="New note" role="button" tabindex="0">➕</span>
+
+                    <span class="quick-note-icon-btn" id="btnCloseNoteTable" title="Close" role="button" tabindex="0">✕</span>
+
                 </div>
+
             </div>
-        
-            <div style="flex: 1; overflow-y: auto; padding: 10px;">
-                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 14px;">
-                    <tbody id="noteListTableBody">
-                    </tbody>
+
+
+
+            <div class="note-list-body">
+
+                <table class="note-list-table">
+
+                    <tbody id="noteListTableBody"></tbody>
+
                 </table>
+
             </div>
+
         </div>
 
     </div>
+
+
+
+    <div id="keyboardHints" class="keyboard-hints" aria-hidden="true">
+
+        <kbd>/</kbd> search · <kbd>N</kbd> new card · <kbd>Esc</kbd> close
+
+    </div>
+
 </body>
+
 </html>
+

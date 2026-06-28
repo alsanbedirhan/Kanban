@@ -52,6 +52,9 @@ namespace Kanban.Models
 
         [Required]
         public string turnstileToken { get; set; } = string.Empty;
+
+        /// <summary>"register" or "reset"</summary>
+        public string purpose { get; set; } = "register";
     }
     public class ChangePasswordViewModel
     {

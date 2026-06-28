@@ -1,6 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Repositories;
+using Kanban.Security;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -44,6 +45,11 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
                 }
+
+                desc = InputSanitizer.SanitizeRichText(desc);
+                highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
+                calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
+
                 return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor));
             }
             catch (Exception)
@@ -426,6 +432,10 @@ namespace Kanban.Services
                     return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
                 }
 
+                desc = InputSanitizer.SanitizeRichText(desc);
+                highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
+                calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
+
                 await _kanbanRepository.UpdateCard(userId, cardId, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor);
                 return ServiceResult.Ok();
             }
@@ -540,6 +550,11 @@ namespace Kanban.Services
                     return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
                 }
 
+                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                {
+                    return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
+                }
+
                 return ServiceResult<List<CommentResultModel>>.Ok(await _kanbanRepository.GetComments(cardId));
             }
             catch (Exception)
@@ -557,7 +572,7 @@ namespace Kanban.Services
                     return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
                 }
 
-                return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message));
+                return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message.Trim()));
             }
             catch (Exception)
             {

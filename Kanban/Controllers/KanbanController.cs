@@ -2,10 +2,12 @@
 using Kanban.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Kanban.Controllers
 {
     [Authorize]
+    [EnableRateLimiting("api")]
     public class KanbanController : Controller
     {
         private readonly IKanbanService _kanbanService;

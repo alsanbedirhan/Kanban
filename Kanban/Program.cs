@@ -1,13 +1,16 @@
 using Kanban;
 using Kanban.Entities;
 using Kanban.Repositories;
+using Kanban.Security;
 using Kanban.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Rewrite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -38,7 +41,20 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddHttpClient<ITurnstileService, TurnstileService>();
 
+builder.Services.AddSingleton<IOtpCodeProtector, OtpCodeProtector>();
+
 builder.Services.AddMemoryCache();
+
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+}
+Directory.CreateDirectory(dataProtectionKeysPath);
+
+builder.Services.AddDataProtection()
+    .SetApplicationName("Kanflow")
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -80,6 +96,16 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    options.AddPolicy("api", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientPartitionKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
@@ -131,7 +157,35 @@ builder.Services.AddAuthentication(options =>
             }
 
             var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
-            var isValid = await securityService.IsUserValidAsync(int.Parse(userIdClaim.Value), stampClaim.Value);
+            if (!long.TryParse(userIdClaim.Value, out var userId))
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                context.HttpContext.DeleteCookies();
+                return;
+            }
+
+            bool isValid;
+            try
+            {
+                isValid = await securityService.IsUserValidAsync(userId, stampClaim.Value);
+            }
+            catch
+            {
+                var cache = context.HttpContext.RequestServices.GetRequiredService<IMemoryCache>();
+                var cacheKey = $"SECURITY:{userId}";
+                if (cache.TryGetValue(cacheKey, out string? cachedStamp)
+                    && !string.IsNullOrEmpty(cachedStamp)
+                    && cachedStamp == stampClaim.Value)
+                {
+                    return;
+                }
+
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                context.HttpContext.DeleteCookies();
+                return;
+            }
 
             if (!isValid)
             {
@@ -209,7 +263,7 @@ app.Use(async (context, next) =>
         csp.Append(" ws://localhost:* http://localhost:*");
     }
     csp.Append("; ");
-    csp.Append("img-src 'self' data: blob: https:; ");
+    csp.Append("img-src 'self' data: blob:; ");
     csp.Append("font-src 'self' data:; ");
     csp.Append("object-src 'none'; ");
     csp.Append("base-uri 'self'; ");
@@ -223,6 +277,8 @@ app.Use(async (context, next) =>
     context.Response.Headers.ContentSecurityPolicy = csp.ToString();
     context.Response.Headers.XContentTypeOptions = "nosniff";
     context.Response.Headers.XFrameOptions = "SAMEORIGIN";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
 
     await next();
 });

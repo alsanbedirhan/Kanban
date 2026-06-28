@@ -12,21 +12,36 @@ const AppState = {
 
     lastSyncTime: null,
     syncInterval: null,
+    searchQuery: '',
+    authFailureCount: 0,
 
     reset() {
-        this.isAuthenticated = false;
-        this.currentUser = null;
-        this.currentBoardId = null;
-        this.boards = [];
-        this.currentColumns = [];
-        this.isDragging = false;
-        this.stopPolling();
-        renderBoardList();
-        renderColumns([]);
-        deleteAllCookies();
-        QuickNoteState.reset();
+        clearSessionState();
     }
 };
+
+function clearSessionState() {
+    AppState.isAuthenticated = false;
+    AppState.currentUser = null;
+    AppState.currentBoardId = null;
+    AppState.boards = [];
+    AppState.currentColumns = [];
+    AppState.isDragging = false;
+    AppState.searchQuery = '';
+    AppState.stopPolling();
+    renderBoardList();
+    renderColumns([]);
+    QuickNoteState.reset();
+}
+
+function deleteAppCookies() {
+    const names = ['XSRF-TOKEN', 'Kanflow.Antiforgery', 'Kanflow.Auth'];
+    const expires = 'expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    names.forEach(name => {
+        document.cookie = `${name}=;${expires};path=/;SameSite=Strict`;
+        document.cookie = `${name}=;${expires};path=/;SameSite=Strict;Secure`;
+    });
+}
 
 function escapeHtml(unsafe) {
     if (!unsafe) return "";
@@ -44,14 +59,116 @@ function stripHtml(html) {
     return doc.body.textContent || "";
 }
 
+function swalWidth(desktop = '650px') {
+    return window.innerWidth <= 768 ? undefined : desktop;
+}
+
+function showToast(title, icon = 'info', timer = 2500) {
+    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer });
+    Toast.fire({ icon, title });
+}
+
+function cardMatchesSearch(card, query) {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    const desc = stripHtml(card.desc || '').toLowerCase();
+    const assignee = (card.assigneeName || '').toLowerCase();
+    return desc.includes(q) || assignee.includes(q);
+}
+
+function filterColumnsForSearch(columns, query) {
+    if (!query) return columns;
+    return columns.map(col => ({
+        ...col,
+        cards: col.cards.filter(c => cardMatchesSearch(c, query)),
+    }));
+}
+
+function getTurnstileToken() {
+    return document.querySelector('#loginModal [name="cf-turnstile-response"]')?.value
+        || document.querySelector('#registerModal [name="cf-turnstile-response"]')?.value
+        || null;
+}
+
+function isSafeHexColor(color) {
+    return /^#[0-9A-Fa-f]{6}$/.test(color || '');
+}
+
+function setupOfflineDetection() {
+    if (!navigator.onLine) showToast('You are offline', 'warning', 4000);
+    window.addEventListener('offline', () => showToast('Connection lost', 'error', 4000));
+    window.addEventListener('online', () => showToast('Back online', 'success', 2000));
+}
+
+function focusBoardSearch() {
+    const wrap = document.getElementById('boardSearchWrap');
+    const toggle = document.getElementById('boardSearchToggleBtn');
+    if (wrap && window.matchMedia('(max-width: 768px)').matches) {
+        wrap.classList.add('is-open');
+        if (toggle) toggle.setAttribute('aria-expanded', 'true');
+    }
+    const input = document.getElementById('boardSearchInput');
+    if (input) { input.focus(); input.select(); }
+}
+
+function toggleBoardSearch() {
+    const wrap = document.getElementById('boardSearchWrap');
+    const toggle = document.getElementById('boardSearchToggleBtn');
+    if (!wrap) return;
+
+    const isOpen = wrap.classList.toggle('is-open');
+    if (toggle) toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+    if (isOpen) {
+        const input = document.getElementById('boardSearchInput');
+        if (input) setTimeout(() => input.focus(), 50);
+    }
+}
+
+function handleBoardSearchInput(e) {
+    AppState.searchQuery = (e.target.value || '').trim();
+    const clearBtn = document.getElementById('boardSearchClear');
+    if (clearBtn) clearBtn.hidden = !AppState.searchQuery;
+    renderColumns(AppState.currentColumns);
+}
+
+function clearBoardSearch() {
+    const input = document.getElementById('boardSearchInput');
+    if (input) input.value = '';
+    AppState.searchQuery = '';
+    const clearBtn = document.getElementById('boardSearchClear');
+    if (clearBtn) clearBtn.hidden = true;
+    renderColumns(AppState.currentColumns);
+}
+
+function shortcutNewCard() {
+    if (!checkAuth() || !AppState.currentBoardId) return;
+    const firstCol = AppState.currentColumns[0];
+    if (firstCol) openCardModal(firstCol.id);
+    else Swal.fire('Info', 'Add a column first.', 'info');
+}
+
+function cloneColumnsState() {
+    return AppState.currentColumns.map(col => ({
+        ...col,
+        cards: col.cards.map(c => ({ ...c })),
+    }));
+}
+
 function showLoading() {
     const el = document.getElementById('loadingOverlay');
-    if (el) el.style.display = 'flex';
+    if (el) {
+        el.style.display = 'flex';
+        el.setAttribute('aria-busy', 'true');
+    }
 }
 
 function hideLoading() {
     const el = document.getElementById('loadingOverlay');
-    if (el) el.style.display = 'none';
+    if (el) {
+        el.style.display = 'none';
+        el.setAttribute('aria-busy', 'false');
+    }
 }
 
 function getXsrfToken() {
@@ -111,10 +228,19 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
         }
 
         if (response.status === 401 || response.status === 403) {
+            if (isPooling) {
+                AppState.authFailureCount++;
+                if (AppState.authFailureCount < 2) {
+                    throw new Error('Session expired or unauthorized.');
+                }
+                AppState.authFailureCount = 0;
+            }
             console.warn('Session expired or unauthorized. Force clearing and redirecting...');
             handleLogout(true, 'Session expired. Please log in again.');
             throw new Error('Session expired or unauthorized.');
         }
+
+        AppState.authFailureCount = 0;
 
         if (!response.ok) {
             let errorMsg = `HTTP error: ${response.status}`;
@@ -158,18 +284,19 @@ AppState.startPolling = function () {
         if (sidebar && sidebar.classList.contains('open')) return;
 
         const container = document.getElementById('quickNoteContainer');
-        if (container.classList.contains('active')) return;
+        if (container?.classList.contains('active')) return;
 
         try {
             const res = await apiRequest(`/Kanban/CheckBoardVersion?boardId=${this.currentBoardId}`, {}, false, true);
+            if (!res?.success || !res?.data) return;
+
             const serverTime = new Date(res.data.lastUpdate).getTime();
             const localTime = new Date(res.data.now).getTime();
 
             if (serverTime > localTime) {
-                console.log("New changes detected! Refreshing...");
                 loadBoardData(false);
             }
-            checkNewUpdates();
+            checkNewUpdates(true);
         } catch (e) {
             console.warn("Polling error (transient):", e);
         }
@@ -183,10 +310,10 @@ AppState.stopPolling = function () {
     }
 };
 
-async function checkNewUpdates() {
+async function checkNewUpdates(isPolling = false) {
     if (!AppState.isAuthenticated) return;
     try {
-        const res = await apiRequest('/Kanban/CheckUpdates', {}, false);
+        const res = await apiRequest('/Kanban/CheckUpdates', {}, false, isPolling);
         const badge = document.getElementById('nav-badge');
         if (!badge) return;
 
@@ -218,10 +345,10 @@ async function fetchCurrentUser() {
             }
             initQuickNotes();
         } else {
-            AppState.reset();
+            clearSessionState();
         }
     } catch {
-        AppState.reset();
+        clearSessionState();
     }
     updateAuthUI();
 }
@@ -520,8 +647,8 @@ async function openChangePasswordModal() {
                 Swal.showValidationMessage('Please fill all fields.');
                 return false;
             }
-            if (newPassword.length < 6) {
-                Swal.showValidationMessage('Password must be at least 6 characters.');
+            if (newPassword.length < 8) {
+                Swal.showValidationMessage('Password must be at least 8 characters.');
                 return false;
             }
             if (newPassword !== confPass) {
@@ -547,9 +674,9 @@ async function openChangePasswordModal() {
                     icon: 'success',
                     confirmButtonText: 'Login'
                 });
-                handleLogout(false);
-                openLoginModal(temp);
-            } else {
+                sessionStorage.setItem('kanflow:prefillEmail', temp);
+                await handleLogout(true);
+            } else if (res) {
                 await Swal.fire('Error', res.errorMessage || 'Failed to update password.', 'error');
                 openChangePasswordModal();
             }
@@ -686,11 +813,14 @@ function updateAuthUI() {
         }, 0);
 
     } else {
-        if (boardHeader) boardHeader.style.display = "none";
+        if (boardHeader) {
+            boardHeader.classList.add('u-hidden');
+            boardHeader.style.display = 'none';
+        }
         document.getElementById("boardHeaderTitle").textContent = "";
         document.getElementById("board").innerHTML = "";
 
-        area.innerHTML = `<button id="header-login-btn" class="btn btn-primary">🔐</button>`;
+        area.innerHTML = `<button id="header-login-btn" class="btn btn-primary btn-login-header">Login</button>`;
         authSection.innerHTML = `
             <button id="sidebar-login-btn" class="btn btn-primary" style="width:100%; margin-bottom:10px;">Login</button>
             <button id="sidebar-register-btn" class="btn btn-secondary" style="width:100%;">Register</button>
@@ -712,9 +842,10 @@ function switchToLogin() { closeRegisterModal(); openLoginModal(); }
 
 function openLoginModal(prefillEmail = null) {
     const sidebar = document.getElementById('sidebar');
-    if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
+    if (sidebar?.classList.contains('open')) toggleSidebar();
     document.getElementById('loginModal').classList.add('active');
     if (prefillEmail) document.getElementById('loginEmail').value = prefillEmail;
+    setTimeout(() => document.getElementById('loginEmail')?.focus(), 50);
 }
 
 function closeLoginModal() {
@@ -725,9 +856,10 @@ function closeLoginModal() {
 
 function openRegisterModal(prefillEmail = null) {
     const sidebar = document.getElementById('sidebar');
-    if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
+    if (sidebar?.classList.contains('open')) toggleSidebar();
     document.getElementById('registerModal').classList.add('active');
     if (prefillEmail) document.getElementById('registerEmail').value = prefillEmail;
+    setTimeout(() => document.getElementById('registerFullName')?.focus(), 50);
 }
 
 function closeRegisterModal() {
@@ -748,6 +880,8 @@ async function handleLogin() {
             body: JSON.stringify({ email, password })
         });
 
+        if (!response) return;
+
         if (response.success) {
             await fetchCurrentUser();
             closeLoginModal();
@@ -762,7 +896,9 @@ async function handleLogin() {
         } else {
             Swal.fire('Error', response.errorMessage || 'Login failed', 'error');
         }
-    } catch { }
+    } catch (err) {
+        console.error('Login error:', err);
+    }
 }
 
 function showPrivacyPolicy(e) {
@@ -812,7 +948,7 @@ async function handleRegister() {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) return Swal.fire('Error', 'Invalid email address', 'error');
-    if (password.length < 6) return Swal.fire('Error', 'Password must be at least 6 characters', 'error');
+    if (password.length < 8) return Swal.fire('Error', 'Password must be at least 8 characters', 'error');
     if (password !== confirmPassword) return Swal.fire('Error', 'Passwords do not match', 'error');
 
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*(),.?:{}|<>]/.test(password)) {
@@ -829,12 +965,12 @@ async function handleRegister() {
     try {
         const verify = await apiRequest('/Auth/VerifyWork', {
             method: 'POST',
-            body: JSON.stringify({ email, turnstileToken })
+            body: JSON.stringify({ email, turnstileToken, purpose: 'register' })
         });
 
-        if (!verify.success) {
+        if (!verify?.success) {
             if (window.turnstile) window.turnstile.reset();
-            return Swal.fire('Error', verify.errorMessage || 'Failed to send verification code', 'error');
+            return Swal.fire('Error', verify?.errorMessage || 'Failed to send verification code', 'error');
         }
 
         let isRegistered = false;
@@ -896,6 +1032,8 @@ async function handleRegister() {
                 body: JSON.stringify({ fullName, email, password, otpCode })
             });
 
+            if (!response) break;
+
             if (response.success) {
                 isRegistered = true;
                 await fetchCurrentUser();
@@ -909,7 +1047,9 @@ async function handleRegister() {
                 });
                 loadBoards();
             } else {
-                await Swal.fire('Registration Failed', response.errorMessage || 'Invalid code, please try again.', 'error');
+                const msg = response.errorMessage || 'Registration failed.';
+                await Swal.fire('Registration Failed', msg, 'error');
+                if (msg.toLowerCase().includes('already exists')) break;
             }
         }
     } catch (error) {
@@ -920,13 +1060,13 @@ async function handleRegister() {
 }
 
 async function handleForgotPassword() {
-    closeLoginModal();
-    const turnstileInput = document.querySelector('[name="cf-turnstile-response"]');
-    const turnstileToken = turnstileInput ? turnstileInput.value : null;
+    const turnstileToken = getTurnstileToken();
 
     if (!turnstileToken) {
-        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please verify that you are human.' });
+        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please complete the captcha in the login window.' });
     }
+
+    closeLoginModal();
 
     const { value: email, dismiss: emailDismiss } = await Swal.fire({
         title: 'Forgot Password',
@@ -955,12 +1095,12 @@ async function handleForgotPassword() {
     try {
         const verify = await apiRequest('/Auth/VerifyWork', {
             method: 'POST',
-            body: JSON.stringify({ email, turnstileToken })
+            body: JSON.stringify({ email, turnstileToken, purpose: 'reset' })
         });
 
-        if (!verify.success) {
+        if (!verify?.success) {
             if (window.turnstile) window.turnstile.reset();
-            return Swal.fire('Error', verify.errorMessage || 'Failed to send verification code', 'error');
+            return Swal.fire('Error', verify?.errorMessage || 'Failed to send verification code', 'error');
         }
 
         const containerStyle = `position:relative; max-width:100%; width:18em; margin:1em auto; display:flex; align-items:center;`;
@@ -1060,8 +1200,8 @@ async function handleForgotPassword() {
                     Swal.showValidationMessage('Please fill the password fields');
                     return false;
                 }
-                if (pass.length < 6) {
-                    Swal.showValidationMessage('Password must be at least 6 characters');
+                if (pass.length < 8) {
+                    Swal.showValidationMessage('Password must be at least 8 characters');
                     return false;
                 }
                 if (pass !== confirmPass) {
@@ -1109,49 +1249,60 @@ async function handleForgotPassword() {
     }
 }
 
-async function handleLogout(refresh = true, message = '') {
-    AppState.reset();
-    updateAuthUI();
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
+async function postLogoutRequest() {
     try {
-        await fetch('/Auth/Logout', {
-            method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-XSRF-TOKEN': getXsrfToken() || ''
-            },
-            credentials: 'same-origin'
-        });
+        await fetch('/Home/GetToken', { credentials: 'same-origin' });
+    } catch (err) {
+        console.warn('Token refresh before logout failed:', err);
+    }
+
+    const token = getXsrfToken();
+    const response = await fetch('/Auth/Logout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            'X-XSRF-TOKEN': token || ''
+        },
+        credentials: 'same-origin'
+    });
+    return response.ok;
+}
+
+async function handleLogout(refresh = true, message = '') {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar?.classList.contains('open')) toggleSidebar();
+
+    try {
+        await postLogoutRequest();
     } catch (error) {
-        console.warn("Logout API error (forcing exit):", error);
-    } finally {
-        if (refresh) {
-            if (message.length > 0) {
-                await Swal.fire({
-                    title: 'Session Expired',
-                    text: message,
-                    icon: 'warning',
-                    timer: 1500,
-                    showConfirmButton: false
-                });
-                setTimeout(() => {
-                    window.location.replace('/?logout=true&t=' + new Date().getTime());
-                }, 100);
-            }
-            else {
-                await Swal.fire({
-                    title: 'Logged Out',
-                    text: 'Logged out successfully.',
-                    icon: 'success',
-                    timer: 500,
-                    showConfirmButton: false
-                });
-                setTimeout(() => {
-                    window.location.replace('/?logout=true&t=' + new Date().getTime());
-                }, 600);
-            }
+        console.warn('Logout API error (continuing cleanup):', error);
+    }
+
+    clearSessionState();
+    deleteAppCookies();
+    updateAuthUI();
+
+    if (refresh) {
+        if (message.length > 0) {
+            await Swal.fire({
+                title: 'Session Expired',
+                text: message,
+                icon: 'warning',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        } else {
+            await Swal.fire({
+                title: 'Logged Out',
+                text: 'Logged out successfully.',
+                icon: 'success',
+                timer: 500,
+                showConfirmButton: false
+            });
         }
+        window.location.replace('/?logout=true&t=' + new Date().getTime());
     }
 }
 
@@ -1170,18 +1321,32 @@ function confirmLogout() {
 }
 
 function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-    document.getElementById('sidebarOverlay').classList.toggle('active');
-    if (window.innerWidth > 768) document.body.classList.toggle('sidebar-open');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const menuBtn = document.querySelector('.menu-toggle');
+    const isOpen = sidebar.classList.toggle('open');
+    overlay.classList.toggle('active', isOpen);
+    if (window.innerWidth > 768) document.body.classList.toggle('sidebar-open', isOpen);
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (overlay) overlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
 }
 
 async function loadBoards() {
     try {
         const res = await apiRequest('/Kanban/GetBoards');
+        if (!res?.success || !res.data) return;
+
         AppState.boards = res.data;
         renderBoardList();
-        if (AppState.boards.length > 0 && !AppState.currentBoardId) {
-            selectBoard(AppState.boards[0].id);
+
+        if (AppState.boards.length === 0) return;
+
+        const savedBoardId = Number(localStorage.getItem('kanflow:lastBoardId'));
+        const hasSavedBoard = savedBoardId && AppState.boards.some(b => b.id === savedBoardId);
+        const targetId = hasSavedBoard ? savedBoardId : AppState.boards[0].id;
+
+        if (!AppState.currentBoardId || AppState.currentBoardId !== targetId) {
+            selectBoard(targetId);
         }
     } catch (e) {
         console.error('Failed to load boards:', e);
@@ -1189,9 +1354,13 @@ async function loadBoards() {
 }
 
 function renderBoardList() {
+    const boardHeader = document.getElementById('boardHeader');
     if (!AppState.isAuthenticated) {
-        document.getElementById("boardHeader").style.display = "none";
-        document.getElementById("boardHeaderTitle").textContent = "";
+        if (boardHeader) {
+            boardHeader.classList.add('u-hidden');
+            boardHeader.style.display = 'none';
+        }
+        document.getElementById('boardHeaderTitle').textContent = '';
     }
 
     const list = document.getElementById('boardList');
@@ -1234,10 +1403,11 @@ function renderBoardList() {
 
 async function selectBoard(id) {
     const sidebar = document.getElementById('sidebar');
-    if (sidebar.classList.contains('open')) toggleSidebar();
+    if (sidebar?.classList.contains('open')) toggleSidebar();
 
     AppState.stopPolling();
     AppState.currentBoardId = id;
+    localStorage.setItem('kanflow:lastBoardId', String(id));
     renderBoardList();
     await loadBoardData();
     AppState.startPolling();
@@ -1281,7 +1451,7 @@ function createCardHtml(card, colId, currentUserId) {
         const diffTime = dueDate - today;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         if (diffDays <= card.warningDays && diffDays >= 0) {
-            cardBgColor = card.highlightColor;
+            cardBgColor = isSafeHexColor(card.highlightColor) ? card.highlightColor : '#ffffff';
         } else if (diffDays < 0) {
             cardBgColor = '#fee2e2';
         }
@@ -1298,15 +1468,9 @@ function createCardHtml(card, colId, currentUserId) {
         : `<span class="card-avatar-empty" title="Unassigned">👤</span>`;
 
     const moveButtonsHtml = isLocked ? '' : `
-        <div style="display:flex; flex-direction:column; margin-right:6px; justify-content:center;">
-            <button class="move-card-top-btn" data-card-id="${card.id}" data-col-id="${colId}" 
-                    title="Move to Top" 
-                    style="border:none; background:transparent; cursor:pointer; font-size:10px; line-height:10px; padding:1px; color:#cbd5e0; transition:color 0.2s;"
-                    onmouseover="this.style.color='#4a5568'" onmouseout="this.style.color='#cbd5e0'">▲</button>
-            <button class="move-card-bottom-btn" data-card-id="${card.id}" data-col-id="${colId}" 
-                    title="Move to Bottom" 
-                    style="border:none; background:transparent; cursor:pointer; font-size:10px; line-height:10px; padding:1px; color:#cbd5e0; transition:color 0.2s;"
-                    onmouseover="this.style.color='#4a5568'" onmouseout="this.style.color='#cbd5e0'">▼</button>
+        <div class="card-move-buttons">
+            <button class="move-card-top-btn card-action-btn" data-card-id="${card.id}" data-col-id="${colId}" title="Move to Top" type="button">▲</button>
+            <button class="move-card-bottom-btn card-action-btn" data-card-id="${card.id}" data-col-id="${colId}" title="Move to Bottom" type="button">▼</button>
         </div>
     `;
 
@@ -1321,7 +1485,7 @@ function createCardHtml(card, colId, currentUserId) {
                     ${lockIcon}
                     <span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString('tr-TR')}</span>
                 </div>
-                <span class="card-delete-btn" data-card-id="${card.id}" style="cursor:pointer; font-weight:bold; font-size:16px; color:#cbd5e0;" onmouseover="this.style.color='#e53e3e'" onmouseout="this.style.color='#cbd5e0'">×</span>
+                <button type="button" class="card-delete-btn" data-card-id="${card.id}" aria-label="Delete card">×</button>
             </div>
 
             <p class="card-desc-truncate">${escapeHtml(stripHtml(card.desc))}</p>
@@ -1354,10 +1518,13 @@ async function loadBoardData(showLoad = true) {
         const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
         if (currentBoard) {
             const header = document.getElementById("boardHeader");
-            if (header) header.style.display = "flex";
+            if (header) {
+                header.classList.remove('u-hidden');
+                header.style.display = "flex";
+            }
             document.getElementById("boardHeaderTitle").textContent = currentBoard.title;
         }
-        if (kanflowCalendar && document.getElementById('calendar').style.display === 'flex') {
+        if (kanflowCalendar && !document.getElementById('calendar')?.classList.contains('u-hidden')) {
             kanflowCalendar.refetchEvents();
         }
     } catch (e) {
@@ -1564,7 +1731,7 @@ async function openManageUsersModal(boardId) {
         Swal.fire({
             title: 'Manage Users',
             html: membersHtml,
-            width: '650px',
+            width: swalWidth('650px'),
             showCancelButton: true,
             confirmButtonText: '➕ Invite User',
             cancelButtonText: 'Close',
@@ -1722,7 +1889,7 @@ function changeView(e) {
         btn = e.target.closest('button');
     }
 
-    const isCalendarHidden = calendarEl.style.display === 'none' || calendarEl.style.display === '';
+    const isCalendarHidden = calendarEl.classList.contains('u-hidden') || calendarEl.style.display === 'none' || calendarEl.style.display === '';
 
     if (isCalendarHidden) {
         openCalendarView();
@@ -1730,14 +1897,17 @@ function changeView(e) {
         if (btn) {
             btn.innerHTML = '📋';
             btn.title = 'Board View';
+            btn.setAttribute('aria-label', 'Board view');
         }
     } else {
+        calendarEl.classList.add('u-hidden');
         calendarEl.style.display = 'none';
         boardEl.style.display = '';
 
         if (btn) {
             btn.innerHTML = '📅';
             btn.title = 'Calendar View';
+            btn.setAttribute('aria-label', 'Calendar view');
         }
     }
 }
@@ -1747,6 +1917,7 @@ function openCalendarView() {
     const calendarEl = document.getElementById('calendar');
 
     boardEl.style.display = 'none';
+    calendarEl.classList.remove('u-hidden');
     calendarEl.style.display = 'flex';
 
     setTimeout(() => {
@@ -1796,7 +1967,8 @@ function openCalendarView() {
 }
 function renderColumns(columns) {
     const boardDiv = document.getElementById('board');
-    if (!columns || columns.length === 0) {
+    const displayColumns = filterColumnsForSearch(columns, AppState.searchQuery);
+    if (!displayColumns || displayColumns.length === 0) {
         boardDiv.innerHTML = '';
         return;
     }
@@ -1818,7 +1990,7 @@ function renderColumns(columns) {
         }
     }
 
-    boardDiv.innerHTML = columns.map(col => {
+    boardDiv.innerHTML = displayColumns.map(col => {
         const deleteBtnHtml = isOwner
             ? `<button class="col-delete-btn btn" data-col-id="${col.id}" style="padding:5px 10px;" title="Delete Column">🗑️</button>`
             : `<button class="btn" style="padding:5px 10px; opacity:0.3; cursor:not-allowed;" disabled title="Only owner can delete">🗑️</button>`;
@@ -2125,6 +2297,7 @@ function initSortable() {
 
                 if (oldColumnId === newColumnId && evt.oldIndex === evt.newIndex) return;
 
+                const snapshot = cloneColumnsState();
                 const item = evt.item;
                 const cardId = evt.item.dataset.cardId;
                 const newIndex = evt.newIndex;
@@ -2169,14 +2342,17 @@ function initSortable() {
                 }
 
                 try {
-                    await apiRequest('/Kanban/MoveCard', {
+                    const res = await apiRequest('/Kanban/MoveCard', {
                         method: 'POST',
                         body: JSON.stringify({ boardId: AppState.currentBoardId, cardId, newColumnId, newOrder: newIndex + 1 })
                     }, false);
+                    if (!res?.success) throw new Error(res?.errorMessage || 'Move failed');
                 } catch (error) {
                     console.error(error);
+                    AppState.currentColumns = snapshot;
+                    renderColumns(snapshot);
+                    initSortable();
                     Swal.fire('Error', 'Card could not be moved.', 'error');
-                    loadBoardData();
                 }
             }
         });
@@ -2331,7 +2507,7 @@ async function openCardModal(columnId, cardId = null) {
 
     const { value: formValues, isDenied } = await Swal.fire({
         title: defaults.title,
-        width: '650px',
+        width: swalWidth('650px'),
         html: `
             <div style="text-align:left; display:flex; flex-direction:column; gap:15px;">
                 <div>
@@ -2644,13 +2820,75 @@ async function deleteComment(commentId, cardId) {
 }
 
 function deleteAllCookies() {
-    const cookies = document.cookie.split(";");
-    for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i];
-        const eqPos = cookie.indexOf("=");
-        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-        document.cookie = name.trim() + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-    }
+    deleteAppCookies();
+}
+
+function setupModalsAndKeyboard() {
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target !== modal) return;
+            if (modal.id === 'loginModal') closeLoginModal();
+            else if (modal.id === 'registerModal') closeRegisterModal();
+            else modal.classList.remove('active');
+        });
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.target.matches('input, textarea, select, [contenteditable="true"]')) {
+            if (e.key === 'Escape') e.target.blur();
+            return;
+        }
+        if (document.body.classList.contains('swal2-shown')) return;
+
+        if (e.key === 'Escape') {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar?.classList.contains('open')) {
+                toggleSidebar();
+                e.preventDefault();
+                return;
+            }
+            if (document.getElementById('loginModal')?.classList.contains('active')) {
+                closeLoginModal();
+                return;
+            }
+            if (document.getElementById('registerModal')?.classList.contains('active')) {
+                closeRegisterModal();
+                return;
+            }
+            document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
+            return;
+        }
+
+        if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            focusBoardSearch();
+            return;
+        }
+
+        if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.metaKey) {
+            if (!AppState.isAuthenticated || !AppState.currentBoardId) return;
+            e.preventDefault();
+            shortcutNewCard();
+        }
+    });
+}
+
+function setupVisibilitySync() {
+    document.addEventListener('visibilitychange', async () => {
+        if (document.hidden) {
+            AppState.stopPolling();
+            return;
+        }
+        if (!AppState.isAuthenticated) return;
+
+        await fetchCurrentUser();
+        if (!AppState.isAuthenticated || !AppState.currentBoardId) return;
+
+        AppState.authFailureCount = 0;
+        AppState.startPolling();
+        loadBoardData(false);
+        checkNewUpdates(true);
+    });
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -2697,7 +2935,20 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    setupModalsAndKeyboard();
+    setupVisibilitySync();
+    setupOfflineDetection();
+
+    const searchInput = document.getElementById('boardSearchInput');
+    if (searchInput) searchInput.addEventListener('input', handleBoardSearchInput);
+
     await fetchCurrentUser();
+
+    const prefillEmail = sessionStorage.getItem('kanflow:prefillEmail');
+    if (prefillEmail) {
+        sessionStorage.removeItem('kanflow:prefillEmail');
+        openLoginModal(prefillEmail);
+    }
 
     if (AppState.isAuthenticated && AppState.currentUser) {
         loadBoards();
@@ -3088,6 +3339,7 @@ let selectedAvatarTemp = "Felix";
 
 function getAvatarPath(seed) {
     if (seed === 'def') return '/avatars/Felix.svg';
+    if (!AVATAR_OPTIONS.includes(seed)) return '/avatars/Felix.svg';
     return `/avatars/${seed}.svg`;
 }
 
@@ -3188,3 +3440,21 @@ async function saveMyAvatar() {
         Swal.fire('Error', 'Could not save avatar', 'error');
     }
 }
+
+Object.assign(window, {
+    toggleSidebar,
+    openNewBoardModal,
+    clearBoardSearch,
+    toggleBoardSearch,
+    changeView,
+    openNewColumnModal,
+    handleForgotPassword,
+    closeLoginModal,
+    switchToRegister,
+    showPrivacyPolicy,
+    showUserAgreement,
+    closeRegisterModal,
+    switchToLogin,
+    saveMyAvatar,
+    toggleQuickNote,
+});
