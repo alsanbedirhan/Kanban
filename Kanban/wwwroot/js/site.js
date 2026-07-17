@@ -398,7 +398,7 @@ function checkAuth() {
         showCancelButton: true,
         confirmButtonText: 'Login',
         cancelButtonText: 'Cancel',
-        confirmButtonColor: '#667eea'
+        confirmButtonColor: '#289f51'
     }).then((result) => {
         if (result.isConfirmed) openLoginModal();
     });
@@ -414,7 +414,7 @@ async function openNotifications() {
                 title: 'Notifications',
                 text: 'No new notifications.',
                 icon: 'info',
-                confirmButtonColor: '#667eea'
+                confirmButtonColor: '#289f51'
             }).then(() => openProfileMenu());
         }
 
@@ -632,7 +632,7 @@ async function handleInviteResponse(inviteId, isAccepted) {
 async function openChangePasswordModal() {
     if (!checkAuth()) return;
 
-    const { value: passwordData } = await Swal.fire(formSwalOptions({
+    const { value: passwordData, isDismissed } = await Swal.fire(formSwalOptions({
         title: 'Change Password',
         html: `
             ${swalPasswordField('swal-old-pass', 'Current Password')}
@@ -662,6 +662,11 @@ async function openChangePasswordModal() {
             return { currentPassword, newPassword };
         }
     }));
+
+    if (isDismissed) {
+        openProfileMenu();
+        return;
+    }
 
     if (passwordData) {
         try {
@@ -705,7 +710,7 @@ function openProfileMenu() {
     Swal.fire({
         html: `
             <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px;">
-                <img src="${avatar}" style="width:70px; height:70px; border-radius:50%; border:3px solid #667eea; margin-bottom:10px;">
+                <img src="${avatar}" style="width:70px; height:70px; border-radius:50%; border:3px solid #289f51; margin-bottom:10px;">
                 <h3 style="margin:0; font-size:18px; color:#2d3748;">${name}</h3>
                 <span style="font-size:13px; color:#718096;">${email}</span>
             </div>
@@ -788,7 +793,7 @@ function updateAuthUI() {
                 wrap.addEventListener('click', () => openProfileMenu());
                 img.addEventListener('mouseenter', () => {
                     img.style.transform = 'scale(1.05)';
-                    img.style.borderColor = '#667eea';
+                    img.style.borderColor = '#289f51';
                 });
                 img.addEventListener('mouseleave', () => {
                     img.style.transform = 'scale(1)';
@@ -1382,7 +1387,7 @@ async function selectBoard(id) {
     AppState.currentBoardId = id;
     localStorage.setItem('kanflow:lastBoardId', String(id));
     renderBoardList();
-    await loadBoardData();
+    await loadBoardData(true, true);
     AppState.startPolling();
 }
 
@@ -1476,7 +1481,7 @@ function createCardHtml(card, colId, currentUserId) {
     `;
 }
 
-async function loadBoardData(showLoad = true) {
+async function loadBoardData(showLoad = true, animate = false) {
     if (!AppState.currentBoardId) return;
     try {
         const res = await apiRequest(`/Kanban/GetBoard?boardId=${AppState.currentBoardId}`, {}, showLoad);
@@ -1486,7 +1491,7 @@ async function loadBoardData(showLoad = true) {
         AppState.currentColumns = columnsRes;
         AppState.lastSyncTime = timeRes;
 
-        renderColumns(columnsRes);
+        renderColumns(columnsRes, animate);
 
         const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
         if (currentBoard) {
@@ -1938,11 +1943,18 @@ function openCalendarView() {
         kanflowCalendar.render();
     }, 10);
 }
-function renderColumns(columns) {
+function renderColumns(columns, animate = false) {
     const boardDiv = document.getElementById('board');
     const displayColumns = filterColumnsForSearch(columns, AppState.searchQuery);
     if (!displayColumns || displayColumns.length === 0) {
-        boardDiv.innerHTML = '';
+        boardDiv.classList.remove('cards-animate');
+        boardDiv.innerHTML = AppState.currentBoardId
+            ? `<div class="board-empty">
+                    <div class="board-empty-icon">🗂️</div>
+                    <h2 class="board-empty-title">This board is empty</h2>
+                    <p class="board-empty-text">Create your first column with the ➕ button in the top bar to start organizing your tasks.</p>
+               </div>`
+            : '';
         return;
     }
 
@@ -1968,8 +1980,10 @@ function renderColumns(columns) {
             ? `<button class="col-delete-btn btn" data-col-id="${col.id}" style="padding:5px 10px;" title="Delete Column">🗑️</button>`
             : `<button class="btn" style="padding:5px 10px; opacity:0.3; cursor:not-allowed;" disabled title="Only owner can delete">🗑️</button>`;
 
+        const isSearching = !!AppState.searchQuery;
         const totalCards = col.totalCards || col.cards.length;
-        const showLoadMore = totalCards > col.cards.length;
+        const showLoadMore = !isSearching && totalCards > col.cards.length;
+        const cardCountLabel = isSearching ? col.cards.length : totalCards;
 
         const loadMoreHtml = showLoadMore
             ? `<button class="load-more-btn btn btn-secondary" data-col-id="${col.id}" style="opacity: 0; pointer-events: none; transition: opacity 0.3s ease; width:100%; font-size:12px; padding:5px; border-radius:4px;">Show More</button>`
@@ -1980,7 +1994,7 @@ function renderColumns(columns) {
             <div class="column-header">
                 <div style="display:flex; align-items:center; gap:5px; width: 100%">
                     <span class="column-title">${escapeHtml(col.title)}</span>
-                    <span class="card-count" style="margin: 0 auto">${totalCards}</span>
+                    <span class="card-count" style="margin: 0 auto">${cardCountLabel}</span>
                 </div>
                 <div style="display:flex; gap:5px;">
                     <button class="col-add-card-btn btn btn-primary" data-col-id="${col.id}" style="padding:5px 10px;" title="Add Card">➕</button>
@@ -1999,7 +2013,12 @@ function renderColumns(columns) {
     `}).join('');
 
     const newBoardDiv = boardDiv.cloneNode(true);
+    newBoardDiv.classList.toggle('cards-animate', animate);
     boardDiv.parentNode.replaceChild(newBoardDiv, boardDiv);
+
+    if (animate) {
+        setTimeout(() => newBoardDiv.classList.remove('cards-animate'), 600);
+    }
 
     newBoardDiv.querySelectorAll('.cards-container').forEach(container => {
         const handleScroll = () => {
@@ -2547,7 +2566,7 @@ async function openCardModal(columnId, cardId = null) {
         showCancelButton: true,
         showConfirmButton: canEdit,
         confirmButtonText: defaults.btnText,
-        confirmButtonColor: '#667eea',
+        confirmButtonColor: '#289f51',
         showDenyButton: isEditMode && canEdit,
         denyButtonText: '🗑️ Delete',
         denyButtonColor: '#f56565',
@@ -3327,7 +3346,7 @@ function openAvatarModal(fromMenu = false) {
         setTimeout(() => {
             document.querySelectorAll('.avatar-option').forEach(img => {
                 if (img.alt === selectedAvatarTemp) {
-                    img.style.borderColor = '#667eea';
+                    img.style.borderColor = '#289f51';
                     img.style.transform = 'scale(1.1)';
                 }
             });
@@ -3374,7 +3393,7 @@ function selectAvatarTemp(name, imgElement) {
         img.style.borderColor = 'transparent';
         img.style.transform = 'scale(1)';
     });
-    imgElement.style.borderColor = '#667eea';
+    imgElement.style.borderColor = '#289f51';
     imgElement.style.transform = 'scale(1.1)';
 }
 
