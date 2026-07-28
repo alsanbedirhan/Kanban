@@ -28,6 +28,7 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
         [EnableRateLimiting("auth-strict")]
         public async Task<IActionResult> Login([FromBody] LoginViewModel model)
         {
@@ -52,6 +53,7 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
         [EnableRateLimiting("auth-otp")]
         public async Task<IActionResult> VerifyWork([FromBody] VerifyViewModel model)
         {
@@ -75,10 +77,15 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
+        [EnableRateLimiting("auth-register")]
         public async Task<IActionResult> Register([FromBody] RegisterViewModel model)
         {
             if (!ModelState.IsValid)
                 return Ok(ServiceResult.Fail("Invalid registration data."));
+            var isHuman = await _turnstileService.VerifyAsync(model.turnstileToken);
+            if (!isHuman)
+                return Ok(ServiceResult.Fail("Turnstile verification failed."));
             if (!TurnstileSessionCache.HasVerification(_cache, model.email, "register"))
                 return Ok(ServiceResult.Fail("Verification expired. Please verify again."));
             var result = await _userService.RegisterWithOtp(model.email, model.password, model.fullName, model.otpCode);
@@ -98,6 +105,7 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
         public async Task<IActionResult> Logout()
         {
             try
@@ -112,13 +120,17 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
-        [EnableRateLimiting("auth-strict")]
+        [AllowAnonymous]
+        [EnableRateLimiting("auth-reset")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordViewModel model)
         {
             if (!ModelState.IsValid)
                 return Ok(ServiceResult.Fail("Invalid request."));
             if (!TurnstileSessionCache.HasVerification(_cache, model.email, "reset"))
                 return Ok(ServiceResult.Fail("Verification expired. Please verify again."));
+            var isHuman = await _turnstileService.VerifyAsync(model.turnstileToken);
+            if (!isHuman)
+                return Ok(ServiceResult.Fail("Turnstile verification failed."));
             var result = await _userService.ResetPasswordWithOtp(model.email, model.password, model.otpCode);
             if (!result.Success)
             {
@@ -234,14 +246,7 @@ namespace Kanban.Controllers
                 authProperties);
             var antiforgery = HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
             var tokens = antiforgery.GetAndStoreTokens(HttpContext);
-            HttpContext.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
-                new CookieOptions
-                {
-                    HttpOnly = false,
-                    Secure = true,
-                    SameSite = SameSiteMode.Strict,
-                    Path = "/"
-                });
+            HttpContext.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, HttpContext.CreateXsrfCookieOptions());
         }
     }
 }

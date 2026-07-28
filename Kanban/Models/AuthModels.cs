@@ -36,8 +36,14 @@ namespace Kanban.Models
         public string Audience { get; set; } = string.Empty;
         public int ExpireMinutes { get; set; }
     }
+    public class AntiforgeryTokenResult
+    {
+        public string XsrfToken { get; set; } = string.Empty;
+    }
+
     public class TurnstileSettings
     {
+        public string SiteKey { get; set; } = string.Empty;
         public string SecretKey { get; set; } = string.Empty;
     }
     public class RegisterViewModel : LoginViewModel

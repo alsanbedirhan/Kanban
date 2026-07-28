@@ -125,6 +125,213 @@ function getTurnstileToken(modalId) {
     return value || null;
 }
 
+function getTurnstileTokenFromContainer(containerId) {
+    const input = getTurnstileWrapEl(containerId)?.querySelector('[name="cf-turnstile-response"]');
+    return input?.value?.trim() || null;
+}
+
+const turnstileWidgetIds = {};
+let turnstileRenderToken = 0;
+
+function getTurnstileContainerId(modalId) {
+    return modalId === 'registerModal' ? 'turnstile-container-register' : 'turnstile-container-login';
+}
+
+function getTurnstileWrapEl(containerId) {
+    return document.getElementById(containerId)?.closest('.turnstile-wrap') ?? null;
+}
+
+function hasTurnstileTokenInContainer(containerId) {
+    const input = getTurnstileWrapEl(containerId)?.querySelector('[name="cf-turnstile-response"]');
+    return !!(input?.value?.trim());
+}
+
+function setTurnstileLoaded(isLoaded, containerId) {
+    const wrap = getTurnstileWrapEl(containerId);
+    if (!wrap) return;
+    wrap.classList.toggle('is-loaded', isLoaded);
+    if (isLoaded) wrap.classList.remove('is-error');
+}
+
+function showTurnstileError(message, containerId) {
+    if (hasTurnstileTokenInContainer(containerId)) return;
+
+    const wrap = getTurnstileWrapEl(containerId);
+    const container = document.getElementById(containerId);
+    const errorEl = wrap?.querySelector('.turnstile-error');
+    const widgetId = turnstileWidgetIds[containerId];
+
+    if (window.turnstile && widgetId != null) {
+        try { window.turnstile.remove(widgetId); } catch { /* ignore */ }
+    }
+    delete turnstileWidgetIds[containerId];
+
+    if (container) container.innerHTML = '';
+    if (wrap) {
+        wrap.classList.add('is-error');
+        wrap.classList.remove('is-loaded');
+    }
+    if (errorEl) errorEl.textContent = message;
+}
+
+function resetKanbanTurnstile(containerId) {
+    turnstileRenderToken++;
+    const widgetId = turnstileWidgetIds[containerId];
+    if (window.turnstile && widgetId != null) {
+        try { window.turnstile.remove(widgetId); } catch { /* ignore */ }
+    }
+    delete turnstileWidgetIds[containerId];
+
+    const container = document.getElementById(containerId);
+    const wrap = getTurnstileWrapEl(containerId);
+    const errorEl = wrap?.querySelector('.turnstile-error');
+    if (container) container.innerHTML = '';
+    if (wrap) wrap.classList.remove('is-loaded', 'is-error');
+    if (errorEl) errorEl.textContent = '';
+    setTurnstileLoaded(false, containerId);
+}
+
+function renderKanbanTurnstile(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || !window.turnstile?.render) return;
+
+    resetKanbanTurnstile(containerId);
+    const renderToken = turnstileRenderToken;
+    const siteKey = container.dataset.sitekey?.trim();
+
+    if (!siteKey) {
+        showTurnstileError('Verification is not configured.', containerId);
+        return;
+    }
+
+    const markLoaded = () => {
+        if (renderToken !== turnstileRenderToken) return;
+        setTurnstileLoaded(true, containerId);
+    };
+
+    try {
+        turnstileWidgetIds[containerId] = window.turnstile.render(container, {
+            sitekey: siteKey,
+            theme: 'light',
+            size: 'normal',
+            'refresh-expired': 'auto',
+            callback: markLoaded,
+            'after-interactive-callback': markLoaded,
+            'error-callback': () => {
+                if (renderToken !== turnstileRenderToken) return;
+                if (hasTurnstileTokenInContainer(containerId)) return;
+                showTurnstileError('Verification could not start. Use Retry verification below.', containerId);
+            },
+            'timeout-callback': () => {
+                if (renderToken !== turnstileRenderToken) return;
+                if (hasTurnstileTokenInContainer(containerId)) return;
+                showTurnstileError('Verification timed out. Use Retry verification below.', containerId);
+            },
+            'expired-callback': () => {
+                if (renderToken !== turnstileRenderToken) return;
+                setTurnstileLoaded(false, containerId);
+            }
+        });
+    } catch {
+        showTurnstileError('Verification failed to load.', containerId);
+        return;
+    }
+
+    setTimeout(() => {
+        if (renderToken !== turnstileRenderToken) return;
+        const wrap = getTurnstileWrapEl(containerId);
+        if (wrap?.classList.contains('is-loaded') || wrap?.classList.contains('is-error')) return;
+        if (hasTurnstileTokenInContainer(containerId)) {
+            markLoaded();
+            return;
+        }
+        const widgetId = turnstileWidgetIds[containerId];
+        if (widgetId != null && window.turnstile.getResponse?.(widgetId)) {
+            markLoaded();
+            return;
+        }
+        showTurnstileError('Verification failed to load. Use Retry verification below.', containerId);
+    }, 15000);
+}
+
+function waitForKanbanTurnstileAndRender(containerId, attempt = 0) {
+    if (window.turnstile?.render) {
+        renderKanbanTurnstile(containerId);
+        return;
+    }
+    if (attempt < 80) {
+        setTimeout(() => waitForKanbanTurnstileAndRender(containerId, attempt + 1), 100);
+    } else {
+        showTurnstileError('Verification failed to load. Check your connection and retry.', containerId);
+    }
+}
+
+function resetModalTurnstile(modalId) {
+    resetKanbanTurnstile(getTurnstileContainerId(modalId));
+}
+
+function refreshModalTurnstile(modalId) {
+    waitForKanbanTurnstileAndRender(getTurnstileContainerId(modalId));
+}
+
+window.retryTurnstile = function (e) {
+    const containerId = e?.target?.closest('[data-turnstile-target]')?.dataset?.turnstileTarget;
+    if (containerId) waitForKanbanTurnstileAndRender(containerId);
+};
+
+function turnstileRequiredMessage() {
+    return 'Please complete the verification. If it does not load, click "Retry verification" below.';
+}
+
+const OTP_TURNSTILE_CONTAINER = 'turnstile-container-otp';
+
+function initOtpSwalTurnstile() {
+    requestAnimationFrame(() => {
+        waitForKanbanTurnstileAndRender(OTP_TURNSTILE_CONTAINER);
+    });
+}
+
+function readOtpSwalTurnstileToken() {
+    return getTurnstileTokenFromContainer(OTP_TURNSTILE_CONTAINER);
+}
+
+function bindSwalOtpInputs(container, options = {}) {
+    const inputs = container.querySelectorAll('.otp-field');
+    const afterLastInput = options.afterLastInput;
+    if (inputs.length > 0) inputs[0].focus();
+
+    inputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            const value = e.target.value;
+            if (!/^\d+$/.test(value)) { e.target.value = ''; return; }
+            if (value && index < inputs.length - 1) inputs[index + 1].focus();
+            else if (value && index === inputs.length - 1 && afterLastInput) afterLastInput();
+        });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && !e.target.value && index > 0) inputs[index - 1].focus();
+            else if (e.key === 'Enter') Swal.clickConfirm();
+        });
+        input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const data = e.clipboardData.getData('text').trim();
+            if (data.length === 6 && /^\d+$/.test(data)) {
+                const digits = data.split('');
+                inputs.forEach((inp, i) => inp.value = digits[i]);
+                if (afterLastInput) afterLastInput();
+                else if (inputs[5]) inputs[5].focus();
+                Swal.clickConfirm();
+            }
+        });
+    });
+}
+
+function readSwalOtpCode(container) {
+    const inputs = container.querySelectorAll('.otp-field');
+    let code = '';
+    inputs.forEach(input => code += input.value);
+    return code;
+}
+
 function isSafeHexColor(color) {
     return /^#[0-9A-Fa-f]{6}$/.test(color || '');
 }
@@ -218,6 +425,29 @@ function getXsrfToken() {
     return null;
 }
 
+function isAuthEntryEndpoint(endpoint) {
+    return /^\/Auth\/(Login|VerifyWork|Register|ResetPassword)/i.test(endpoint || '');
+}
+
+async function refreshXsrfToken() {
+    try {
+        const response = await fetch('/Home/GetToken', {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        });
+        if (!response.ok) return getXsrfToken();
+        const data = await response.json();
+        return data?.data?.xsrfToken || getXsrfToken();
+    } catch (err) {
+        console.warn('Token refresh error:', err);
+        return getXsrfToken();
+    }
+}
+
 async function apiRequest(endpoint, options = {}, showload = true, isPooling = false) {
     if (showload) showLoading();
     if (!isPooling) {
@@ -225,38 +455,37 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
     }
     try {
         const method = (options.method || 'GET').toUpperCase();
+        let xsrfToken = null;
 
         if (method !== 'GET') {
-            try {
-                await fetch('/Home/GetToken', {
-                    credentials: 'same-origin',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    }
-                });
-            } catch (err) {
-                console.warn("Token fetch error:", err);
-            }
+            xsrfToken = await refreshXsrfToken();
         }
 
-        const token = getXsrfToken();
-        const headers = {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json',
-            ...options.headers
+        const sendRequest = async (token) => {
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+                ...options.headers
+            };
+
+            if (token) {
+                headers['X-XSRF-TOKEN'] = token;
+            }
+
+            return fetch(endpoint, {
+                ...options,
+                headers: headers,
+                credentials: 'same-origin'
+            });
         };
 
-        if (token) {
-            headers['X-XSRF-TOKEN'] = token;
-        }
+        let response = await sendRequest(xsrfToken);
 
-        const response = await fetch(endpoint, {
-            ...options,
-            headers: headers,
-            credentials: 'same-origin'
-        });
+        if (response.status === 400 && method !== 'GET') {
+            xsrfToken = await refreshXsrfToken();
+            response = await sendRequest(xsrfToken);
+        }
 
         if (response.status === 429) {
             let rateLimitMsg = 'Too many requests. Please try again later.';
@@ -269,6 +498,15 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
         }
 
         if (response.status === 401 || response.status === 403) {
+            if (isAuthEntryEndpoint(endpoint)) {
+                let authMsg = 'Authentication failed. Please refresh the page and try again.';
+                try {
+                    const errData = await response.json();
+                    if (errData.errorMessage) authMsg = errData.errorMessage;
+                } catch (e) { }
+                throw new Error(authMsg);
+            }
+
             if (isPooling) {
                 AppState.authFailureCount++;
                 if (AppState.authFailureCount < 2) {
@@ -860,6 +1098,7 @@ function openLoginModal(prefillEmail = null) {
     if (sidebar?.classList.contains('open')) toggleSidebar();
     document.getElementById('loginModal').classList.add('active');
     if (prefillEmail) document.getElementById('loginEmail').value = prefillEmail;
+    refreshModalTurnstile('loginModal');
     setTimeout(() => document.getElementById('loginEmail')?.focus(), 50);
 }
 
@@ -867,7 +1106,7 @@ function closeLoginModal() {
     document.getElementById('loginModal').classList.remove('active');
     document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
-    if (window.turnstile) window.turnstile.reset();
+    resetModalTurnstile('loginModal');
 }
 
 function openRegisterModal(prefillEmail = null) {
@@ -875,6 +1114,7 @@ function openRegisterModal(prefillEmail = null) {
     if (sidebar?.classList.contains('open')) toggleSidebar();
     document.getElementById('registerModal').classList.add('active');
     if (prefillEmail) document.getElementById('registerEmail').value = prefillEmail;
+    refreshModalTurnstile('registerModal');
     setTimeout(() => document.getElementById('registerFullName')?.focus(), 50);
 }
 
@@ -882,6 +1122,7 @@ function closeRegisterModal() {
     document.getElementById('registerModal').classList.remove('active');
     ['registerFullName', 'registerEmail', 'registerPassword', 'registerConfirmPassword']
         .forEach(id => document.getElementById(id).value = '');
+    resetModalTurnstile('registerModal');
 }
 
 async function handleLogin() {
@@ -890,7 +1131,7 @@ async function handleLogin() {
     const turnstileToken = getTurnstileToken('loginModal');
 
     if (!email || !password) return Swal.fire('Error', 'Please fill all fields', 'error');
-    if (!turnstileToken) return Swal.fire('Error', 'Please complete the verification.', 'error');
+    if (!turnstileToken) return Swal.fire('Error', turnstileRequiredMessage(), 'error');
 
     try {
         const response = await apiRequest('/Auth/Login', {
@@ -913,7 +1154,7 @@ async function handleLogin() {
             loadBoards();
         } else {
             Swal.fire('Error', response.errorMessage || 'Login failed', 'error');
-            if (window.turnstile) window.turnstile.reset();
+            refreshModalTurnstile('loginModal');
         }
     } catch (err) {
         console.error('Login error:', err);
@@ -977,7 +1218,7 @@ async function handleRegister() {
     const turnstileToken = getTurnstileToken('registerModal');
 
     if (!turnstileToken) {
-        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please verify that you are human.' });
+        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: turnstileRequiredMessage() });
     }
 
     try {
@@ -987,7 +1228,7 @@ async function handleRegister() {
         });
 
         if (!verify?.success) {
-            if (window.turnstile) window.turnstile.reset();
+            refreshModalTurnstile('registerModal');
             return Swal.fire('Error', verify?.errorMessage || 'Failed to send verification code', 'error');
         }
 
@@ -995,57 +1236,47 @@ async function handleRegister() {
         const templateContent = document.getElementById('otpTemplate').innerHTML;
 
         while (!isRegistered) {
-            const { value: otpCode, dismiss } = await Swal.fire(formSwalOptions({
+            const { value: formValues, dismiss } = await Swal.fire(formSwalOptions({
                 title: 'Email Verification',
                 text: `A 6-digit code has been sent to ${escapeHtml(email)}.`,
                 html: templateContent,
                 confirmButtonText: 'Verify & Register',
                 didOpen: () => {
-                    const container = Swal.getHtmlContainer().querySelector('#otp-inputs');
-                    const inputs = container.querySelectorAll('.otp-field');
-                    if (inputs.length > 0) inputs[0].focus();
-
-                    inputs.forEach((input, index) => {
-                        input.addEventListener('input', (e) => {
-                            const value = e.target.value;
-                            if (!/^\d+$/.test(value)) { e.target.value = ''; return; }
-                            if (value && index < inputs.length - 1) inputs[index + 1].focus();
-                        });
-                        input.addEventListener('keydown', (e) => {
-                            if (e.key === 'Backspace' && !e.target.value && index > 0) inputs[index - 1].focus();
-                            else if (e.key === 'Enter') Swal.clickConfirm();
-                        });
-                        input.addEventListener('paste', (e) => {
-                            e.preventDefault();
-                            const data = e.clipboardData.getData('text').trim();
-                            if (data.length === 6 && /^\d+$/.test(data)) {
-                                const digits = data.split('');
-                                inputs.forEach((inp, i) => inp.value = digits[i]);
-                                inputs[5].focus();
-                                Swal.clickConfirm();
-                            }
-                        });
-                    });
+                    const container = Swal.getHtmlContainer();
+                    bindSwalOtpInputs(container);
+                    initOtpSwalTurnstile();
                 },
                 preConfirm: () => {
                     const container = Swal.getHtmlContainer();
-                    const inputs = container.querySelectorAll('.otp-field');
-                    let code = "";
-                    inputs.forEach(input => code += input.value);
+                    const code = readSwalOtpCode(container);
                     if (code.length !== 6) {
                         Swal.showValidationMessage('Please enter the complete 6-digit code');
                         return false;
                     }
-                    return code;
+
+                    const turnstileToken = readOtpSwalTurnstileToken();
+                    if (!turnstileToken) {
+                        Swal.showValidationMessage(turnstileRequiredMessage());
+                        return false;
+                    }
+
+                    return { otpCode: code, turnstileToken };
                 }
             }));
 
-            if (window.turnstile) window.turnstile.reset();
+            resetKanbanTurnstile(OTP_TURNSTILE_CONTAINER);
             if (dismiss === Swal.DismissReason.cancel || dismiss === Swal.DismissReason.backdrop) return;
+            if (!formValues) continue;
 
             const response = await apiRequest('/Auth/Register', {
                 method: 'POST',
-                body: JSON.stringify({ fullName, email, password, otpCode })
+                body: JSON.stringify({
+                    fullName,
+                    email,
+                    password,
+                    otpCode: formValues.otpCode,
+                    turnstileToken: formValues.turnstileToken
+                })
             });
 
             if (!response) break;
@@ -1069,7 +1300,7 @@ async function handleRegister() {
             }
         }
     } catch (error) {
-        if (window.turnstile) window.turnstile.reset();
+        refreshModalTurnstile('registerModal');
         console.error(error);
         Swal.fire('Error', 'An unexpected error occurred during registration.', 'error');
     }
@@ -1079,7 +1310,7 @@ async function handleForgotPassword() {
     const turnstileToken = getTurnstileToken('loginModal');
 
     if (!turnstileToken) {
-        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please complete the captcha below.' });
+        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: turnstileRequiredMessage() });
     }
 
     const loginEmail = document.getElementById('loginEmail')?.value.trim() || '';
@@ -1113,7 +1344,7 @@ async function handleForgotPassword() {
         });
 
         if (!verify?.success) {
-            if (window.turnstile) window.turnstile.reset();
+            refreshModalTurnstile('loginModal');
             return Swal.fire('Error', verify?.errorMessage || 'Failed to send verification code', 'error');
         }
 
@@ -1136,50 +1367,27 @@ async function handleForgotPassword() {
                 const container = Swal.getHtmlContainer();
                 bindSwalPasswordToggles(container);
 
-                const inputs = container.querySelectorAll('.otp-field');
                 const firstPasswordInput = container.querySelector('#swal-new-password');
-
-                if (inputs.length > 0) inputs[0].focus();
-
-                inputs.forEach((input, index) => {
-                    input.addEventListener('input', (e) => {
-                        const value = e.target.value;
-                        if (!/^\d+$/.test(value)) { e.target.value = ''; return; }
-
-                        if (value && index < inputs.length - 1) {
-                            inputs[index + 1].focus();
-                        } else if (value && index === inputs.length - 1) {
-                            firstPasswordInput.focus();
-                        }
-                    });
-
-                    input.addEventListener('keydown', (e) => {
-                        if (e.key === 'Backspace' && !e.target.value && index > 0) inputs[index - 1].focus();
-                        else if (e.key === 'Enter') Swal.clickConfirm();
-                    });
-
-                    input.addEventListener('paste', (e) => {
-                        e.preventDefault();
-                        const data = e.clipboardData.getData('text').trim();
-                        if (data.length === 6 && /^\d+$/.test(data)) {
-                            const digits = data.split('');
-                            inputs.forEach((inp, i) => inp.value = digits[i]);
-                            firstPasswordInput.focus();
-                        }
-                    });
+                bindSwalOtpInputs(container, {
+                    afterLastInput: () => firstPasswordInput?.focus()
                 });
+                initOtpSwalTurnstile();
             },
             preConfirm: () => {
                 const container = Swal.getHtmlContainer();
-                const inputs = container.querySelectorAll('.otp-field');
-                let code = "";
-                inputs.forEach(input => code += input.value);
+                const code = readSwalOtpCode(container);
 
                 const pass = document.getElementById('swal-new-password').value;
                 const confirmPass = document.getElementById('swal-confirm-password').value;
 
                 if (code.length !== 6) {
                     Swal.showValidationMessage('Please enter the complete 6-digit code');
+                    return false;
+                }
+
+                const turnstileToken = readOtpSwalTurnstileToken();
+                if (!turnstileToken) {
+                    Swal.showValidationMessage(turnstileRequiredMessage());
                     return false;
                 }
                 if (!pass || !confirmPass) {
@@ -1199,11 +1407,11 @@ async function handleForgotPassword() {
                     return false;
                 }
 
-                return { otpCode: code, newPassword: pass };
+                return { otpCode: code, newPassword: pass, turnstileToken };
             }
         }));
 
-        if (window.turnstile) window.turnstile.reset();
+        resetKanbanTurnstile(OTP_TURNSTILE_CONTAINER);
         if (formDismiss) return;
 
         const resetResponse = await apiRequest('/Auth/ResetPassword', {
@@ -1211,7 +1419,8 @@ async function handleForgotPassword() {
             body: JSON.stringify({
                 email: email,
                 otpCode: formValues.otpCode,
-                password: formValues.newPassword
+                password: formValues.newPassword,
+                turnstileToken: formValues.turnstileToken
             })
         });
 
@@ -1229,26 +1438,14 @@ async function handleForgotPassword() {
         }
 
     } catch (error) {
-        if (window.turnstile) window.turnstile.reset();
+        refreshModalTurnstile('loginModal');
         console.error(error);
         Swal.fire('Error', 'An unexpected error occurred.', 'error');
     }
 }
 
 async function postLogoutRequest() {
-    try {
-        await fetch('/Home/GetToken', {
-            credentials: 'same-origin',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
-            }
-        });
-    } catch (err) {
-        console.warn('Token refresh before logout failed:', err);
-    }
-
-    const token = getXsrfToken();
+    const token = await refreshXsrfToken();
     const response = await fetch('/Auth/Logout', {
         method: 'POST',
         headers: {

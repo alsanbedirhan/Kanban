@@ -1,7 +1,8 @@
 @model Kanban.Services.ServiceResult<InviteStatus>
-
+@inject IConfiguration Configuration
 @{
     Layout = null;
+    var turnstileSiteKey = Configuration["TurnstileSettings:SiteKey"] ?? "";
 }
 <!DOCTYPE html>
 
@@ -26,7 +27,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
     <script src="https://cdn.quilljs.com/1.3.6/quill.js" defer></script>
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js' defer></script>
@@ -103,7 +104,16 @@
                 <button type="button" tabindex="-1" class="toggle-password" data-target="loginPassword" aria-label="Show password">🙈</button>
             </div>
             <div class="turnstile-wrap">
-                <div class="cf-turnstile" data-sitekey="0x4AAAAAACWAgmX9pAp9Li7E"></div>
+                <div class="turnstile-stage">
+                    <div id="turnstile-container-login" class="turnstile-container" data-sitekey="@turnstileSiteKey"></div>
+                    <div class="turnstile-skeleton" aria-hidden="true">
+                        <span>Loading verification...</span>
+                    </div>
+                    <div class="turnstile-error" role="alert"></div>
+                </div>
+                <button type="button" class="turnstile-retry-btn" data-action="retryTurnstile" data-turnstile-target="turnstile-container-login">
+                    Retry verification
+                </button>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" data-action="closeLoginModal">Cancel</button>
@@ -146,7 +156,16 @@
                 </label>
             </div>
             <div class="turnstile-wrap">
-                <div class="cf-turnstile" data-sitekey="0x4AAAAAACWAgmX9pAp9Li7E"></div>
+                <div class="turnstile-stage">
+                    <div id="turnstile-container-register" class="turnstile-container" data-sitekey="@turnstileSiteKey"></div>
+                    <div class="turnstile-skeleton" aria-hidden="true">
+                        <span>Loading verification...</span>
+                    </div>
+                    <div class="turnstile-error" role="alert"></div>
+                </div>
+                <button type="button" class="turnstile-retry-btn" data-action="retryTurnstile" data-turnstile-target="turnstile-container-register">
+                    Retry verification
+                </button>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" data-action="closeRegisterModal">Cancel</button>
@@ -180,6 +199,18 @@
             <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
             <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
             <input type="text" class="otp-field" maxlength="1" inputmode="numeric">
+        </div>
+        <div class="turnstile-wrap turnstile-wrap-otp">
+            <div class="turnstile-stage">
+                <div id="turnstile-container-otp" class="turnstile-container" data-sitekey="@turnstileSiteKey"></div>
+                <div class="turnstile-skeleton" aria-hidden="true">
+                    <span>Loading verification...</span>
+                </div>
+                <div class="turnstile-error" role="alert"></div>
+            </div>
+            <button type="button" class="turnstile-retry-btn" data-action="retryTurnstile" data-turnstile-target="turnstile-container-otp">
+                Retry verification
+            </button>
         </div>
     </template>
     <button type="button" id="quickNoteBtn" class="quick-note-toggle" data-action="toggleQuickNote" aria-label="Quick notes">📝</button>

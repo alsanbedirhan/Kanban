@@ -1,5 +1,7 @@
 ﻿using Kanban.Entities;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
@@ -21,6 +23,18 @@ namespace Kanban
         {
             return user.FindFirst(ClaimTypes.Name)?.Value ?? "";
         }
+        public static CookieOptions CreateXsrfCookieOptions(this HttpContext context)
+        {
+            var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+            return new CookieOptions
+            {
+                HttpOnly = false,
+                Secure = env.IsDevelopment() ? context.Request.IsHttps : true,
+                SameSite = SameSiteMode.Strict,
+                Path = "/"
+            };
+        }
+
         public static void DeleteCookies(this HttpContext context)
         {
             try

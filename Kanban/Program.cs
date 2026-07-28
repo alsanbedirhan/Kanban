@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Rewrite;
 using Microsoft.EntityFrameworkCore;
@@ -104,6 +105,17 @@ var dataProtectionKeysPath = !string.IsNullOrWhiteSpace(configuredKeysPath)
     : Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
 Directory.CreateDirectory(dataProtectionKeysPath);
 
+var cookieSecurePolicy = builder.Environment.IsDevelopment()
+    ? CookieSecurePolicy.SameAsRequest
+    : CookieSecurePolicy.Always;
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Services.AddDataProtection()
     .SetApplicationName("Kanflow")
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
@@ -148,6 +160,28 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
+    // OTP tamamlama: kayıt (dakikada 8 / IP).
+    options.AddPolicy("auth-register", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientPartitionKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    // OTP tamamlama: şifre sıfırlama (dakikada 8 / IP).
+    options.AddPolicy("auth-reset", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientPartitionKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
     options.AddPolicy("auth", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             GetClientPartitionKey(context),
@@ -175,7 +209,7 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.Name = "Kanflow.Antiforgery";
     options.Cookie.HttpOnly = false;
     options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SecurePolicy = cookieSecurePolicy;
 });
 
 builder.Services.AddHsts(options =>
@@ -206,7 +240,7 @@ builder.Services.AddAuthentication(options =>
     options.Cookie.Name = "Kanflow.Auth";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SecurePolicy = cookieSecurePolicy;
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;
 
@@ -318,6 +352,7 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.UseRewriter(new RewriteOptions().AddRedirectToNonWwwPermanent());
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.Use(async (context, next) =>
 {

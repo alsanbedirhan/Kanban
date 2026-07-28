@@ -223,15 +223,99 @@
 
 .turnstile-wrap {
     margin: 16px auto 12px;
-    width: fit-content;
-    max-width: 100%;
-    line-height: 0;
+    width: 100%;
+    max-width: 320px;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
 }
 
-.turnstile-wrap .cf-turnstile {
-    display: inline-block;
+.turnstile-stage {
+    position: relative;
+    width: min(100%, 300px);
+    min-height: 65px;
+}
+
+.turnstile-container {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    line-height: 0;
+}
+
+.turnstile-skeleton {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    min-height: 65px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    background: var(--bg-soft, #f7fafc);
+    border: 1px dashed var(--border-color, #e2e8f0);
+    pointer-events: none;
+}
+
+.turnstile-wrap.is-loaded .turnstile-skeleton,
+.turnstile-wrap.is-error .turnstile-skeleton {
+    display: none;
+}
+
+.turnstile-error {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    text-align: center;
+    color: #B12A1A;
+    background: #FDECEA;
+    border: 1px solid #F2C9C3;
+    border-radius: 8px;
+}
+
+.turnstile-wrap.is-error .turnstile-container {
+    display: none;
+}
+
+.turnstile-wrap.is-error .turnstile-error {
+    display: flex;
+    min-height: 65px;
+}
+
+.turnstile-retry-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-soft, #f7fafc);
+    color: var(--text-muted, #718096);
+    font-size: 0.8rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 8px;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.turnstile-retry-btn:hover {
+    color: var(--text-main, #2d3748);
+    border-color: var(--primary-color, #289f51);
+}
+
+.turnstile-wrap:not(.is-loaded) .turnstile-retry-btn,
+.turnstile-wrap.is-error .turnstile-retry-btn {
+    display: inline-flex;
+}
+
+.turnstile-wrap-otp {
+    margin-top: 1rem;
 }
 
 .login-modal-footer {

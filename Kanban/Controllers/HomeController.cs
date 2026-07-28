@@ -57,16 +57,12 @@ namespace Kanban.Controllers
             var antiforgery = HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
             var tokens = antiforgery.GetAndStoreTokens(HttpContext);
 
-            HttpContext.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
-                new CookieOptions
-                {
-                    HttpOnly = false,
-                    Secure = true,
-                    SameSite = SameSiteMode.Strict,
-                    Path = "/"
-                });
+            HttpContext.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, HttpContext.CreateXsrfCookieOptions());
 
-            return Ok(ServiceResult.Ok());
+            return Ok(ServiceResult<AntiforgeryTokenResult>.Ok(new AntiforgeryTokenResult
+            {
+                XsrfToken = tokens.RequestToken!
+            }));
         }
     }
 }
