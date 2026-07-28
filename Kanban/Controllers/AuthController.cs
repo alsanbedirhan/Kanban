@@ -33,6 +33,9 @@ namespace Kanban.Controllers
         {
             if (!ModelState.IsValid)
                 return Ok(ServiceResult.Fail("Invalid email or password."));
+            var isHuman = await _turnstileService.VerifyAsync(model.turnstileToken);
+            if (!isHuman)
+                return Ok(ServiceResult.Fail("Turnstile verification failed."));
             var result = await _userService.Login(model.email, model.password);
             if (!result.Success)
             {

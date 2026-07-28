@@ -26,6 +26,14 @@ namespace Kanban.Security
         public static bool IsValidHexColor(string? color) =>
             !string.IsNullOrWhiteSpace(color) && HexColorRegex.IsMatch(color);
 
+        public static string SanitizePlainText(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return string.Empty;
+
+            return HtmlSanitizer.Sanitize(text).Trim();
+        }
+
         public static string NormalizeHexColor(string? color, string fallback = "#ffffff") =>
             IsValidHexColor(color) ? color! : fallback;
     }

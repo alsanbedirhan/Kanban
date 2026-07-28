@@ -2,8 +2,6 @@ using Kanban.Models;
 using Kanban.Security;
 using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,30 +19,8 @@ namespace Kanban.Controllers
 
         [HttpGet]
         [AllowAnonymous]
-        public async Task<IActionResult> Index(string? token, bool logout = false)
+        public async Task<IActionResult> Index(string? token)
         {
-            if (!logout)
-            {
-                logout = !(User.Identity?.IsAuthenticated ?? false);
-            }
-
-            if (logout)
-            {
-                try
-                {
-                    await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                }
-                catch (Exception)
-                {
-
-                }
-                HttpContext.DeleteCookies();
-                if (Request.Query.ContainsKey("logout") || Request.Query.ContainsKey("t"))
-                {
-                    return RedirectToAction("Index");
-                }
-            }
-
             if (!string.IsNullOrEmpty(token))
             {
                 var r = await _kanbanService.VerifyActivationToken(User.GetUserId(), token);
@@ -57,6 +33,7 @@ namespace Kanban.Controllers
         }
 
         [HttpGet]
+        [AllowAnonymous]
         public async Task<IActionResult> Fetch()
         {
             if (User.Identity?.IsAuthenticated ?? false)
@@ -74,6 +51,7 @@ namespace Kanban.Controllers
         }
 
         [HttpGet]
+        [AllowAnonymous]
         public IActionResult GetToken()
         {
             var antiforgery = HttpContext.RequestServices.GetRequiredService<IAntiforgery>();

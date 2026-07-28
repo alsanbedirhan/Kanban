@@ -14,9 +14,9 @@ namespace Kanban.Controllers
                 ErrorCode = statusCode,
                 Message = statusCode switch
                 {
-                    401 => "Unauthorized access. Please log in.",
-                    403 => "Access denied. You do not have permission to access this page.",
                     404 => "Page not found. Please check the URL.",
+                    429 => "Too many requests. Please wait a moment and try again.",
+                    500 => "An unexpected error occurred. Please try again.",
                     _ => "An error occurred"
                 }
             });

@@ -71,8 +71,19 @@ namespace Kanban.Repositories
 
             if (isAccepted)
             {
-                await _context.BoardMembers.AddAsync(new BoardMember { BoardId = boardId, IsActive = true, RoleCode = "MEMBER", UserId = userId });
-                await _context.SaveChangesAsync();
+                var alreadyMember = await _context.BoardMembers.AnyAsync(
+                    bm => bm.BoardId == boardId && bm.UserId == userId && bm.IsActive);
+                if (!alreadyMember)
+                {
+                    await _context.BoardMembers.AddAsync(new BoardMember
+                    {
+                        BoardId = boardId,
+                        IsActive = true,
+                        RoleCode = "MEMBER",
+                        UserId = userId
+                    });
+                    await _context.SaveChangesAsync();
+                }
 
                 var invite = await _context.UserInvites.AsNoTracking()
                     .Where(x => x.Id == inviteId)
@@ -152,6 +163,8 @@ namespace Kanban.Repositories
             };
             await _context.BoardMembers.AddAsync(b);
             await _context.SaveChangesAsync();
+
+            await TouchBoard(boardId);
         }
 
         public async Task DeleteBoard(long userId, long boardId)
@@ -349,6 +362,26 @@ namespace Kanban.Repositories
             await TouchBoard(boardId);
         }
 
+        public async Task<string?> GetMemberRole(long boardId, long userId)
+        {
+            return await _context.BoardMembers.AsNoTracking()
+                .Where(bm => bm.BoardId == boardId && bm.UserId == userId && bm.IsActive)
+                .Select(bm => bm.RoleCode)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<int> CountActiveOwners(long boardId)
+        {
+            return await _context.BoardMembers.AsNoTracking()
+                .CountAsync(bm => bm.BoardId == boardId && bm.IsActive && bm.RoleCode == "OWNER");
+        }
+
+        public async Task<bool> IsActiveMember(long boardId, long userId)
+        {
+            return await _context.BoardMembers.AsNoTracking()
+                .AnyAsync(bm => bm.BoardId == boardId && bm.UserId == userId && bm.IsActive);
+        }
+
         public async Task<BoardRefreshResultModel> GetBoardVersion(long boardId)
         {
             var now = await _dbDate.Now();
@@ -384,9 +417,11 @@ namespace Kanban.Repositories
 
             if (!_cache.TryGetValue(cacheKey, out List<BoardMember> members))
             {
+                // Board.IsActive must be part of the gate: DeleteBoard only soft-deletes the board
+                // and leaves member rows active, so membership alone would still grant API access.
                 members = await _context.BoardMembers
                     .AsNoTracking()
-                    .Where(b => b.BoardId == boardId && b.IsActive)
+                    .Where(b => b.BoardId == boardId && b.IsActive && b.Board.IsActive)
                     .ToListAsync();
 
                 _cache.Set(cacheKey, members, TimeSpan.FromHours(1));

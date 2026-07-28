@@ -111,7 +111,9 @@ No Node.js or npm is required. Changes are picked up on refresh (or after restar
 - Avatar filenames are validated against a server-side whitelist
 - Session cookies are HttpOnly, Secure, and SameSite=Strict
 - Content Security Policy restricts script, frame, and image sources; `Referrer-Policy` and `Permissions-Policy` headers are set
-- **IIS / app pool recycle:** Data Protection keys are persisted under `App_Data/DataProtection-Keys` so auth cookies and OTP encryption survive process restarts. On production, ensure the app pool identity has read/write access to this folder (or set `DataProtection:KeysPath` in config to a fixed path such as `C:\ProgramData\Kanflow\DataProtection-Keys`).
+- **IIS / app pool recycle:** Data Protection keys are persisted under `App_Data/DataProtection-Keys` so auth cookies and OTP encryption survive process restarts. `DataProtection:KeysPath` accepts an absolute path (recommended in production, e.g. `C:\ProgramData\Kanflow\DataProtection-Keys`) or a path relative to the content root. On startup the app verifies the folder is writable and logs an error if it is not — if keys cannot be persisted, new ones are generated on every recycle and every signed-in user is logged out. Keep the folder outside the deployment directory so publishing does not wipe it.
+- **Cold start resilience:** The security stamp is validated against the database on every request with no in-memory cache, and EF Core retries transient SQL failures, so an empty cache right after a recycle cannot log users out.
+- **Error responses:** Unhandled exceptions are caught centrally; JSON callers always receive a `ServiceResult` payload and only real page navigations get the HTML error page. Auth failures return `401`/`403` JSON for XHR and a redirect to `/` for navigations.
 
 ## License
 

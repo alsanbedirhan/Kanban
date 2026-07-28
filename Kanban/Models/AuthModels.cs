@@ -14,6 +14,9 @@ namespace Kanban.Models
 
         [Required, MinLength(8), MaxLength(128)]
         public string password { get; set; } = string.Empty;
+
+        [Required]
+        public string turnstileToken { get; set; } = string.Empty;
     }
     public class ResetPasswordViewModel : LoginViewModel
     {

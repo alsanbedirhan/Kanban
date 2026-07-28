@@ -24,6 +24,7 @@ namespace Kanban.Repositories
         Task UpdateAvatar(long userId, string avatar);
         Task<string> GetAvatar(long userId);
         Task<User?> GetById(long userId);
+        Task<UserSecuritySnapshot?> GetSecuritySnapshot(long userId);
         Task<User?> GetByIdForUpdate(long userId);
         Task SaveContext();
         Task<User> Create(User user);

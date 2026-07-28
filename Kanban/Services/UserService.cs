@@ -68,9 +68,20 @@ namespace Kanban.Services
         {
             try
             {
+                if (IsLoginLockedOut(email))
+                    return ServiceResult<User>.Fail("Too many failed attempts. Please try again later.");
+
                 var user = await _userRepository.GetByEmail(email);
-                if (user == null || !user.IsActive || !BCrypt.Net.BCrypt.Verify(password, user.HashPassword))
+                var hashToVerify = user?.HashPassword ?? LoginSecurity.DummyPasswordHash;
+                var passwordValid = BCrypt.Net.BCrypt.Verify(password, hashToVerify);
+
+                if (user == null || !user.IsActive || !passwordValid)
+                {
+                    RecordLoginFailure(email);
                     return ServiceResult<User>.Fail("Incorrect email or password.");
+                }
+
+                ClearLoginFailures(email);
                 return ServiceResult<User>.Ok(user);
             }
             catch (Exception)
@@ -197,6 +208,19 @@ namespace Kanban.Services
 
         private void ClearOtpFailures(string email) =>
             _cache.Remove(OtpFailKey(email));
+
+        private static string LoginFailKey(string email) =>
+            $"LOGIN_FAIL:{email.Trim().ToLowerInvariant()}";
+        private bool IsLoginLockedOut(string email) =>
+            _cache.TryGetValue(LoginFailKey(email), out int failures) && failures >= LoginSecurity.MaxFailedAttempts;
+        private void RecordLoginFailure(string email)
+        {
+            var key = LoginFailKey(email);
+            var failures = _cache.TryGetValue(key, out int count) ? count + 1 : 1;
+            _cache.Set(key, failures, LoginSecurity.FailedAttemptWindow);
+        }
+        private void ClearLoginFailures(string email) =>
+            _cache.Remove(LoginFailKey(email));
         public async Task<ServiceResult> UpdateAvatar(long userId, string avatar)
         {
             if (!AvatarNames.IsAllowed(avatar))
@@ -280,6 +304,11 @@ namespace Kanban.Services
         {
             try
             {
+                if (await _userRepository.GetQuickNoteCount(userId) >= QuickNoteLimits.MaxNotesPerUser)
+                {
+                    return ServiceResult<UserNote>.Fail(
+                        $"You can have at most {QuickNoteLimits.MaxNotesPerUser} notes.");
+                }
                 return ServiceResult<UserNote>.Ok(await _userRepository.AddQuickNote(userId, title, note));
             }
             catch (Exception)

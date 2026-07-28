@@ -41,6 +41,10 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
                 }
+                if (assigneeId > 0 && !await _kanbanRepository.IsActiveMember(boardId, assigneeId))
+                {
+                    return ServiceResult<BoardCard>.Fail("Assignee must be a member of this board.");
+                }
                 if (startDate > dueDate)
                 {
                     return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
@@ -171,7 +175,7 @@ namespace Kanban.Services
         {
             try
             {
-                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
+                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
                 {
                     return ServiceResult.Fail("You do not have permission to manage this board.");
                 }
@@ -368,6 +372,19 @@ namespace Kanban.Services
                 {
                     return ServiceResult.Fail("You do not have permission to manage this board.");
                 }
+                if (removeUserId == userId)
+                {
+                    return ServiceResult.Fail("Use leave board to remove yourself.");
+                }
+                var targetRole = await _kanbanRepository.GetMemberRole(boardId, removeUserId);
+                if (targetRole == null)
+                {
+                    return ServiceResult.Fail("User is not a member of this board.");
+                }
+                if (targetRole == "OWNER")
+                {
+                    return ServiceResult.Fail("Owners cannot be removed. Transfer ownership first.");
+                }
                 await _kanbanRepository.DeleteMember(boardId, removeUserId);
                 return ServiceResult.Ok();
             }
@@ -384,6 +401,10 @@ namespace Kanban.Services
                 if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
                 {
                     return ServiceResult.Fail("You do not have permission to manage this board.");
+                }
+                if (!await _kanbanRepository.IsActiveMember(boardId, promoteUserId))
+                {
+                    return ServiceResult.Fail("User must be an active board member.");
                 }
                 await _kanbanRepository.PromoteToOwner(boardId, promoteUserId);
                 return ServiceResult.Ok();
@@ -425,6 +446,11 @@ namespace Kanban.Services
                 if (card != null && card > 0 && userId != card)
                 {
                     return ServiceResult.Fail("Only the assigned user can update this card.");
+                }
+
+                if (assigneeId > 0 && !await _kanbanRepository.IsActiveMember(boardId, assigneeId))
+                {
+                    return ServiceResult.Fail("Assignee must be a member of this board.");
                 }
 
                 if (startDate > dueDate)
@@ -470,6 +496,10 @@ namespace Kanban.Services
                 {
                     return ServiceResult.Fail("Invitation has already been used.");
                 }
+                if (i.IsAccepted)
+                {
+                    return ServiceResult.Fail("Invitation has already been accepted.");
+                }
                 if (i.Email != email)
                 {
                     return ServiceResult.Fail("Invitation does not match the email address.");
@@ -477,6 +507,10 @@ namespace Kanban.Services
                 if (!await _kanbanRepository.ValidateBoardWithBoardId(i.SenderUserId, i.BoardId))
                 {
                     return ServiceResult.Fail("The inviting user no longer has authority.");
+                }
+                if (isAccepted && await _kanbanRepository.IsActiveMember(i.BoardId, userId))
+                {
+                    return ServiceResult.Fail("You are already a member of this board.");
                 }
                 await _kanbanRepository.WorkInvite(inviteId, userId, i.BoardId, isAccepted);
                 return ServiceResult.Ok();
@@ -572,7 +606,13 @@ namespace Kanban.Services
                     return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
                 }
 
-                return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message.Trim()));
+                message = InputSanitizer.SanitizePlainText(message);
+                if (string.IsNullOrWhiteSpace(message))
+                {
+                    return ServiceResult<BoardCardComment>.Fail("Comment cannot be empty.");
+                }
+
+                return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message));
             }
             catch (Exception)
             {

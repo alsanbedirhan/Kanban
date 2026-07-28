@@ -34,6 +34,9 @@ namespace Kanban.Repositories
         Task DeleteCard(long cardId);
         Task DeleteMember(long boardId, long userId);
         Task PromoteToOwner(long boardId, long userId);
+        Task<string?> GetMemberRole(long boardId, long userId);
+        Task<int> CountActiveOwners(long boardId);
+        Task<bool> IsActiveMember(long boardId, long userId);
         Task UpdateBoardTitle(long boardId, string title);
         Task<BoardColumn> AddColumn(long boardId, string title);
     }

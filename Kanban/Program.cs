@@ -3,6 +3,7 @@ using Kanban.Entities;
 using Kanban.Repositories;
 using Kanban.Security;
 using Kanban.Services;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -10,26 +11,76 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Rewrite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-static bool IsApiRequest(HttpRequest request)
+static bool WantsJsonResponse(HttpRequest request)
 {
-    var path = request.Path.Value?.ToLower() ?? "";
-    return path.StartsWith("/auth") || path.StartsWith("/kanban") ||
-        request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
-        request.Headers.Accept.Any(x => x != null && x.Contains("application/json"));
+    if (string.Equals(request.Headers.XRequestedWith, "XMLHttpRequest", StringComparison.OrdinalIgnoreCase))
+        return true;
+
+    var accept = request.Headers.Accept;
+    var wantsJson = accept.Any(a => a != null && a.Contains("application/json", StringComparison.OrdinalIgnoreCase));
+    var wantsHtml = accept.Any(a => a != null && a.Contains("text/html", StringComparison.OrdinalIgnoreCase));
+
+    return wantsJson && !wantsHtml;
+}
+
+static bool IsApiRequest(HttpRequest request) => WantsJsonResponse(request);
+
+static bool IsStaticAssetRequest(HttpRequest request)
+{
+    var path = request.Path.Value ?? string.Empty;
+    return path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/favicon.ico", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/favicon.svg", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/logo.png", StringComparison.OrdinalIgnoreCase);
+}
+
+static void DisableStatusCodePages(HttpContext httpContext)
+{
+    var statusCodePagesFeature = httpContext.Features.Get<IStatusCodePagesFeature>();
+    if (statusCodePagesFeature != null)
+    {
+        statusCodePagesFeature.Enabled = false;
+    }
+}
+
+static (int StatusCode, string Message) MapUnhandledException(Exception? error) => error switch
+{
+    AntiforgeryValidationException =>
+        (StatusCodes.Status400BadRequest, "Session validation failed. Please refresh the page and try again."),
+    BadHttpRequestException =>
+        (StatusCodes.Status400BadRequest, "Invalid request."),
+    _ =>
+        (StatusCodes.Status500InternalServerError, "An unexpected error occurred. Please try again.")
+};
+
+static bool IsClientDisconnect(Exception? error) =>
+    error is OperationCanceledException or TaskCanceledException;
+
+static async Task RejectPrincipalAsync(CookieValidatePrincipalContext context)
+{
+    context.RejectPrincipal();
+    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    context.HttpContext.DeleteCookies();
 }
 
 static string GetClientPartitionKey(HttpContext context) =>
     context.Connection.RemoteIpAddress?.ToString() ?? context.TraceIdentifier;
 
 builder.Services.AddDbContext<KanbanDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sql => sql.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(3),
+            errorNumbersToAdd: null)));
 
 builder.Services.AddScoped<IUserSecurityService, UserSecurityService>();
 builder.Services.AddScoped<IDBDateTimeProvider, DBDateTimeProvider>();
@@ -45,11 +96,12 @@ builder.Services.AddSingleton<IOtpCodeProtector, OtpCodeProtector>();
 
 builder.Services.AddMemoryCache();
 
-var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
-if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
-{
-    dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
-}
+var configuredKeysPath = builder.Configuration["DataProtection:KeysPath"];
+var dataProtectionKeysPath = !string.IsNullOrWhiteSpace(configuredKeysPath)
+    ? Path.IsPathRooted(configuredKeysPath)
+        ? configuredKeysPath
+        : Path.Combine(builder.Environment.ContentRootPath, configuredKeysPath)
+    : Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
 Directory.CreateDirectory(dataProtectionKeysPath);
 
 builder.Services.AddDataProtection()
@@ -61,9 +113,15 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, token) =>
     {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            context.HttpContext.Response.Headers.RetryAfter = ((int)retryAfter.TotalSeconds).ToString();
+
         if (IsApiRequest(context.HttpContext.Request))
         {
-            context.HttpContext.Response.ContentType = "application/json";
+            DisableStatusCodePages(context.HttpContext);
+            context.HttpContext.Response.ContentType = "application/json; charset=utf-8";
             await context.HttpContext.Response.WriteAsJsonAsync(
                 ServiceResult.Fail("Too many requests. Please try again later."), token);
         }
@@ -127,6 +185,17 @@ builder.Services.AddHsts(options =>
     options.MaxAge = TimeSpan.FromDays(365);
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.WithOrigins(
+                "https://kanflow.online",
+                "https://www.kanflow.online")
+            .AllowCredentials()
+            .WithMethods("GET", "POST")
+            .AllowAnyHeader());
+});
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -145,91 +214,66 @@ builder.Services.AddAuthentication(options =>
     {
         OnValidatePrincipal = async context =>
         {
-            var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier);
-            var stampClaim = context.Principal?.FindFirst("SecurityStamp");
-
-            if (userIdClaim == null || stampClaim == null)
-            {
-                context.RejectPrincipal();
-                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                context.HttpContext.DeleteCookies();
-                return;
-            }
-
-            var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
-            if (!long.TryParse(userIdClaim.Value, out var userId))
-            {
-                context.RejectPrincipal();
-                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                context.HttpContext.DeleteCookies();
-                return;
-            }
-
-            bool isValid;
             try
             {
-                isValid = await securityService.IsUserValidAsync(userId, stampClaim.Value);
-            }
-            catch
-            {
-                var cache = context.HttpContext.RequestServices.GetRequiredService<IMemoryCache>();
-                var cacheKey = $"SECURITY:{userId}";
-                if (cache.TryGetValue(cacheKey, out string? cachedStamp)
-                    && !string.IsNullOrEmpty(cachedStamp)
-                    && cachedStamp == stampClaim.Value)
+                var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier);
+                var stampClaim = context.Principal?.FindFirst("SecurityStamp");
+
+                if (userIdClaim == null || stampClaim == null)
                 {
+                    await RejectPrincipalAsync(context);
                     return;
                 }
 
-                context.RejectPrincipal();
-                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                context.HttpContext.DeleteCookies();
+                if (!long.TryParse(userIdClaim.Value, out var userId))
+                {
+                    await RejectPrincipalAsync(context);
+                    return;
+                }
+
+                var securityService = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityService>();
+                if (!await securityService.IsUserValidAsync(userId, stampClaim.Value))
+                {
+                    await RejectPrincipalAsync(context);
+                }
+            }
+            catch (Exception ex)
+            {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILogger<Program>>();
+                logger.LogError(ex, "Unexpected error while validating the auth cookie.");
+                await RejectPrincipalAsync(context);
+            }
+        },
+        OnRedirectToAccessDenied = async context =>
+        {
+            context.HttpContext.DeleteCookies();
+            DisableStatusCodePages(context.HttpContext);
+
+            if (WantsJsonResponse(context.Request))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/json; charset=utf-8";
+                await context.Response.WriteAsJsonAsync(ServiceResult.Fail("You do not have permission for this action."));
                 return;
             }
 
-            if (!isValid)
-            {
-                context.RejectPrincipal();
-                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                context.HttpContext.DeleteCookies();
-            }
+            context.Response.Redirect("/");
         },
-        OnRedirectToAccessDenied = context =>
+        OnRedirectToLogin = async context =>
         {
             context.HttpContext.DeleteCookies();
-            if (IsApiRequest(context.Request))
+            DisableStatusCodePages(context.HttpContext);
+
+            if (WantsJsonResponse(context.Request))
             {
-                var statusCodePagesFeature = context.HttpContext.Features.Get<IStatusCodePagesFeature>();
-                if (statusCodePagesFeature != null)
-                {
-                    statusCodePagesFeature.Enabled = false;
-                }
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            }
-            else
-            {
-                context.Response.Redirect("/");
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json; charset=utf-8";
+                await context.Response.WriteAsJsonAsync(ServiceResult.Fail("Your session is not active or has expired."));
+                return;
             }
 
-            return Task.CompletedTask;
-        },
-        OnRedirectToLogin = context =>
-        {
-            context.HttpContext.DeleteCookies();
-            if (IsApiRequest(context.Request))
-            {
-                var statusCodePagesFeature = context.HttpContext.Features.Get<IStatusCodePagesFeature>();
-                if (statusCodePagesFeature != null)
-                {
-                    statusCodePagesFeature.Enabled = false;
-                }
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            }
-            else
-            {
-                context.Response.Redirect("/");
-            }
-            return Task.CompletedTask;
+            context.Response.Redirect("/");
         }
     };
 });
@@ -245,6 +289,33 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
 }
+
+// İşlenmemiş istisnalar: API → JSON ServiceResult, sayfa → /Error/500
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var feature = context.Features.Get<IExceptionHandlerPathFeature>();
+        var error = feature?.Error;
+        if (IsClientDisconnect(error))
+            return;
+
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(error, "Unhandled error. Path: {Path}", feature?.Path);
+
+        if (IsApiRequest(context.Request))
+        {
+            var (statusCode, message) = MapUnhandledException(error);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            await context.Response.WriteAsJsonAsync(ServiceResult.Fail(message));
+            return;
+        }
+
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.Redirect("/Error/500");
+    });
+});
 
 app.UseRewriter(new RewriteOptions().AddRedirectToNonWwwPermanent());
 app.UseHttpsRedirection();
@@ -283,23 +354,13 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseStatusCodePagesWithReExecute("/Error/{0}");
+app.UseWhen(
+    context => !WantsJsonResponse(context.Request) && !IsStaticAssetRequest(context.Request),
+    branch => branch.UseStatusCodePagesWithReExecute("/Error/{0}"));
 app.UseRouting();
 
-app.UseCors(x =>
-{
-    var origins = new List<string> { "https://kanflow.online", "https://www.kanflow.online" };
-    if (app.Environment.IsDevelopment())
-    {
-        origins.AddRange(["http://localhost:5000", "https://localhost:5001", "http://localhost:5173"]);
-    }
-    x.WithOrigins(origins.ToArray())
-        .AllowCredentials()
-        .AllowAnyMethod()
-        .AllowAnyHeader();
-});
-
 app.UseRateLimiter();
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 

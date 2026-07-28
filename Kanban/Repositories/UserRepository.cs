@@ -1,5 +1,6 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
+using Kanban.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System;
@@ -34,6 +35,13 @@ namespace Kanban.Repositories
         {
             return await _context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId);
         }
+        public async Task<UserSecuritySnapshot?> GetSecuritySnapshot(long userId)
+        {
+            return await _context.Users.AsNoTracking()
+                .Where(x => x.Id == userId)
+                .Select(x => new UserSecuritySnapshot(x.SecurityStamp, x.IsActive))
+                .FirstOrDefaultAsync();
+        }
         public async Task<User?> GetByIdForUpdate(long userId)
         {
             return await _context.Users.FirstOrDefaultAsync(x => x.Id == userId);
@@ -53,8 +61,7 @@ namespace Kanban.Repositories
             await _context.Users.Where(x => x.Id == userId)
                 .ExecuteUpdateAsync(x => x.SetProperty(u => u.HashPassword, pass)
                 .SetProperty(u => u.SecurityStamp, sec));
-            _cache.Remove($"SECURITY:{userId}");
-            _cache.Set($"SECURITY:{userId}", sec, TimeSpan.FromHours(6));
+            UserSecurityCache.Invalidate(_cache, userId);
         }
         public async Task<User> Create(User user)
         {

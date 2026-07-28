@@ -1,4 +1,5 @@
 ﻿using Kanban.Repositories;
+using Kanban.Security;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Kanban.Services
@@ -16,24 +17,16 @@ namespace Kanban.Services
 
         public async Task<bool> IsUserValidAsync(long userId, string securityStamp)
         {
-            string key = $"SECURITY:{userId}";
-            if (!_cache.TryGetValue(key, out string? stamp) || string.IsNullOrEmpty(stamp))
+            if (!UserSecurityCache.TryGet(_cache, userId, out var snapshot))
             {
-                var user = await _userRepository.GetById(userId);
-
-                if (user == null)
-                    return false;
-
-                stamp = user.SecurityStamp;
-
-                _cache.Set(key, stamp, TimeSpan.FromHours(6));
+                snapshot = await _userRepository.GetSecuritySnapshot(userId);
+                UserSecurityCache.Set(_cache, userId, snapshot);
             }
 
-            if (stamp != securityStamp)
+            if (snapshot == null || !snapshot.IsActive)
                 return false;
 
-            return true;
+            return string.Equals(snapshot.SecurityStamp, securityStamp, StringComparison.Ordinal);
         }
     }
-
 }

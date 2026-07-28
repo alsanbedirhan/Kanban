@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 /Kanban/appsettings.Development.json
 /Kanban/App_Data/DataProtection-Keys/
+/Kanban/DataProtection-Keys

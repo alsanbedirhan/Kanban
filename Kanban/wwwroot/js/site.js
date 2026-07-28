@@ -119,10 +119,10 @@ function filterColumnsForSearch(columns, query) {
     }));
 }
 
-function getTurnstileToken() {
-    return document.querySelector('#loginModal [name="cf-turnstile-response"]')?.value
-        || document.querySelector('#registerModal [name="cf-turnstile-response"]')?.value
-        || null;
+function getTurnstileToken(modalId) {
+    if (!modalId) return null;
+    const value = document.querySelector(`#${modalId} [name="cf-turnstile-response"]`)?.value?.trim();
+    return value || null;
 }
 
 function isSafeHexColor(color) {
@@ -228,7 +228,13 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
 
         if (method !== 'GET') {
             try {
-                await fetch('/Home/GetToken', { credentials: 'same-origin' });
+                await fetch('/Home/GetToken', {
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                });
             } catch (err) {
                 console.warn("Token fetch error:", err);
             }
@@ -881,13 +887,15 @@ function closeRegisterModal() {
 async function handleLogin() {
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
+    const turnstileToken = getTurnstileToken('loginModal');
 
     if (!email || !password) return Swal.fire('Error', 'Please fill all fields', 'error');
+    if (!turnstileToken) return Swal.fire('Error', 'Please complete the verification.', 'error');
 
     try {
         const response = await apiRequest('/Auth/Login', {
             method: 'POST',
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ email, password, turnstileToken })
         });
 
         if (!response) return;
@@ -905,6 +913,7 @@ async function handleLogin() {
             loadBoards();
         } else {
             Swal.fire('Error', response.errorMessage || 'Login failed', 'error');
+            if (window.turnstile) window.turnstile.reset();
         }
     } catch (err) {
         console.error('Login error:', err);
@@ -965,8 +974,7 @@ async function handleRegister() {
         return Swal.fire('Error', 'Password must contain uppercase, lowercase, number, and special character.', 'error');
     }
 
-    const turnstileInput = document.querySelector('[name="cf-turnstile-response"]');
-    const turnstileToken = turnstileInput ? turnstileInput.value : null;
+    const turnstileToken = getTurnstileToken('registerModal');
 
     if (!turnstileToken) {
         return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please verify that you are human.' });
@@ -1068,7 +1076,7 @@ async function handleRegister() {
 }
 
 async function handleForgotPassword() {
-    const turnstileToken = getTurnstileToken();
+    const turnstileToken = getTurnstileToken('loginModal');
 
     if (!turnstileToken) {
         return Swal.fire({ icon: 'warning', title: 'Verification Required', text: 'Please complete the captcha below.' });
@@ -1229,7 +1237,13 @@ async function handleForgotPassword() {
 
 async function postLogoutRequest() {
     try {
-        await fetch('/Home/GetToken', { credentials: 'same-origin' });
+        await fetch('/Home/GetToken', {
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        });
     } catch (err) {
         console.warn('Token refresh before logout failed:', err);
     }
@@ -1280,7 +1294,7 @@ async function handleLogout(refresh = true, message = '') {
                 showConfirmButton: false
             });
         }
-        window.location.replace('/?logout=true&t=' + new Date().getTime());
+        window.location.replace('/');
     }
 }
 
@@ -2811,10 +2825,6 @@ async function deleteComment(commentId, cardId) {
     }
 }
 
-function deleteAllCookies() {
-    deleteAppCookies();
-}
-
 function setupModalsAndKeyboard() {
     document.querySelectorAll('.modal').forEach(modal => {
         modal.addEventListener('click', (e) => {
@@ -2884,10 +2894,6 @@ function setupVisibilitySync() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-
-    if (window.location.search.includes('logout=true')) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
 
     const serverDataEl = document.getElementById('server-data');
     if (serverDataEl) {
@@ -2985,7 +2991,7 @@ function handleInviteStatus() {
             Swal.fire('Info', 'You are already a member of this board.', 'info');
             break;
 
-        case 'WRONG_ACCOUNT':
+        case 'WRONG_ACC':
             const parts = (window.SERVER_MESSAGE || "").split('|');
             const currentEmail = escapeHtml(parts[0] || "Unknown");
             const targetEmail = escapeHtml(parts[1] || "Unknown");
