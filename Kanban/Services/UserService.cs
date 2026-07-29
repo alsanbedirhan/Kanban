@@ -4,6 +4,7 @@ using Kanban.Repositories;
 using Kanban.Security;
 using Microsoft.Extensions.Caching.Memory;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace Kanban.Services
 {
@@ -15,20 +16,17 @@ namespace Kanban.Services
         private readonly IUserRepository _userRepository;
         private readonly IEmailService _mailService;
         private readonly IDBDateTimeProvider _dbDate;
-        private readonly IOtpCodeProtector _otpProtector;
         private readonly IMemoryCache _cache;
 
         public UserService(
             IUserRepository userRepository,
             IEmailService mailService,
             IDBDateTimeProvider dbDate,
-            IOtpCodeProtector otpProtector,
             IMemoryCache cache)
         {
             _userRepository = userRepository;
             _mailService = mailService;
             _dbDate = dbDate;
-            _otpProtector = otpProtector;
             _cache = cache;
         }
 
@@ -111,8 +109,7 @@ namespace Kanban.Services
                 }
                 string code = GenerateOtpCode();
                 await _mailService.SendVerificationCode(email, code);
-                var protectedCode = _otpProtector.Protect(code);
-                await _userRepository.SaveVerifyCode(email, protectedCode);
+                await _userRepository.SaveVerifyCode(email, HashOtp(code));
                 ClearOtpFailures(email);
                 return ServiceResult.Ok();
             }
@@ -170,8 +167,7 @@ namespace Kanban.Services
                     RecordOtpFailure(email);
                     return ServiceResult<long>.Fail("Invalid or expired code.");
                 }
-                var expectedCode = ResolveStoredOtpCode(stored.Code);
-                if (expectedCode == null || !OtpSecurity.CodesMatch(expectedCode, code))
+                if (!OtpSecurity.CodesMatch(stored.Code, HashOtp(code)))
                 {
                     RecordOtpFailure(email);
                     return ServiceResult<long>.Fail("Invalid or expired code.");
@@ -184,16 +180,8 @@ namespace Kanban.Services
             }
         }
 
-        private string? ResolveStoredOtpCode(string storedValue)
-        {
-            var decrypted = _otpProtector.Unprotect(storedValue);
-            if (decrypted != null)
-                return decrypted;
-            // Legacy plaintext rows (pre-encryption migration)
-            if (storedValue.Length == 6 && storedValue.All(char.IsDigit))
-                return storedValue;
-            return null;
-        }
+        private static string HashOtp(string code)
+            => Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
 
         private static string OtpFailKey(string email) =>
             $"OTP_FAIL:{email.Trim().ToLowerInvariant()}";

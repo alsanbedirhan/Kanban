@@ -138,7 +138,7 @@ public partial class KanbanDbContext : DbContext
         });
         modelBuilder.Entity<UserVerification>(entity =>
         {
-            entity.Property(e => e.Code).HasMaxLength(10);
+            entity.Property(e => e.Code).HasMaxLength(100);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
             entity.Property(e => e.Email).HasMaxLength(100);
         });

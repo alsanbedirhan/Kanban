@@ -93,8 +93,6 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddHttpClient<ITurnstileService, TurnstileService>();
 
-builder.Services.AddSingleton<IOtpCodeProtector, OtpCodeProtector>();
-
 builder.Services.AddMemoryCache();
 
 var configuredKeysPath = builder.Configuration["DataProtection:KeysPath"];
