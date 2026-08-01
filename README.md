@@ -1,63 +1,72 @@
 # Kanflow
 
-Kanflow is a modern Single Page Application (SPA) for task management using Kanban methodology. It is built with ASP.NET Core and a vanilla JavaScript frontend.
+Kanflow is a Kanban task board built with ASP.NET Core and vanilla JavaScript. One page, no build step — boards, cards, collaboration, and auth run through JSON API calls to MVC controllers.
 
-**Live demo:** [www.kanflow.online](https://www.kanflow.online)
+**Live:** [kanflow.online](https://www.kanflow.online)
 
-Teams and individuals can visualize work, collaborate on shared boards, and track tasks with due dates, comments, and calendar views.
+## Features
 
-## Key Features
-
-- **Kanban boards** — Drag-and-drop cards across columns (SortableJS)
-- **Secure authentication** — Cookie-based auth with BCrypt password hashing, email OTP verification, and Cloudflare Turnstile bot protection
-- **SPA architecture** — Single-page experience powered by ASP.NET Core MVC and fetch API
-- **Email integration** — Verification codes and board invitations via Azure Communication Email
-- **Collaboration** — Board invites, member management, notifications, and card comments
-- **Quick notes** — Personal notes alongside board work
-- **Responsive design** — Works on desktop and mobile
-
-## Tech Stack
-
-### Backend
-
-- **Framework:** ASP.NET Core (.NET 10)
-- **Architecture:** N-layer (Controllers → Services → Repositories)
-- **ORM:** Entity Framework Core
-- **Database:** SQL Server
-- **Authentication:** Custom cookie auth with security stamp validation
-- **Security:** CSRF (antiforgery), HSTS, CSP, rate limiting, HTML sanitization, OTP encryption at rest
-
-### Frontend
-
-- **Type:** Single Page Application (SPA)
-- **Libraries:** Vanilla JavaScript (ES6+), SweetAlert2, Quill, FullCalendar, SortableJS
-- **Assets:** `wwwroot/js/site.js`, `wwwroot/css/site.css` (no build step)
-- **Communication:** JSON API calls to MVC controller actions
-
-### Frontend features
-
-- Card search with `/` keyboard shortcut
-- New card shortcut (`N`)
-- Offline detection toasts
-- Optimistic drag-and-drop with rollback on error
+### Boards & cards
+- Drag-and-drop columns and cards (SortableJS)
+- Rich card descriptions (Quill), due dates, highlight/calendar colors, assignees
+- Card search (`/`) and quick new-card shortcut (`N`)
+- Optimistic drag-and-drop with rollback on failure
 - Last opened board remembered in `localStorage`
+- Polling for board updates and notification badges
 
-## Project Structure
+### Collaboration
+- Shared boards with member list, invites, and owner promotion
+- Email invitations with signed JWT activation links
+- In-app notifications
+- Card comments with server-side HTML sanitization
+
+### Account
+- Register and password reset via email OTP
+- Login with BCrypt password hashing
+- Cloudflare Turnstile on login, OTP request, register, and reset flows
+- Quick notes (personal scratchpad)
+- Avatar picker from a server-side whitelist
+
+### UX & reliability
+- Responsive layout for desktop and mobile
+- Offline detection toasts
+- Centralized JSON error handling for API calls
+
+## Tech stack
+
+| Layer | Choices |
+|-------|---------|
+| Runtime | .NET 10, ASP.NET Core MVC |
+| Data | SQL Server, Entity Framework Core |
+| Auth | Cookie authentication + security stamp validation |
+| Email | Azure Communication Email |
+| Frontend | Vanilla JS (ES6+), SweetAlert2, Quill, FullCalendar, SortableJS |
+| Security | CSRF (antiforgery), HSTS, CSP, rate limiting, HtmlSanitizer |
+
+## Project structure
 
 ```
 Kanban/
-├── Controllers/     # MVC controllers (Home, Auth, Kanban, Error)
-├── Entities/        # EF Core entities and DbContext
-├── Models/          # DTOs and view models
-├── Repositories/    # Data access layer
-├── Services/        # Business logic (Kanban, User, Email, Turnstile)
-├── Security/        # OTP encryption, input sanitization, avatar whitelist
-└── wwwroot/         # Static assets (site.js, site.css)
+├── Controllers/       Home, Auth, Kanban, Error
+├── Entities/          EF Core entities and KanbanDbContext
+├── Models/            DTOs, view models, ServiceResult
+├── Repositories/      Data access
+├── Services/          Business logic (Kanban, User, Email, Turnstile)
+├── Security/          Input sanitization, OTP/login limits, avatar whitelist
+├── Views/Home/        SPA shell (Index.cshtml)
+└── wwwroot/           site.js, site.css, avatars
 ```
+
+## Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- SQL Server (local or remote)
+- Azure Communication Email connection string (for OTP and invites)
+- Cloudflare Turnstile site key + secret key
 
 ## Configuration
 
-Copy settings into `appsettings.Development.json` (gitignored) or your deployment environment:
+Create `Kanban/appsettings.Development.json` (gitignored) or set values in your deployment environment:
 
 ```json
 {
@@ -76,44 +85,87 @@ Copy settings into `appsettings.Development.json` (gitignored) or your deploymen
     "ExpireMinutes": 60
   },
   "TurnstileSettings": {
-    "SecretKey": "<cloudflare-turnstile-secret>"
+    "SiteKey": "<cloudflare-turnstile-site-key>",
+    "SecretKey": "<cloudflare-turnstile-secret-key>"
+  },
+  "DataProtection": {
+    "KeysPath": "C:\\ProgramData\\Kanflow\\DataProtection-Keys"
   }
 }
 ```
 
-## Getting Started
+| Setting | Purpose |
+|---------|---------|
+| `ConnectionStrings:DefaultConnection` | SQL Server database |
+| `EmailSettings` | OTP codes and board invite emails |
+| `JwtSettings` | Signed tokens in board invite links (not session auth) |
+| `TurnstileSettings:SiteKey` | Rendered in the login/register/OTP modals |
+| `TurnstileSettings:SecretKey` | Server-side Turnstile verification |
+| `DataProtection:KeysPath` | Persistent antiforgery/auth cookie keys (see below) |
+
+## Getting started
 
 ```bash
-cd Kanban
+git clone <repo-url>
+cd Kanban/Kanban
 dotnet restore
 dotnet run
 ```
 
-Open `https://localhost:5001` (or the URL shown in the console).
+Open `https://localhost:7281` (or the URL printed in the console).
+
+The app expects an existing SQL Server schema matching the EF entities in `Entities/`. There are no bundled migrations in this repository.
 
 ### Frontend development
 
-Edit static assets directly under `Kanban/wwwroot/`:
+Edit assets directly — no Node.js or npm required:
 
-- `js/site.js` — application logic
-- `css/site.css` — styles
+- `wwwroot/js/site.js` — application logic
+- `wwwroot/css/site.css` — styles
 
-No Node.js or npm is required. Changes are picked up on refresh (or after restart in production with cache busting via `asp-append-version`).
+Static files are cache-busted in production via `asp-append-version`.
 
-## Security Notes
+## Production deployment
 
-- Auth endpoints are rate-limited per IP (login/reset: 10/min, OTP: 5/15 min, general API: 120/min)
-- OTP codes are generated with `RandomNumberGenerator` (cryptographically secure)
-- **OTP at rest:** Codes are encrypted with ASP.NET Data Protection (`Kanflow.OtpCode.v1`) before being stored in the database; validation decrypts them with timing-safe comparison. Legacy plaintext rows (6-digit) remain readable until they expire.
-- OTP brute-force protection: 5 failed attempts per email within 15 minutes
-- Turnstile verification is cached per email/purpose for 10 minutes; consumed only after successful register or password reset
-- Card descriptions are sanitized server-side (HtmlSanitizer); highlight/calendar colors must be valid `#RRGGBB` hex
-- Avatar filenames are validated against a server-side whitelist
-- Session cookies are HttpOnly, Secure, and SameSite=Strict
-- Content Security Policy restricts script, frame, and image sources; `Referrer-Policy` and `Permissions-Policy` headers are set
-- **IIS / app pool recycle:** Data Protection keys are persisted under `App_Data/DataProtection-Keys` so auth cookies and OTP encryption survive process restarts. `DataProtection:KeysPath` accepts an absolute path (recommended in production, e.g. `C:\ProgramData\Kanflow\DataProtection-Keys`) or a path relative to the content root. On startup the app verifies the folder is writable and logs an error if it is not — if keys cannot be persisted, new ones are generated on every recycle and every signed-in user is logged out. Keep the folder outside the deployment directory so publishing does not wipe it.
-- **Cold start resilience:** The security stamp is validated against the database on every request with no in-memory cache, and EF Core retries transient SQL failures, so an empty cache right after a recycle cannot log users out.
-- **Error responses:** Unhandled exceptions are caught centrally; JSON callers always receive a `ServiceResult` payload and only real page navigations get the HTML error page. Auth failures return `401`/`403` JSON for XHR and a redirect to `/` for navigations.
+### Reverse proxy / IIS
+
+The app calls `UseForwardedHeaders()` so `X-Forwarded-Proto` and `X-Forwarded-For` from IIS, Cloudflare, or another reverse proxy are honored. Without this, HTTPS requests can be treated as HTTP and cookies may be set incorrectly.
+
+Ensure your proxy forwards:
+
+- `X-Forwarded-Proto: https`
+- `X-Forwarded-For` (client IP, for rate limiting)
+
+### Data Protection keys
+
+Auth and antiforgery cookies depend on persisted Data Protection keys. By default they are stored under `App_Data/DataProtection-Keys` inside the content root.
+
+For production, set `DataProtection:KeysPath` to a **writable folder outside the publish directory** (for example `C:\ProgramData\Kanflow\DataProtection-Keys`). If keys are lost on every app pool recycle, all users are logged out and CSRF tokens become invalid until they refresh.
+
+### OTP storage
+
+Verification codes are stored as SHA-256 hashes (Base64, 44 characters). The `UserVerifications.Code` column must allow at least 44 characters:
+
+```sql
+ALTER TABLE UserVerifications ALTER COLUMN Code NVARCHAR(44) NOT NULL;
+```
+
+## Security
+
+| Area | Behavior |
+|------|----------|
+| Rate limits | Login/reset: 10/min (sliding); OTP send: 5/15 min; register/reset complete: 8/min; general auth: 30/min; API: 120/min — all per IP |
+| OTP generation | `RandomNumberGenerator` (6-digit codes) |
+| OTP at rest | SHA-256 hash; compared with timing-safe `FixedTimeEquals` |
+| OTP brute force | 5 failed attempts per email within 15 minutes |
+| Turnstile | Verified on login and OTP flows; register/reset require a prior verified session cached per email + purpose |
+| Passwords | BCrypt hashing |
+| Sessions | HttpOnly `Kanflow.Auth` cookie, Secure in production, SameSite=Strict; stamp revalidated against DB on each request |
+| CSRF | Double-submit cookie (`XSRF-TOKEN` header); token refreshed before every mutating request |
+| Content | Card descriptions sanitized (HtmlSanitizer); colors validated as `#RRGGBB`; avatar filenames whitelisted |
+| Headers | CSP, HSTS, `Referrer-Policy`, `Permissions-Policy` |
+
+Auth endpoints (`Login`, `VerifyWork`, `Register`, `ResetPassword`, `Logout`) are marked `[AllowAnonymous]` so unauthenticated clients are not rejected before CSRF validation.
 
 ## License
 
