@@ -1292,7 +1292,7 @@ async function handleRegister() {
                     timer: 2000,
                     showConfirmButton: false
                 });
-                loadBoards();
+                await loadBoards();
             } else {
                 const msg = response.errorMessage || 'Registration failed.';
                 await Swal.fire('Registration Failed', msg, 'error');
@@ -1535,7 +1535,7 @@ async function loadBoards() {
         const targetId = hasSavedBoard ? savedBoardId : AppState.boards[0].id;
 
         if (!AppState.currentBoardId || AppState.currentBoardId !== targetId) {
-            selectBoard(targetId);
+            await selectBoard(targetId);
         }
     } catch (e) {
         console.error('Failed to load boards:', e);

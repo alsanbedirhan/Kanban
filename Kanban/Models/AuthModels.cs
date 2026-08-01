@@ -54,6 +54,7 @@ namespace Kanban.Models
         [Required, StringLength(6, MinimumLength = 6)]
         public string otpCode { get; set; } = string.Empty;
     }
+
     public class VerifyViewModel
     {
         [Required, EmailAddress, MaxLength(100)]

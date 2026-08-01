@@ -17,12 +17,18 @@ namespace Kanban.Controllers
     public class AuthController : Controller
     {
         private readonly IUserService _userService;
+        private readonly IKanbanService _kanbanService;
         private readonly ITurnstileService _turnstileService;
         private readonly IMemoryCache _cache;
 
-        public AuthController(IUserService userService, ITurnstileService turnstileService, IMemoryCache cache)
+        public AuthController(
+            IUserService userService,
+            IKanbanService kanbanService,
+            ITurnstileService turnstileService,
+            IMemoryCache cache)
         {
             _userService = userService;
+            _kanbanService = kanbanService;
             _turnstileService = turnstileService;
             _cache = cache;
         }
@@ -94,6 +100,9 @@ namespace Kanban.Controllers
                 return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
             TurnstileSessionCache.ConsumeVerification(_cache, model.email, "register");
+
+            await _kanbanService.EnsureWelcomeBoard(result.Data.Id);
+
             await signIn(new MyClaims
             {
                 UserId = result.Data.Id,

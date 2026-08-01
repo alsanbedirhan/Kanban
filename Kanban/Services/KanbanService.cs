@@ -131,6 +131,23 @@ namespace Kanban.Services
             }
         }
 
+        public async Task<ServiceResult> EnsureWelcomeBoard(long userId)
+        {
+            try
+            {
+                var boards = await _kanbanRepository.GetBoards(userId);
+                if (boards.Count > 0)
+                    return ServiceResult.Ok();
+
+                await _kanbanRepository.AddBoard(userId, "Sample Board");
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("A database error occurred, please try again.");
+            }
+        }
+
         public async Task<ServiceResult> DeleteBoard(long userId, long boardId)
         {
             try
