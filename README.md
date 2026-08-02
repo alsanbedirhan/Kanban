@@ -142,14 +142,6 @@ Auth and antiforgery cookies depend on persisted Data Protection keys. By defaul
 
 For production, set `DataProtection:KeysPath` to a **writable folder outside the publish directory** (for example `C:\ProgramData\Kanflow\DataProtection-Keys`). If keys are lost on every app pool recycle, all users are logged out and CSRF tokens become invalid until they refresh.
 
-### OTP storage
-
-Verification codes are stored as SHA-256 hashes (Base64, 44 characters). The `UserVerifications.Code` column must allow at least 44 characters:
-
-```sql
-ALTER TABLE UserVerifications ALTER COLUMN Code NVARCHAR(44) NOT NULL;
-```
-
 ## Security
 
 | Area | Behavior |
