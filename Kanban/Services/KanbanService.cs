@@ -11,6 +11,9 @@ namespace Kanban.Services
 {
     public class KanbanService : IKanbanService
     {
+        // Mirrors the BoardCards.Title column width.
+        private const int CardTitleMaxLength = 150;
+
         private readonly JwtSettings? _jwtSettings;
         private readonly IKanbanRepository _kanbanRepository;
         private readonly IEmailService _emailService;
@@ -27,7 +30,7 @@ namespace Kanban.Services
             _dbDate = dbDate;
         }
 
-        public async Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate,
+        public async Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate,
             int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
             try
@@ -50,11 +53,21 @@ namespace Kanban.Services
                     return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
                 }
 
+                title = InputSanitizer.SanitizePlainText(title);
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    return ServiceResult<BoardCard>.Fail("Card title is required.");
+                }
+                if (title.Length > CardTitleMaxLength)
+                {
+                    return ServiceResult<BoardCard>.Fail($"Card title cannot exceed {CardTitleMaxLength} characters.");
+                }
+
                 desc = InputSanitizer.SanitizeRichText(desc);
                 highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
                 calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
 
-                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor));
+                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor));
             }
             catch (Exception)
             {
@@ -62,7 +75,7 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult<BoardColumn>> AddColumn(long userId, long boardId, string title)
+        public async Task<ServiceResult<BoardColumn>> AddColumn(long userId, long boardId, string title, bool isResultColumn)
         {
             try
             {
@@ -70,11 +83,51 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardColumn>.Fail("You do not have permission to manage this board.");
                 }
-                return ServiceResult<BoardColumn>.Ok(await _kanbanRepository.AddColumn(boardId, title));
+
+                title = InputSanitizer.SanitizePlainText(title);
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    return ServiceResult<BoardColumn>.Fail("Column name is required.");
+                }
+                if (title.Length > 100)
+                {
+                    return ServiceResult<BoardColumn>.Fail("Column name cannot exceed 100 characters.");
+                }
+
+                return ServiceResult<BoardColumn>.Ok(await _kanbanRepository.AddColumn(boardId, title, isResultColumn));
             }
             catch (Exception)
             {
                 return ServiceResult<BoardColumn>.Fail("A database error occurred, please try again.");
+            }
+        }
+
+        public async Task<ServiceResult> UpdateColumn(long userId, long boardId, long columnId, string title, bool isResultColumn)
+        {
+            try
+            {
+                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId)
+                    || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
+                {
+                    return ServiceResult.Fail("You do not have permission to manage this board.");
+                }
+
+                title = InputSanitizer.SanitizePlainText(title);
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    return ServiceResult.Fail("Column name is required.");
+                }
+                if (title.Length > 100)
+                {
+                    return ServiceResult.Fail("Column name cannot exceed 100 characters.");
+                }
+
+                await _kanbanRepository.UpdateColumn(boardId, columnId, title, isResultColumn);
+                return ServiceResult.Ok();
+            }
+            catch (Exception)
+            {
+                return ServiceResult.Fail("A database error occurred, please try again.");
             }
         }
 
@@ -110,6 +163,14 @@ namespace Kanban.Services
                 var token = GenerateJwt(email, i.Id, boardId);
 
                 await _emailService.SendInvite(email, senderFullName, senderEmail, b, token);
+
+                if (u != null)
+                {
+                    var inviterName = InputSanitizer.SanitizePlainText(senderFullName);
+                    await _kanbanRepository.NotifyUser(
+                        u.Value,
+                        $"{inviterName} invited you to board '{b}'");
+                }
 
                 return ServiceResult.Ok();
             }
@@ -448,7 +509,7 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor,
+        public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor,
             long assigneeId, DateOnly startDate, string calendarColor)
         {
             try
@@ -475,11 +536,21 @@ namespace Kanban.Services
                     return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
                 }
 
+                title = InputSanitizer.SanitizePlainText(title);
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    return ServiceResult.Fail("Card title is required.");
+                }
+                if (title.Length > CardTitleMaxLength)
+                {
+                    return ServiceResult.Fail($"Card title cannot exceed {CardTitleMaxLength} characters.");
+                }
+
                 desc = InputSanitizer.SanitizeRichText(desc);
                 highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
                 calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
 
-                await _kanbanRepository.UpdateCard(userId, cardId, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor);
+                await _kanbanRepository.UpdateCard(userId, cardId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor);
                 return ServiceResult.Ok();
             }
             catch (Exception)

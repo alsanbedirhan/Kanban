@@ -38,8 +38,10 @@ static bool IsStaticAssetRequest(HttpRequest request)
     return path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/icons/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/favicon.ico", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/favicon.svg", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/manifest.json", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/logo.png", StringComparison.OrdinalIgnoreCase);
 }
 

@@ -45,7 +45,7 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> UpdateCard([FromBody] BoardCardUpdateModel model)
         {
-            var r = await _kanbanService.UpdateCard(User.GetUserId(), model.BoardId, model.CardId, model.Description,
+            var r = await _kanbanService.UpdateCard(User.GetUserId(), model.BoardId, model.CardId, model.Title, model.Description,
                 model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId, model.StartDate, model.CalendarColor);
 
             if (!r.Success)
@@ -130,7 +130,18 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> AddColumn([FromBody] BoardColumnInputModel model)
         {
-            var r = await _kanbanService.AddColumn(User.GetUserId(), model.BoardId, model.Title);
+            var r = await _kanbanService.AddColumn(User.GetUserId(), model.BoardId, model.Title, model.IsResultColumn);
+            if (!r.Success)
+            {
+                return Ok(ServiceResult.Fail(r.ErrorMessage));
+            }
+            return Ok(ServiceResult.Ok());
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> UpdateColumn([FromBody] BoardColumnUpdateModel model)
+        {
+            var r = await _kanbanService.UpdateColumn(User.GetUserId(), model.BoardId, model.ColumnId, model.Title, model.IsResultColumn);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
@@ -152,7 +163,7 @@ namespace Kanban.Controllers
         [HttpPost]
         public async Task<IActionResult> AddCard([FromBody] BoardCardInsertModel model)
         {
-            var r = await _kanbanService.AddCard(User.GetUserId(), model.BoardId, model.ColumnId, model.Description,
+            var r = await _kanbanService.AddCard(User.GetUserId(), model.BoardId, model.ColumnId, model.Title, model.Description,
                 model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId, model.StartDate, model.CalendarColor);
             if (!r.Success)
             {

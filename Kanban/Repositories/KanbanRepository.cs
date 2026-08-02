@@ -1,5 +1,6 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
+using Kanban.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Caching.Memory;
@@ -18,8 +19,17 @@ namespace Kanban.Repositories
             _dbDate = dbDate;
         }
 
+        private const int NotificationMessageMaxLength = 500;
+
         private async Task SendNotification(long userId, string message)
         {
+            if (userId <= 0 || string.IsNullOrWhiteSpace(message))
+                return;
+
+            message = message.Trim();
+            if (message.Length > NotificationMessageMaxLength)
+                message = message[..(NotificationMessageMaxLength - 3)] + "...";
+
             var now = await _dbDate.Now();
             var notification = new UserNotification
             {
@@ -35,6 +45,16 @@ namespace Kanban.Repositories
             _cache.Remove($"User_HasUpdates_{userId}");
         }
 
+        public Task NotifyUser(long userId, string message) => SendNotification(userId, message);
+
+        private static string BuildCommentNotificationPreview(string message)
+        {
+            var preview = InputSanitizer.SanitizePlainText(message);
+            if (preview.Length > 120)
+                preview = preview[..117] + "...";
+            return preview;
+        }
+
         public async Task<Board> AddBoard(long userId, string title)
         {
             var now = await _dbDate.Now();
@@ -48,7 +68,7 @@ namespace Kanban.Repositories
                 BoardColumns = new List<BoardColumn> {
                     new BoardColumn { IsActive = true, Title = "To Do" },
                     new BoardColumn { IsActive = true, Title = "Progress" },
-                    new BoardColumn { IsActive = true, Title = "Done" }
+                    new BoardColumn { IsActive = true, Title = "Done", IsResultColumn = true }
                 }
             };
             await _context.BoardMembers.AddAsync(new BoardMember
@@ -98,9 +118,11 @@ namespace Kanban.Repositories
 
                 await TouchBoard(boardId);
             }
+
+            _cache.Remove($"User_HasUpdates_{userId}");
         }
 
-        public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
+        public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
             var lastOrder = await _context.BoardCards
                 .Where(c => c.BoardColumnId == columnId && c.IsActive)
@@ -108,6 +130,7 @@ namespace Kanban.Repositories
 
             var b = new BoardCard
             {
+                Title = title,
                 Desc = desc,
                 BoardColumnId = columnId,
                 IsActive = true,
@@ -126,25 +149,37 @@ namespace Kanban.Repositories
 
             if (assigneeId > 0 && assigneeId != userId)
             {
-                await SendNotification(assigneeId, $"You have been assigned to a new card");
+                await SendNotification(assigneeId, $"You have been assigned to card '{title}'");
             }
 
             await TouchBoard(boardId);
             return b;
         }
 
-        public async Task<BoardColumn> AddColumn(long boardId, string title)
+        public async Task<BoardColumn> AddColumn(long boardId, string title, bool isResultColumn)
         {
             var b = new BoardColumn
             {
                 BoardId = boardId,
                 Title = title,
-                IsActive = true
+                IsActive = true,
+                IsResultColumn = isResultColumn
             };
             await _context.BoardColumns.AddAsync(b);
             await _context.SaveChangesAsync();
             await TouchBoard(boardId);
             return b;
+        }
+
+        public async Task UpdateColumn(long boardId, long columnId, string title, bool isResultColumn)
+        {
+            await _context.BoardColumns
+                .Where(c => c.Id == columnId && c.BoardId == boardId && c.IsActive)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.Title, title)
+                    .SetProperty(x => x.IsResultColumn, isResultColumn));
+
+            await TouchBoard(boardId);
         }
 
         public async Task<bool> CheckBoardMembers(long userId, long boardId)
@@ -224,6 +259,7 @@ namespace Kanban.Repositories
                 {
                     Id = x.Id,
                     Title = x.Title,
+                    IsResultColumn = x.IsResultColumn,
                     TotalCards = x.BoardCards.Count(y => y.IsActive),
                     Cards = x.BoardCards.Where(y => y.IsActive)
                         .OrderBy(y => y.OrderNo)
@@ -231,11 +267,14 @@ namespace Kanban.Repositories
                         .Select(c => new BoardCardResultModel
                         {
                             Id = c.Id,
+                            Title = c.Title,
                             Desc = c.Desc,
                             Order = c.OrderNo,
                             DueDate = c.DueDate,
+                            StartDate = c.StartDate,
                             WarningDays = c.WarningDays,
                             HighlightColor = c.HighlightColor ?? "",
+                            CalendarColor = c.CalendarColor ?? "",
                             AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
                             AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
                             AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
@@ -252,11 +291,14 @@ namespace Kanban.Repositories
                 .Select(c => new BoardCardResultModel
                 {
                     Id = c.Id,
+                    Title = c.Title,
                     Desc = c.Desc,
                     Order = c.OrderNo,
                     DueDate = c.DueDate,
+                    StartDate = c.StartDate,
                     WarningDays = c.WarningDays,
                     HighlightColor = c.HighlightColor ?? "",
+                    CalendarColor = c.CalendarColor ?? "",
                     AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
                     AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
                     AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
@@ -429,24 +471,35 @@ namespace Kanban.Repositories
             return members;
         }
 
-        public async Task UpdateCard(long userId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
+        public async Task UpdateCard(long userId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
-            var board = await _context.BoardCards.Where(x => x.Id == cardId)
-                .Select(c => new { c.BoardColumn.BoardId }).FirstOrDefaultAsync();
+            var cardInfo = await _context.BoardCards.Where(x => x.Id == cardId)
+                .Select(c => new { c.AssigneeUserId, c.BoardColumn.BoardId })
+                .FirstOrDefaultAsync();
+
+            var newAssigneeId = assigneeId > 0 ? assigneeId : (long?)null;
 
             await _context.BoardCards
             .Where(c => c.Id == cardId)
             .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Title, title)
                 .SetProperty(x => x.Desc, desc)
                 .SetProperty(x => x.DueDate, dueDate)
-                .SetProperty(x => x.AssigneeUserId, assigneeId > 0 ? assigneeId : null)
+                .SetProperty(x => x.AssigneeUserId, newAssigneeId)
                 .SetProperty(x => x.WarningDays, warningDays)
                 .SetProperty(x => x.HighlightColor, highlightColor)
                 .SetProperty(x => x.StartDate, startDate)
                 .SetProperty(x => x.CalendarColor, calendarColor)
             );
 
-            if (board != null) await TouchBoard(board.BoardId);
+            if (newAssigneeId.HasValue
+                && newAssigneeId.Value != userId
+                && newAssigneeId != cardInfo?.AssigneeUserId)
+            {
+                await SendNotification(newAssigneeId.Value, $"You have been assigned to card '{title}'");
+            }
+
+            if (cardInfo != null) await TouchBoard(cardInfo.BoardId);
         }
 
         public async Task<List<CommentResultModel>> GetComments(long cardId)
@@ -478,10 +531,17 @@ namespace Kanban.Repositories
             await _context.BoardCardComments.AddAsync(comment);
             await _context.SaveChangesAsync();
 
-            var card = await _context.BoardCards.AsNoTracking().Select(c => new { c.Id, c.AssigneeUserId, c.Desc }).FirstOrDefaultAsync(c => c.Id == cardId);
+            var card = await _context.BoardCards.AsNoTracking()
+                .Where(c => c.Id == cardId)
+                .Select(c => new { c.AssigneeUserId, c.Title })
+                .FirstOrDefaultAsync();
+
             if (card != null && card.AssigneeUserId.HasValue && card.AssigneeUserId.Value != userId)
             {
-                await SendNotification(card.AssigneeUserId.Value, $"New comment on card: {message}");
+                var preview = BuildCommentNotificationPreview(message);
+                await SendNotification(
+                    card.AssigneeUserId.Value,
+                    $"New comment on '{card.Title}': {preview}");
             }
 
             return comment;

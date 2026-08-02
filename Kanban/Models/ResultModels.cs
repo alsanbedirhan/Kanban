@@ -73,6 +73,7 @@ namespace Kanban.Models
         public long BoardId { get; set; }
         public int WarningDays { get; set; }
         public string HighlightColor { get; set; }
+        public string Title { get; set; }
         public string Description { get; set; }
         public DateOnly DueDate { get; set; }
         public long AssigneeId { get; set; }
@@ -120,6 +121,12 @@ namespace Kanban.Models
     {
         public long BoardId { get; set; }
         public string? Title { get; set; }
+        public bool IsResultColumn { get; set; }
+    }
+    public class BoardColumnUpdateModel : BoardColumnDeleteModel
+    {
+        public string? Title { get; set; }
+        public bool IsResultColumn { get; set; }
     }
     public class BoardMemberInputModel
     {
@@ -130,6 +137,7 @@ namespace Kanban.Models
     {
         public long Id { get; set; }
         public string Title { get; set; }
+        public bool IsResultColumn { get; set; }
         public List<BoardCardResultModel> Cards { get; set; }
         public int TotalCards { get; set; }
     }
@@ -154,11 +162,14 @@ namespace Kanban.Models
     public class BoardCardResultModel
     {
         public long Id { get; set; }
+        public string Title { get; set; }
         public string Desc { get; set; }
         public int Order { get; set; }
         public DateOnly DueDate { get; set; }
+        public DateOnly? StartDate { get; set; }
         public int WarningDays { get; set; }
         public string HighlightColor { get; set; }
+        public string CalendarColor { get; set; }
         public string AssigneeName { get; set; }
         public string AssigneeAvatar { get; set; }
         public long AssigneeId { get; set; }

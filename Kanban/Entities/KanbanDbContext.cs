@@ -39,6 +39,7 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.CalendarColor).HasMaxLength(10);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
             entity.Property(e => e.Desc).HasColumnType("text");
+            entity.Property(e => e.Title).HasMaxLength(150);
             entity.Property(e => e.HighlightColor).HasMaxLength(10);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.HasOne(d => d.AssigneeUser).WithMany(p => p.BoardCards)
@@ -65,6 +66,7 @@ public partial class KanbanDbContext : DbContext
         modelBuilder.Entity<BoardColumn>(entity =>
         {
             entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.IsResultColumn).HasDefaultValue(false);
             entity.Property(e => e.Title).HasMaxLength(100);
             entity.HasOne(d => d.Board).WithMany(p => p.BoardColumns)
                 .HasForeignKey(d => d.BoardId)

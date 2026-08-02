@@ -7,6 +7,7 @@ public partial class BoardCard
 {
     public long Id { get; set; }
     public long BoardColumnId { get; set; }
+    public string Title { get; set; } = null!;
     public string Desc { get; set; } = null!;
     public bool IsActive { get; set; }
     public long CreatedBy { get; set; }

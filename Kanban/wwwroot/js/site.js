@@ -14,6 +14,7 @@ const AppState = {
     syncInterval: null,
     searchQuery: '',
     authFailureCount: 0,
+    columnMenuListenerAttached: false,
 
     reset() {
         clearSessionState();
@@ -59,30 +60,133 @@ function stripHtml(html) {
     return doc.body.textContent || "";
 }
 
+function formatDateInput(value) {
+    if (!value) return '';
+    const str = String(value);
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function todayDateInput() {
+    const d = new Date();
+    return formatDateInput(d);
+}
+
 function swalWidth(desktop = '650px') {
     return window.innerWidth <= 768 ? undefined : desktop;
 }
 
-function formSwalOptions(overrides = {}) {
-    return {
+// Mirrors the BoardCards.Title column width.
+const CARD_TITLE_MAX = 150;
+
+// Every dialog button maps to one of these roles, so colors stay predictable:
+// primary = confirm/save/create, danger = destructive, info = edit,
+// owner = ownership transfer, neutral = dismiss.
+const SWAL_BTN = {
+    primary: 'btn btn-primary',
+    danger: 'btn btn-danger',
+    info: 'btn btn-info',
+    owner: 'btn btn-owner',
+    neutral: 'btn btn-secondary'
+};
+
+// Action buttons carry an icon; dismissive buttons (Cancel/Close/OK) never do.
+const UI_ICON = {
+    create: '➕',
+    save: '💾',
+    delete: '🗑️',
+    send: '📨',
+    verify: '✅',
+    login: '🔐',
+    register: '📝',
+    logout: '🚪',
+    rename: '✏️',
+    members: '👥',
+    owner: '👑',
+    accept: '✔️',
+    decline: '✖️'
+};
+
+function swalDialog(options = {}) {
+    const {
+        confirmVariant = 'primary',
+        denyVariant = 'danger',
+        cancelVariant = 'neutral',
+        framed = false,
+        flush = false,
+        customClass = {},
+        ...rest
+    } = options;
+
+    const popupClass = [
+        'kf-swal',
+        framed ? 'kf-swal--framed' : '',
+        flush ? 'kf-swal--flush' : '',
+        customClass.popup || ''
+    ].filter(Boolean).join(' ');
+
+    return Swal.fire({
+        reverseButtons: true,
+        ...rest,
+        buttonsStyling: false,
+        customClass: {
+            ...customClass,
+            popup: popupClass,
+            actions: ['kf-swal-actions', customClass.actions || ''].filter(Boolean).join(' '),
+            confirmButton: SWAL_BTN[confirmVariant] || SWAL_BTN.primary,
+            denyButton: SWAL_BTN[denyVariant] || SWAL_BTN.danger,
+            cancelButton: SWAL_BTN[cancelVariant] || SWAL_BTN.neutral
+        }
+    });
+}
+
+function swalAlert(icon, title, text, options = {}) {
+    return swalDialog({ icon, title, text, confirmButtonText: 'OK', ...options });
+}
+
+function swalFlash(icon, title, text = '', timer = 1600) {
+    return swalDialog({ icon, title, text, timer, showConfirmButton: false });
+}
+
+function swalConfirm(options = {}) {
+    const { confirmText = 'Confirm', cancelText = 'Cancel', icon = 'warning', ...rest } = options;
+    return swalDialog({
+        icon,
+        showCancelButton: true,
+        confirmButtonText: confirmText,
+        cancelButtonText: cancelText,
+        ...rest
+    });
+}
+
+function swalForm(options = {}) {
+    return swalDialog({
         width: swalWidth('440px'),
         showCancelButton: true,
         cancelButtonText: 'Cancel',
-        confirmButtonColor: '#289f51',
-        cancelButtonColor: '#718096',
-        reverseButtons: true,
-        ...overrides
-    };
+        focusConfirm: false,
+        ...options
+    });
+}
+
+function swalPanel(options = {}) {
+    return swalDialog({
+        showConfirmButton: false,
+        showCloseButton: true,
+        ...options
+    });
 }
 
 function swalPasswordField(id, placeholder) {
-    const wrap = 'position:relative; max-width:100%; width:100%; margin:0.75em 0 0; display:flex; align-items:center;';
-    const input = 'width:100%; margin:0; padding-right:35px; box-sizing:border-box;';
-    const icon = 'position:absolute; right:10px; z-index:2; cursor:pointer; font-size:1.2em; background:transparent; border:none; padding:0;';
     return `
-        <div style="${wrap}">
-            <input id="${id}" type="password" class="swal2-input" placeholder="${placeholder}" style="${input}">
-            <button type="button" class="pass-toggle" tabindex="-1" data-target="${id}" style="${icon}">🙈</button>
+        <div class="kf-password-field">
+            <input id="${id}" type="password" class="kf-input" placeholder="${placeholder}">
+            <button type="button" class="kf-pass-toggle pass-toggle" tabindex="-1" data-target="${id}" aria-label="Show password">🙈</button>
         </div>`;
 }
 
@@ -103,12 +207,24 @@ function showToast(title, icon = 'info', timer = 2500) {
     Toast.fire({ icon, title });
 }
 
+// Cards created before titles existed can still have an empty one, so fall
+// back to the description rather than rendering a blank heading.
+function cardDisplayTitle(card) {
+    const title = (card.title || '').trim();
+    if (title) return title;
+
+    const desc = stripHtml(card.desc || '').trim();
+    if (!desc) return 'Untitled card';
+    return desc.length > 60 ? `${desc.slice(0, 60)}…` : desc;
+}
+
 function cardMatchesSearch(card, query) {
     if (!query) return true;
     const q = query.toLowerCase();
+    const title = (card.title || '').toLowerCase();
     const desc = stripHtml(card.desc || '').toLowerCase();
     const assignee = (card.assigneeName || '').toLowerCase();
-    return desc.includes(q) || assignee.includes(q);
+    return title.includes(q) || desc.includes(q) || assignee.includes(q);
 }
 
 function filterColumnsForSearch(columns, query) {
@@ -387,7 +503,7 @@ function shortcutNewCard() {
     if (!checkAuth() || !AppState.currentBoardId) return;
     const firstCol = AppState.currentColumns[0];
     if (firstCol) openCardModal(firstCol.id);
-    else Swal.fire('Info', 'Add a column first.', 'info');
+    else swalAlert('info', 'No Columns Yet', 'Add a column before creating a card.');
 }
 
 function cloneColumnsState() {
@@ -493,7 +609,7 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
                 const errData = await response.json();
                 if (errData.errorMessage) rateLimitMsg = errData.errorMessage;
             } catch (e) { }
-            if (showload) Swal.fire('Slow down', rateLimitMsg, 'warning');
+            if (showload) swalAlert('warning', 'Slow Down', rateLimitMsg);
             throw new Error(rateLimitMsg);
         }
 
@@ -540,7 +656,7 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
         if (error.message !== 'Session expired or unauthorized.') {
             console.error('API Error:', error);
             if (showload) {
-                Swal.fire('Error', error.message || 'A connection error occurred.', 'error');
+                swalAlert('error', 'Error', error.message || 'A connection error occurred.');
             }
         }
     } finally {
@@ -594,13 +710,11 @@ async function checkNewUpdates(isPolling = false) {
     try {
         const res = await apiRequest('/Kanban/CheckUpdates', {}, false, isPolling);
         const badge = document.getElementById('nav-badge');
-        if (!badge) return;
+        if (!badge || !res) return;
 
         if (res.success && res.data) {
-            if (badge.style.display !== 'block') {
-                badge.style.display = 'block';
-                badge.classList.add('pulse');
-            }
+            badge.style.display = 'block';
+            badge.classList.add('pulse');
         } else {
             badge.style.display = 'none';
             badge.classList.remove('pulse');
@@ -630,19 +744,18 @@ async function fetchCurrentUser() {
         clearSessionState();
     }
     updateAuthUI();
+    if (AppState.isAuthenticated) {
+        checkNewUpdates(false);
+    }
 }
 
 function checkAuth() {
     if (AppState.isAuthenticated && AppState.currentUser) return true;
 
-    Swal.fire({
-        title: 'Unauthorized Action',
+    swalConfirm({
+        title: 'Login Required',
         text: 'Please login to perform this action.',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Login',
-        cancelButtonText: 'Cancel',
-        confirmButtonColor: '#289f51'
+        confirmText: `${UI_ICON.login} Login`
     }).then((result) => {
         if (result.isConfirmed) openLoginModal();
     });
@@ -654,81 +767,55 @@ async function openNotifications() {
         const res = await apiRequest('/Kanban/GetNotifications');
 
         if (!res.success || !res.data || res.data.length === 0) {
-            return Swal.fire({
-                title: 'Notifications',
-                text: 'No new notifications.',
-                icon: 'info',
-                confirmButtonColor: '#289f51'
-            }).then(() => openProfileMenu());
+            return swalAlert('info', 'Notifications', 'No new notifications.')
+                .then(() => openProfileMenu());
         }
 
         const listItemsHtml = res.data.map(n => `
-            <div id="notif-${n.id}" class="notif-item" style="padding:12px; border-bottom:1px solid #eee; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; text-align:left; transition:opacity 0.3s;">
-                <div style="display:flex; gap:10px; align-items:flex-start; flex:1;">
-                    <div style="font-size:20px;">📢</div>
+            <div id="notif-${n.id}" class="kf-notif">
+                <div class="kf-notif-main">
+                    <span class="kf-notif-icon" aria-hidden="true">📢</span>
                     <div>
-                        <div style="font-size:14px; color:#2d3748;">${escapeHtml(n.message)}</div>
-                        <div style="font-size:11px; color:#a0aec0; margin-top:4px;">
+                        <div class="kf-notif-text">${escapeHtml(n.message)}</div>
+                        <div class="kf-notif-time">
                             ${new Date(n.createdAt).toLocaleDateString('tr-TR')} ${new Date(n.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                     </div>
                 </div>
-                <button class="notif-delete-btn" data-notif-id="${n.id}" title="Delete"
-                        style="background:none; border:none; color:#e53e3e; font-size:18px; font-weight:bold; cursor:pointer; padding:0 5px; line-height:1;">×</button>
+                <button type="button" class="kf-icon-btn kf-icon-btn--danger notif-delete-btn"
+                        data-notif-id="${n.id}" title="Delete notification" aria-label="Delete notification">×</button>
             </div>
         `).join('');
 
-        const headerHtml = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:10px; border-bottom:2px solid #f7fafc;">
-                <span style="font-weight:bold; color:#4a5568; font-size:14px;">Recent</span>
-                <button id="delete-all-notifs-btn"
-                        style="background:#fff5f5; border:1px solid #fed7d7; color:#c53030; font-size:12px; padding:5px 10px; border-radius:6px; cursor:pointer; font-weight:600; transition:0.2s;">
-                    🗑️ Delete All
-                </button>
-            </div>
-        `;
-
-        Swal.fire({
+        swalPanel({
             title: 'Notifications',
+            width: swalWidth('460px'),
+            framed: true,
             html: `
-                ${headerHtml}
-                <div id="notif-container" style="max-height:300px; overflow-y:auto;">
+                <div class="kf-panel-head">
+                    <span class="kf-panel-title">Recent</span>
+                    <button type="button" id="delete-all-notifs-btn" class="btn btn-sm btn-danger-soft">
+                        ${UI_ICON.delete} Delete All
+                    </button>
+                </div>
+                <div id="notif-container" class="kf-scroll-sm">
                     ${listItemsHtml}
                 </div>
             `,
-            showCloseButton: true,
-            showConfirmButton: false,
-            width: 450,
             didOpen: () => {
-                const deleteAllBtn = document.getElementById('delete-all-notifs-btn');
-                if (deleteAllBtn) {
-                    deleteAllBtn.addEventListener('mouseenter', () => {
-                        deleteAllBtn.style.background = '#feb2b2';
-                        deleteAllBtn.style.color = 'white';
-                    });
-                    deleteAllBtn.addEventListener('mouseleave', () => {
-                        deleteAllBtn.style.background = '#fff5f5';
-                        deleteAllBtn.style.color = '#c53030';
-                    });
-                    deleteAllBtn.addEventListener('click', () => deleteAllNotifications());
-                }
+                document.getElementById('delete-all-notifs-btn')
+                    ?.addEventListener('click', () => deleteAllNotifications());
 
-                const notifContainer = document.getElementById('notif-container');
-                if (notifContainer) {
-                    notifContainer.addEventListener('click', (e) => {
-                        const btn = e.target.closest('.notif-delete-btn');
-                        if (btn) {
-                            const id = btn.dataset.notifId;
-                            if (id) deleteNotification(Number(id));
-                        }
-                    });
-                }
+                document.getElementById('notif-container')?.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.notif-delete-btn');
+                    if (btn?.dataset.notifId) deleteNotification(Number(btn.dataset.notifId));
+                });
             }
         }).then(() => openProfileMenu());
 
     } catch (e) {
         console.error(e);
-        Swal.fire('Error', 'Could not load notifications.', 'error');
+        swalAlert('error', 'Error', 'Could not load notifications.');
     }
 }
 
@@ -739,6 +826,11 @@ async function deleteNotification(id) {
             body: JSON.stringify({ notificationId: id })
         }, false);
 
+        if (!res) {
+            swalAlert('error', 'Error', 'Could not delete notification.');
+            return;
+        }
+
         if (res.success) {
             const el = document.getElementById(`notif-${id}`);
             if (el) {
@@ -746,39 +838,45 @@ async function deleteNotification(id) {
                 setTimeout(() => {
                     el.remove();
                     checkIfEmpty();
+                    checkNewUpdates(false);
                 }, 300);
+            } else {
+                checkNewUpdates(false);
             }
         } else {
-            Swal.fire('Error', res.errorMessage || 'Failed to delete', 'error');
+            swalAlert('error', 'Error', res.errorMessage || 'Failed to delete');
         }
     } catch (e) {
         console.error(e);
+        swalAlert('error', 'Error', 'Could not delete notification.');
     }
 }
 
 async function deleteAllNotifications() {
     if (!checkAuth()) return;
-    const confirm = await Swal.fire({
-        title: 'Clear all?',
-        text: "This will delete all your notifications.",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#e53e3e',
-        confirmButtonText: 'Yes, delete all',
-        cancelButtonText: 'Cancel'
+    const confirm = await swalConfirm({
+        title: 'Clear All Notifications?',
+        text: 'This will delete all of your notifications.',
+        confirmText: `${UI_ICON.delete} Delete All`,
+        confirmVariant: 'danger'
     });
 
     if (confirm.isConfirmed) {
         try {
             const res = await apiRequest('/Kanban/DeleteNotifications', { method: 'POST' });
+            if (!res) {
+                swalAlert('error', 'Error', 'Network error.');
+                return;
+            }
             if (res.success) {
-                Swal.fire('Deleted!', 'All notifications have been cleared.', 'success');
+                swalFlash('success', 'Deleted', 'All notifications have been cleared.');
+                checkNewUpdates(false);
             } else {
-                Swal.fire('Error', res.errorMessage || 'Failed to delete all', 'error');
+                swalAlert('error', 'Error', res.errorMessage || 'Failed to delete all');
             }
         } catch (e) {
             console.error(e);
-            Swal.fire('Error', 'Network error.', 'error');
+            swalAlert('error', 'Error', 'Network error.');
         }
     } else {
         openNotifications();
@@ -788,7 +886,7 @@ async function deleteAllNotifications() {
 function checkIfEmpty() {
     const container = document.getElementById('notif-container');
     if (container && container.children.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:20px; color:#a0aec0;">No new notifications.</div>';
+        container.innerHTML = '<div class="kf-panel-empty">No new notifications.</div>';
     }
 }
 
@@ -797,54 +895,45 @@ async function openPendingInvites() {
         const res = await apiRequest('/Kanban/GetInvites');
 
         if (!res.success || !res.data || res.data.length === 0) {
-            return Swal.fire('Invites', 'You have no pending invites.', 'info').then(() => openProfileMenu());
+            return swalAlert('info', 'Invites', 'You have no pending invites.')
+                .then(() => openProfileMenu());
         }
 
         const invitesHtml = res.data.map(invite => `
-            <div style="padding:15px; background:#f7fafc; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:10px; text-align:left;">
-                <div style="font-weight:bold; color:#2d3748; margin-bottom:5px;">
-                    📂 ${escapeHtml(invite.boardName)}
-                </div>
-                <div style="font-size:13px; color:#718096; margin-bottom:10px;">
-                    Invited by: <b>${escapeHtml(invite.inviterName)}</b>
-                </div>
-                <div style="display:flex; gap:10px;">
-                    <button class="invite-accept-btn" data-invite-id="${invite.id}"
-                            style="flex:1; padding:8px; border:none; background:#48bb78; color:white; border-radius:6px; cursor:pointer; font-weight:600;">
-                        Accept
+            <div class="kf-invite">
+                <div class="kf-invite-board">📂 ${escapeHtml(invite.boardName)}</div>
+                <div class="kf-invite-meta">Invited by: <b>${escapeHtml(invite.inviterName)}</b></div>
+                <div class="kf-invite-actions">
+                    <button type="button" class="btn btn-sm btn-primary invite-accept-btn" data-invite-id="${invite.id}">
+                        ${UI_ICON.accept} Accept
                     </button>
-                    <button class="invite-decline-btn" data-invite-id="${invite.id}"
-                            style="flex:1; padding:8px; border:none; background:#f56565; color:white; border-radius:6px; cursor:pointer; font-weight:600;">
-                        Decline
+                    <button type="button" class="btn btn-sm btn-danger invite-decline-btn" data-invite-id="${invite.id}">
+                        ${UI_ICON.decline} Decline
                     </button>
                 </div>
             </div>
         `).join('');
 
-        Swal.fire({
+        swalPanel({
             title: 'Pending Invites',
-            html: `<div id="invites-wrapper" style="max-height:400px; overflow-y:auto;">${invitesHtml}</div>`,
-            showConfirmButton: false,
-            showCloseButton: true,
+            framed: true,
+            html: `<div id="invites-wrapper" class="kf-scroll-md">${invitesHtml}</div>`,
             didOpen: () => {
-                const wrapper = document.getElementById('invites-wrapper');
-                if (wrapper) {
-                    wrapper.addEventListener('click', (e) => {
-                        const acceptBtn = e.target.closest('.invite-accept-btn');
-                        const declineBtn = e.target.closest('.invite-decline-btn');
-                        if (acceptBtn) {
-                            handleInviteResponse(Number(acceptBtn.dataset.inviteId), true);
-                        } else if (declineBtn) {
-                            handleInviteResponse(Number(declineBtn.dataset.inviteId), false);
-                        }
-                    });
-                }
+                document.getElementById('invites-wrapper')?.addEventListener('click', (e) => {
+                    const acceptBtn = e.target.closest('.invite-accept-btn');
+                    const declineBtn = e.target.closest('.invite-decline-btn');
+                    if (acceptBtn) {
+                        handleInviteResponse(Number(acceptBtn.dataset.inviteId), true);
+                    } else if (declineBtn) {
+                        handleInviteResponse(Number(declineBtn.dataset.inviteId), false);
+                    }
+                });
             }
         }).then(() => openProfileMenu());
 
     } catch (e) {
         console.error(e);
-        Swal.fire('Error', 'Could not load invites.', 'error');
+        swalAlert('error', 'Error', 'Could not load invites.');
     }
 }
 
@@ -856,35 +945,35 @@ async function handleInviteResponse(inviteId, isAccepted) {
             body: JSON.stringify({ inviteId, isAccepted })
         }, false);
 
+        if (!res) {
+            swalAlert('error', 'Error', 'Network error occurred.');
+            return;
+        }
+
         if (res.success) {
-            Swal.fire({
-                icon: 'success',
-                title: isAccepted ? 'Joined Board!' : 'Invite Declined',
-                timer: 1500,
-                showConfirmButton: false
-            });
+            swalFlash('success', isAccepted ? 'Joined Board!' : 'Invite Declined');
+            checkNewUpdates(false);
             if (isAccepted) loadBoards();
         } else {
-            Swal.fire('Error', res.errorMessage || 'Operation failed', 'error');
+            swalAlert('error', 'Error', res.errorMessage || 'Operation failed');
         }
     } catch (e) {
         console.error(e);
-        Swal.fire('Error', 'Network error occurred.', 'error');
+        swalAlert('error', 'Error', 'Network error occurred.');
     }
 }
 
 async function openChangePasswordModal() {
     if (!checkAuth()) return;
 
-    const { value: passwordData, isDismissed } = await Swal.fire(formSwalOptions({
+    const { value: passwordData, isDismissed } = await swalForm({
         title: 'Change Password',
         html: `
             ${swalPasswordField('swal-old-pass', 'Current Password')}
             ${swalPasswordField('swal-new-pass', 'New Password')}
             ${swalPasswordField('swal-conf-pass', 'Confirm New Password')}
         `,
-        focusConfirm: false,
-        confirmButtonText: 'Update',
+        confirmButtonText: `${UI_ICON.save} Update Password`,
         didOpen: () => bindSwalPasswordToggles(),
         preConfirm: () => {
             const currentPassword = document.getElementById('swal-old-pass').value;
@@ -905,7 +994,7 @@ async function openChangePasswordModal() {
             }
             return { currentPassword, newPassword };
         }
-    }));
+    });
 
     if (isDismissed) {
         openProfileMenu();
@@ -921,16 +1010,16 @@ async function openChangePasswordModal() {
             if (res.success) {
                 const temp = AppState.currentUser.email;
 
-                await Swal.fire({
+                await swalDialog({
                     title: 'Password Changed',
                     text: 'Please login again with your new password.',
                     icon: 'success',
-                    confirmButtonText: 'Login'
+                    confirmButtonText: `${UI_ICON.login} Login`
                 });
                 sessionStorage.setItem('kanflow:prefillEmail', temp);
                 await handleLogout(true);
             } else if (res) {
-                await Swal.fire('Error', res.errorMessage || 'Failed to update password.', 'error');
+                await swalAlert('error', 'Error', res.errorMessage || 'Failed to update password.');
                 openChangePasswordModal();
             }
         } catch (e) {
@@ -949,59 +1038,41 @@ function openProfileMenu() {
     const email = escapeHtml(AppState.currentUser.email);
     const avatar = getAvatarPath(AppState.currentUser.avatar || 'def');
 
-    const btnStyle = `width:100%; padding:12px; margin-bottom:8px; border:1px solid #e2e8f0; background:white; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:10px; font-size:15px; text-align:left; transition:background 0.2s;`;
-
-    Swal.fire({
+    swalPanel({
+        width: swalWidth('400px'),
+        padding: '20px',
         html: `
-            <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px;">
-                <img src="${avatar}" style="width:70px; height:70px; border-radius:50%; border:3px solid #289f51; margin-bottom:10px;">
-                <h3 style="margin:0; font-size:18px; color:#2d3748;">${name}</h3>
-                <span style="font-size:13px; color:#718096;">${email}</span>
+            <div class="kf-profile">
+                <img src="${avatar}" alt="" class="kf-profile-avatar">
+                <h3 class="kf-profile-name">${name}</h3>
+                <span class="kf-profile-email">${email}</span>
             </div>
-            <div id="profile-menu-buttons" style="text-align:left;">
-                <button class="profile-menu-btn" data-action="notifications" style="${btnStyle}">
-                    <span style="font-size:18px;">🔔</span> Notifications
+            <div id="profile-menu-buttons" class="kf-menu">
+                <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="notifications">
+                    <span class="kf-menu-icon" aria-hidden="true">🔔</span> Notifications
                 </button>
-                <button class="profile-menu-btn" data-action="invites" style="${btnStyle}">
-                    <span style="font-size:18px;">📩</span> Invites
+                <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="invites">
+                    <span class="kf-menu-icon" aria-hidden="true">📩</span> Invites
                 </button>
-                <button class="profile-menu-btn" data-action="avatar" style="${btnStyle}">
-                    <span style="font-size:18px;">🎨</span> Change Avatar
+                <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="avatar">
+                    <span class="kf-menu-icon" aria-hidden="true">🎨</span> Change Avatar
                 </button>
-                <button class="profile-menu-btn" data-action="password" style="${btnStyle}">
-                    <span style="font-size:18px;">🔑</span> Change Password
+                <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="password">
+                    <span class="kf-menu-icon" aria-hidden="true">🔑</span> Change Password
                 </button>
-                <hr style="border:0; border-top:1px solid #edf2f7; margin:15px 0;">
-                <button class="profile-menu-btn" data-action="logout" style="${btnStyle} color:#e53e3e; border-color:#fed7d7;">
-                    <span style="font-size:18px;">🚪</span> Logout
+                <div class="kf-menu-sep"></div>
+                <button type="button" class="kf-menu-btn kf-menu-btn--danger profile-menu-btn" data-menu-action="logout">
+                    <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.logout}</span> Logout
                 </button>
             </div>
         `,
-        showConfirmButton: false,
-        showCloseButton: true,
-        width: 400,
-        padding: '20px',
-        customClass: { popup: 'animated fadeInDown' },
         didOpen: () => {
-            const container = document.getElementById('profile-menu-buttons');
-            if (!container) return;
-
-            container.querySelectorAll('.profile-menu-btn').forEach(btn => {
-                const isLogout = btn.dataset.action === 'logout';
-                btn.addEventListener('mouseenter', () => {
-                    btn.style.background = isLogout ? '#fff5f5' : '#f7fafc';
-                });
-                btn.addEventListener('mouseleave', () => {
-                    btn.style.background = 'white';
-                });
-            });
-
-            container.addEventListener('click', (e) => {
+            document.getElementById('profile-menu-buttons')?.addEventListener('click', (e) => {
                 const btn = e.target.closest('.profile-menu-btn');
                 if (!btn) return;
 
                 Swal.close();
-                switch (btn.dataset.action) {
+                switch (btn.dataset.menuAction) {
                     case 'notifications': openNotifications(); break;
                     case 'invites': openPendingInvites(); break;
                     case 'avatar': openAvatarModal(true); break;
@@ -1054,8 +1125,8 @@ function updateAuthUI() {
                     <div style="font-size:11px; color:#a0aec0;">${escapeHtml(AppState.currentUser.email)}</div>
                 </div>
             </div>
-            <button id="sidebar-menu-btn" class="btn btn-secondary" style="width:100%; margin-bottom:15px;">⚙️ Menu</button>
-            <button id="sidebar-logout-btn" class="btn btn-danger" style="width:100%;">Logout</button>
+            <button type="button" id="sidebar-menu-btn" class="btn btn-secondary btn-block">⚙️ Menu</button>
+            <button type="button" id="sidebar-logout-btn" class="btn btn-danger btn-block">${UI_ICON.logout} Logout</button>
         `;
 
         setTimeout(() => {
@@ -1073,10 +1144,10 @@ function updateAuthUI() {
         document.getElementById("boardHeaderTitle").textContent = "";
         document.getElementById("board").innerHTML = "";
 
-        area.innerHTML = `<button id="header-login-btn" class="btn btn-primary btn-login-header" type="button" title="Login" aria-label="Login">🔐</button>`;
+        area.innerHTML = `<button id="header-login-btn" class="btn btn-primary btn-login-header" type="button" title="Login" aria-label="Login">${UI_ICON.login}</button>`;
         authSection.innerHTML = `
-            <button id="sidebar-login-btn" class="btn btn-primary" style="width:100%; margin-bottom:10px;">Login</button>
-            <button id="sidebar-register-btn" class="btn btn-secondary" style="width:100%;">Register</button>
+            <button type="button" id="sidebar-login-btn" class="btn btn-primary btn-block">${UI_ICON.login} Login</button>
+            <button type="button" id="sidebar-register-btn" class="btn btn-secondary btn-block">${UI_ICON.register} Register</button>
         `;
 
         setTimeout(() => {
@@ -1130,8 +1201,8 @@ async function handleLogin() {
     const password = document.getElementById('loginPassword').value;
     const turnstileToken = getTurnstileToken('loginModal');
 
-    if (!email || !password) return Swal.fire('Error', 'Please fill all fields', 'error');
-    if (!turnstileToken) return Swal.fire('Error', turnstileRequiredMessage(), 'error');
+    if (!email || !password) return swalAlert('error', 'Missing Information', 'Please fill all fields.');
+    if (!turnstileToken) return swalAlert('warning', 'Verification Required', turnstileRequiredMessage());
 
     try {
         const response = await apiRequest('/Auth/Login', {
@@ -1144,16 +1215,10 @@ async function handleLogin() {
         if (response.success) {
             await fetchCurrentUser();
             closeLoginModal();
-            Swal.fire({
-                title: 'Welcome Back!',
-                text: `Hello ${escapeHtml(AppState.currentUser.fullName)}`,
-                icon: 'success',
-                timer: 1500,
-                showConfirmButton: false
-            });
+            swalFlash('success', 'Welcome Back!', `Hello ${AppState.currentUser.fullName}`);
             loadBoards();
         } else {
-            Swal.fire('Error', response.errorMessage || 'Login failed', 'error');
+            swalAlert('error', 'Login Failed', response.errorMessage || 'Login failed.');
             refreshModalTurnstile('loginModal');
         }
     } catch (err) {
@@ -1163,10 +1228,11 @@ async function handleLogin() {
 
 function showPrivacyPolicy(e) {
     if (e) e.preventDefault();
-    Swal.fire({
+    swalDialog({
         title: 'Privacy Policy',
+        framed: true,
         html: `
-            <div style="text-align:left; font-size:13px; max-height:300px; overflow-y:auto;">
+            <div class="kf-prose">
                 <p><strong>Data Controller:</strong> Bedirhan Alşan (Kanflow Project)</p>
                 <p>Your personal data (Name, Surname, Email) is processed solely for the purpose of membership registration and service provision.</p>
                 <p>Your data is not shared with third parties (except for legal obligations).</p>
@@ -1178,10 +1244,11 @@ function showPrivacyPolicy(e) {
 
 function showUserAgreement(e) {
     if (e) e.preventDefault();
-    Swal.fire({
+    swalDialog({
         title: 'User Agreement',
+        framed: true,
         html: `
-            <div style="text-align:left; font-size:13px; max-height:300px; overflow-y:auto;">
+            <div class="kf-prose">
                 <p><b>1</b>. The user agrees to remain loyal to <b>Atatürk</b>'s principles and reforms.</p>
                 <p><b>2</b>. This application is developed as a portfolio project.</p>
                 <p><b>3</b>. The permanence of data uploaded to the system (cards, boards) is not guaranteed.</p>
@@ -1195,7 +1262,7 @@ function showUserAgreement(e) {
 async function handleRegister() {
     const agreementCheckbox = document.getElementById('registerAgreement');
     if (!agreementCheckbox || !agreementCheckbox.checked) {
-        return Swal.fire('Warning', 'Please accept the User Agreement and Privacy Policy to proceed.', 'warning');
+        return swalAlert('warning', 'Agreement Required', 'Please accept the User Agreement and Privacy Policy to proceed.');
     }
 
     const fullName = document.getElementById('registerFullName').value.trim();
@@ -1204,21 +1271,21 @@ async function handleRegister() {
     const confirmPassword = document.getElementById('registerConfirmPassword').value;
 
     if (!fullName || !email || !password || !confirmPassword)
-        return Swal.fire('Error', 'Please fill all fields', 'error');
+        return swalAlert('error', 'Missing Information', 'Please fill all fields.');
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) return Swal.fire('Error', 'Invalid email address', 'error');
-    if (password.length < 8) return Swal.fire('Error', 'Password must be at least 8 characters', 'error');
-    if (password !== confirmPassword) return Swal.fire('Error', 'Passwords do not match', 'error');
+    if (!emailRegex.test(email)) return swalAlert('error', 'Invalid Email', 'Please enter a valid email address.');
+    if (password.length < 8) return swalAlert('error', 'Weak Password', 'Password must be at least 8 characters.');
+    if (password !== confirmPassword) return swalAlert('error', 'Passwords Do Not Match', 'Please retype your password.');
 
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*(),.?:{}|<>]/.test(password)) {
-        return Swal.fire('Error', 'Password must contain uppercase, lowercase, number, and special character.', 'error');
+        return swalAlert('error', 'Weak Password', 'Password must contain uppercase, lowercase, number, and special character.');
     }
 
     const turnstileToken = getTurnstileToken('registerModal');
 
     if (!turnstileToken) {
-        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: turnstileRequiredMessage() });
+        return swalAlert('warning', 'Verification Required', turnstileRequiredMessage());
     }
 
     try {
@@ -1229,18 +1296,20 @@ async function handleRegister() {
 
         if (!verify?.success) {
             refreshModalTurnstile('registerModal');
-            return Swal.fire('Error', verify?.errorMessage || 'Failed to send verification code', 'error');
+            return swalAlert('error', 'Error', verify?.errorMessage || 'Failed to send verification code.');
         }
 
         let isRegistered = false;
         const templateContent = document.getElementById('otpTemplate').innerHTML;
 
         while (!isRegistered) {
-            const { value: formValues, dismiss } = await Swal.fire(formSwalOptions({
+            const { value: formValues, dismiss } = await swalForm({
                 title: 'Email Verification',
-                text: `A 6-digit code has been sent to ${escapeHtml(email)}.`,
-                html: templateContent,
-                confirmButtonText: 'Verify & Register',
+                html: `
+                    <p class="kf-dialog-hint">A 6-digit code has been sent to <b>${escapeHtml(email)}</b>.</p>
+                    ${templateContent}
+                `,
+                confirmButtonText: `${UI_ICON.verify} Verify & Register`,
                 didOpen: () => {
                     const container = Swal.getHtmlContainer();
                     bindSwalOtpInputs(container);
@@ -1262,7 +1331,7 @@ async function handleRegister() {
 
                     return { otpCode: code, turnstileToken };
                 }
-            }));
+            });
 
             resetKanbanTurnstile(OTP_TURNSTILE_CONTAINER);
             if (dismiss === Swal.DismissReason.cancel || dismiss === Swal.DismissReason.backdrop) return;
@@ -1285,24 +1354,18 @@ async function handleRegister() {
                 isRegistered = true;
                 await fetchCurrentUser();
                 closeRegisterModal();
-                Swal.fire({
-                    title: 'Welcome!',
-                    text: `Registration successful! Welcome ${escapeHtml(fullName)}`,
-                    icon: 'success',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
+                swalFlash('success', 'Welcome!', `Registration successful! Welcome ${fullName}`, 2000);
                 await loadBoards();
             } else {
                 const msg = response.errorMessage || 'Registration failed.';
-                await Swal.fire('Registration Failed', msg, 'error');
+                await swalAlert('error', 'Registration Failed', msg);
                 if (msg.toLowerCase().includes('already exists')) break;
             }
         }
     } catch (error) {
         refreshModalTurnstile('registerModal');
         console.error(error);
-        Swal.fire('Error', 'An unexpected error occurred during registration.', 'error');
+        swalAlert('error', 'Error', 'An unexpected error occurred during registration.');
     }
 }
 
@@ -1310,19 +1373,19 @@ async function handleForgotPassword() {
     const turnstileToken = getTurnstileToken('loginModal');
 
     if (!turnstileToken) {
-        return Swal.fire({ icon: 'warning', title: 'Verification Required', text: turnstileRequiredMessage() });
+        return swalAlert('warning', 'Verification Required', turnstileRequiredMessage());
     }
 
     const loginEmail = document.getElementById('loginEmail')?.value.trim() || '';
     closeLoginModal();
 
-    const { value: email, dismiss: emailDismiss } = await Swal.fire(formSwalOptions({
+    const { value: email, dismiss: emailDismiss } = await swalForm({
         title: 'Forgot Password',
         input: 'email',
         inputValue: loginEmail,
         inputLabel: 'Enter your registered Kanflow email address',
         inputPlaceholder: 'example@email.com',
-        confirmButtonText: 'Send Code',
+        confirmButtonText: `${UI_ICON.send} Send Code`,
         inputValidator: (value) => {
             value = value.trim();
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1330,7 +1393,7 @@ async function handleForgotPassword() {
             if (!emailRegex.test(value)) return 'Please enter a valid email address.';
         },
         preConfirm: () => Swal.getInput().value.trim()
-    }));
+    });
 
     if (!email || emailDismiss) {
         openLoginModal();
@@ -1345,24 +1408,21 @@ async function handleForgotPassword() {
 
         if (!verify?.success) {
             refreshModalTurnstile('loginModal');
-            return Swal.fire('Error', verify?.errorMessage || 'Failed to send verification code', 'error');
+            return swalAlert('error', 'Error', verify?.errorMessage || 'Failed to send verification code.');
         }
 
         const otpHtml = document.getElementById('otpTemplate').innerHTML;
         const combinedHtml = `
-            <div style="margin-bottom: 12px; font-size: 14px; color: #4a5568; text-align: center;">
-                A 6-digit code has been sent to <b>${escapeHtml(email)}</b>.
-            </div>
+            <p class="kf-dialog-hint">A 6-digit code has been sent to <b>${escapeHtml(email)}</b>.</p>
             ${otpHtml}
             ${swalPasswordField('swal-new-password', 'New Password')}
             ${swalPasswordField('swal-confirm-password', 'Confirm New Password')}
         `;
 
-        const { value: formValues, dismiss: formDismiss } = await Swal.fire(formSwalOptions({
+        const { value: formValues, dismiss: formDismiss } = await swalForm({
             title: 'Reset Password',
             html: combinedHtml,
-            confirmButtonText: 'Reset Password',
-            focusConfirm: false,
+            confirmButtonText: `${UI_ICON.save} Reset Password`,
             didOpen: () => {
                 const container = Swal.getHtmlContainer();
                 bindSwalPasswordToggles(container);
@@ -1409,7 +1469,7 @@ async function handleForgotPassword() {
 
                 return { otpCode: code, newPassword: pass, turnstileToken };
             }
-        }));
+        });
 
         resetKanbanTurnstile(OTP_TURNSTILE_CONTAINER);
         if (formDismiss) return;
@@ -1425,22 +1485,16 @@ async function handleForgotPassword() {
         });
 
         if (resetResponse.success) {
-            Swal.fire({
-                title: 'Success!',
-                text: 'Your password has been successfully reset. You can now log in.',
-                icon: 'success',
-                timer: 2500,
-                showConfirmButton: false
-            });
+            swalFlash('success', 'Password Reset', 'Your password has been reset. You can now log in.', 2500);
             openLoginModal(email);
         } else {
-            Swal.fire('Error', resetResponse.errorMessage || 'Password reset failed. The code might be invalid or expired.', 'error');
+            swalAlert('error', 'Error', resetResponse.errorMessage || 'Password reset failed. The code might be invalid or expired.');
         }
 
     } catch (error) {
         refreshModalTurnstile('loginModal');
         console.error(error);
-        Swal.fire('Error', 'An unexpected error occurred.', 'error');
+        swalAlert('error', 'Error', 'An unexpected error occurred.');
     }
 }
 
@@ -1475,35 +1529,21 @@ async function handleLogout(refresh = true, message = '') {
 
     if (refresh) {
         if (message.length > 0) {
-            await Swal.fire({
-                title: 'Session Expired',
-                text: message,
-                icon: 'warning',
-                timer: 1500,
-                showConfirmButton: false
-            });
+            await swalFlash('warning', 'Session Expired', message, 1500);
         } else {
-            await Swal.fire({
-                title: 'Logged Out',
-                text: 'Logged out successfully.',
-                icon: 'success',
-                timer: 500,
-                showConfirmButton: false
-            });
+            await swalFlash('success', 'Logged Out', 'Logged out successfully.', 500);
         }
         window.location.replace('/');
     }
 }
 
 function confirmLogout() {
-    Swal.fire({
-        title: "Logout",
-        text: "Are you sure you want to logout?",
-        icon: "question",
-        showCancelButton: true,
-        confirmButtonText: "Yes, logout",
-        cancelButtonText: "Cancel",
-        confirmButtonColor: "#d33"
+    swalConfirm({
+        title: 'Logout',
+        text: 'Are you sure you want to logout?',
+        icon: 'question',
+        confirmText: `${UI_ICON.logout} Logout`,
+        confirmVariant: 'danger'
     }).then(result => {
         if (result.isConfirmed) handleLogout();
     });
@@ -1561,7 +1601,8 @@ function renderBoardList() {
     const boardHtml = (b) => `
         <li class="board-item ${b.id === AppState.currentBoardId ? 'active' : ''}" data-board-id="${b.id}">
             <span>📊 ${escapeHtml(b.title)}</span>
-            <div class="board-actions-btn" data-board-menu="${b.id}">⋮</div>
+            <button type="button" class="board-actions-btn" data-board-menu="${b.id}"
+                    title="Board options" aria-label="Board options">⋮</button>
         </li>
     `;
 
@@ -1604,12 +1645,12 @@ async function selectBoard(id) {
 
 async function openNewBoardModal() {
     if (!checkAuth()) return;
-    const { value: tt } = await Swal.fire({
-        title: 'New Board Name',
+    const { value: tt } = await swalForm({
+        title: 'New Board',
         input: 'text',
+        inputLabel: 'Board name',
         inputPlaceholder: 'Enter board name...',
-        confirmButtonText: 'Create',
-        showCancelButton: true,
+        confirmButtonText: `${UI_ICON.create} Create Board`,
         inputValidator: (value) => {
             if (value.trim().length < 3) return 'Name must be at least 3 characters!';
             if (value.trim().length > 100) return 'Name is too long!';
@@ -1621,15 +1662,24 @@ async function openNewBoardModal() {
                 method: 'POST',
                 body: JSON.stringify({ title: tt.trim() })
             });
-            Swal.fire('Success', 'Board created successfully', 'success');
+            showToast('Board created', 'success');
             loadBoards();
         } catch {
-            Swal.fire('Error', 'Failed to create board', 'error');
+            swalAlert('error', 'Error', 'Failed to create board.');
         }
     }
 }
 
-function createCardHtml(card, colId, currentUserId) {
+function createCardHtml(card, colId, currentUserId, isResultColumn = false) {
+    if (isResultColumn) {
+        return `
+        <div class="card card--result"
+             data-card-id="${card.id}"
+             data-col-id="${colId}">
+            <h3 class="card-title">${escapeHtml(cardDisplayTitle(card))}</h3>
+        </div>`;
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -1656,6 +1706,8 @@ function createCardHtml(card, colId, currentUserId) {
         ? `<img src="${getAvatarPath(card.assigneeAvatar)}" title="${escapeHtml(card.assigneeName)}" class="card-avatar-small">`
         : `<span class="card-avatar-empty" title="Unassigned">👤</span>`;
 
+    const descText = stripHtml(card.desc).trim();
+
     const moveButtonsHtml = isLocked ? '' : `
         <div class="card-move-buttons">
             <button class="move-card-top-btn card-action-btn" data-card-id="${card.id}" data-col-id="${colId}" title="Move to Top" type="button">▲</button>
@@ -1669,21 +1721,24 @@ function createCardHtml(card, colId, currentUserId) {
              data-col-id="${colId}"
              style="background-color:${cardBgColor}; transition:background-color 0.3s; cursor:${cursorStyle}; ${opacityStyle}">
 
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                <div style="display:flex; align-items:center; gap:5px;">
+            <div class="card-head-row">
+                <div class="card-head-meta">
                     ${lockIcon}
                     <span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString('tr-TR')}</span>
                 </div>
-                <button type="button" class="card-delete-btn" data-card-id="${card.id}" aria-label="Delete card">×</button>
+                <button type="button" class="card-delete-btn" data-card-id="${card.id}"
+                        title="Delete card" aria-label="Delete card">×</button>
             </div>
 
-            <p class="card-desc-truncate">${escapeHtml(stripHtml(card.desc))}</p>
+            <h3 class="card-title">${escapeHtml(cardDisplayTitle(card))}</h3>
 
-            <div class="card-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:auto;">
-                <div style="font-size:10px; color:#999; font-weight:600;">
+            ${descText ? `<p class="card-desc-truncate">${escapeHtml(descText)}</p>` : ''}
+
+            <div class="card-footer">
+                <div class="card-owner-name">
                     ${card.assigneeName ? escapeHtml(card.assigneeName.split(' ')[0]) : 'Unassigned'}
                 </div>
-                <div style="display:flex; align-items:center;">
+                <div class="card-footer-actions">
                     ${moveButtonsHtml}
                     ${avatarHtml}
                 </div>
@@ -1718,7 +1773,7 @@ async function loadBoardData(showLoad = true, animate = false) {
         }
     } catch (e) {
         console.error(e);
-        if (showLoad) Swal.fire('Error', 'Data could not be loaded', 'error');
+        if (showLoad) swalAlert('error', 'Error', 'Data could not be loaded.');
     }
 }
 
@@ -1743,7 +1798,8 @@ async function handleLoadMore(colId, btnElement) {
 
             const container = document.querySelector(`.cards-container[data-column-id="${colId}"]`);
             if (container) {
-                const newCardsHtml = newCards.map(card => createCardHtml(card, colId, currentUserId)).join('');
+                const newCardsHtml = newCards.map(card =>
+                    createCardHtml(card, colId, currentUserId, col.isResultColumn)).join('');
                 container.insertAdjacentHTML('beforeend', newCardsHtml);
             }
 
@@ -1770,14 +1826,12 @@ async function startRenameProcess(boardId) {
 
     const currentName = board.title;
 
-    const result = await Swal.fire({
+    const result = await swalForm({
         title: 'Rename Board',
         input: 'text',
         inputValue: currentName,
-        showCancelButton: true,
-        confirmButtonText: 'Save',
-        confirmButtonColor: '#3182ce',
-        cancelButtonText: 'Cancel',
+        inputLabel: 'Board name',
+        confirmButtonText: `${UI_ICON.save} Save`,
         inputPlaceholder: 'Enter new board name',
         inputValidator: (value) => {
             if (value.trim().length < 3) return 'Name must be at least 3 characters!';
@@ -1803,17 +1857,10 @@ async function startRenameProcess(boardId) {
             }
 
             renderBoardList();
-
-            Swal.fire({
-                icon: 'success',
-                title: 'Renamed!',
-                text: 'Board name has been updated.',
-                timer: 1500,
-                showConfirmButton: false
-            });
+            showToast('Board renamed', 'success');
         } catch (error) {
             console.error("Rename error", error);
-            Swal.fire('Error', 'Failed to rename board.', 'error');
+            swalAlert('error', 'Error', 'Failed to rename board.');
         }
     } else if (result.isDismissed) {
         showBoardMenu(boardId);
@@ -1826,36 +1873,34 @@ async function showBoardMenu(boardId) {
     const board = AppState.boards.find(b => b.id === boardId);
     if (!board) return;
 
-    await Swal.fire({
+    await swalPanel({
         title: escapeHtml(board.title),
+        width: swalWidth('400px'),
         html: `
-            <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-                <button id="menuBtnRename" class="swal2-confirm swal2-styled" style="background-color:#3182ce; width:100%; margin:0;">
-                    ✏️ Rename Board
+            <div id="board-menu" class="kf-menu">
+                <button type="button" class="kf-menu-btn" data-menu-action="rename">
+                    <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.rename}</span> Rename Board
                 </button>
-                <button id="menuBtnManage" class="swal2-confirm swal2-styled" style="background-color:#48bb78; width:100%; margin:0;">
-                    👥 Manage Users
+                <button type="button" class="kf-menu-btn" data-menu-action="manage">
+                    <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.members}</span> Manage Users
                 </button>
-                <button id="menuBtnDelete" class="swal2-deny swal2-styled" style="background-color:#f56565; width:100%; margin:0;">
-                    🗑️ Delete Board
+                <div class="kf-menu-sep"></div>
+                <button type="button" class="kf-menu-btn kf-menu-btn--danger" data-menu-action="delete">
+                    <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.delete}</span> Delete Board
                 </button>
             </div>
         `,
-        showConfirmButton: false,
-        showDenyButton: false,
-        showCloseButton: true,
         didOpen: () => {
-            document.getElementById('menuBtnRename').addEventListener('click', () => {
+            document.getElementById('board-menu')?.addEventListener('click', (e) => {
+                const btn = e.target.closest('.kf-menu-btn');
+                if (!btn) return;
+
                 Swal.close();
-                startRenameProcess(boardId);
-            });
-            document.getElementById('menuBtnManage').addEventListener('click', () => {
-                Swal.close();
-                openManageUsersModal(boardId);
-            });
-            document.getElementById('menuBtnDelete').addEventListener('click', () => {
-                Swal.close();
-                deleteBoard(boardId);
+                switch (btn.dataset.menuAction) {
+                    case 'rename': startRenameProcess(boardId); break;
+                    case 'manage': openManageUsersModal(boardId); break;
+                    case 'delete': deleteBoard(boardId); break;
+                }
             });
         }
     });
@@ -1870,74 +1915,72 @@ async function openManageUsersModal(boardId) {
         const me = members.find(m => m.userId === currentUserId);
         const amIOwner = me && me.roleCode === 'OWNER';
 
-        let membersHtml = `
-            <div style="text-align:left; max-height:300px; overflow-y:auto;">
-                <table style="width:100%; border-collapse:collapse;">
-                    <thead>
-                        <tr style="border-bottom:2px solid #eee; text-align:left;">
-                            <th style="padding:8px;">User</th>
-                            <th style="padding:8px; text-align:center;">Role</th>
-                            <th style="padding:8px; text-align:right;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="members-tbody">
-        `;
-
-        members.forEach(m => {
+        const rowsHtml = members.map(m => {
             const isMe = m.userId === currentUserId;
             const isTargetOwner = m.roleCode === 'OWNER';
 
             const roleBadge = isTargetOwner
-                ? `<span style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:bold; display:inline-block; background-color:#805ad5; color:white;">👑 Owner</span>`
-                : `<span style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:bold; display:inline-block; background-color:#e2e8f0; color:#4a5568; border:1px solid #cbd5e0;">👤 Member</span>`;
+                ? `<span class="kf-badge kf-badge--owner">${UI_ICON.owner} Owner</span>`
+                : `<span class="kf-badge">👤 Member</span>`;
 
-            let buttons = '';
+            let actions = '';
             if (amIOwner && !isTargetOwner) {
-                buttons = `
-                    <button class="member-promote-btn" data-board-id="${boardId}" data-user-id="${m.userId}"
-                            style="padding:6px 10px; font-size:12px; border-radius:4px; border:none; cursor:pointer; color:white; margin-left:5px; background-color:#6b46c1;" title="Make Owner">👑</button>
-                    <button class="member-remove-btn" data-board-id="${boardId}" data-user-id="${m.userId}"
-                            style="padding:6px 10px; font-size:12px; border-radius:4px; border:none; cursor:pointer; color:white; margin-left:5px; background-color:#f56565;" title="Remove User">🗑️</button>
+                actions = `
+                    <button type="button" class="btn btn-sm btn-square btn-owner member-promote-btn"
+                            data-board-id="${boardId}" data-user-id="${m.userId}"
+                            title="Make owner" aria-label="Make owner">${UI_ICON.owner}</button>
+                    <button type="button" class="btn btn-sm btn-square btn-danger member-remove-btn"
+                            data-board-id="${boardId}" data-user-id="${m.userId}"
+                            title="Remove user" aria-label="Remove user">${UI_ICON.delete}</button>
                 `;
             } else if (isMe) {
-                buttons = `<span style="font-size:11px; color:#aaa;">(It's you)</span>`;
+                actions = `<span class="kf-cell-note">(It's you)</span>`;
             }
 
-            membersHtml += `
-                <tr style="border-bottom:1px solid #f7fafc;">
-                    <td style="padding:10px 8px;">
-                        <div style="font-weight:bold;">${escapeHtml(m.fullName)}</div>
-                        <div style="font-size:12px; color:#718096;">${escapeHtml(m.email)}</div>
+            return `
+                <tr>
+                    <td>
+                        <div class="kf-cell-name">${escapeHtml(m.fullName)}</div>
+                        <div class="kf-cell-sub">${escapeHtml(m.email)}</div>
                     </td>
-                    <td style="padding:10px 8px; text-align:center;">${roleBadge}</td>
-                    <td style="padding:10px 8px; text-align:right; white-space:nowrap;">${buttons}</td>
+                    <td style="text-align:center;">${roleBadge}</td>
+                    <td><div class="kf-table-actions">${actions}</div></td>
                 </tr>
             `;
-        });
+        }).join('');
 
-        membersHtml += `</tbody></table></div>`;
-
-        Swal.fire({
+        swalDialog({
             title: 'Manage Users',
-            html: membersHtml,
             width: swalWidth('650px'),
+            framed: true,
+            html: `
+                <div class="kf-scroll-sm">
+                    <table class="kf-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th style="text-align:center;">Role</th>
+                                <th style="text-align:right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="members-tbody">${rowsHtml}</tbody>
+                    </table>
+                </div>
+            `,
             showCancelButton: true,
-            confirmButtonText: '➕ Invite User',
+            confirmButtonText: `${UI_ICON.create} Invite User`,
             cancelButtonText: 'Close',
             showCloseButton: true,
             didOpen: () => {
-                const tbody = document.getElementById('members-tbody');
-                if (tbody) {
-                    tbody.addEventListener('click', (e) => {
-                        const promoteBtn = e.target.closest('.member-promote-btn');
-                        const removeBtn = e.target.closest('.member-remove-btn');
-                        if (promoteBtn) {
-                            promoteToOwner(Number(promoteBtn.dataset.boardId), Number(promoteBtn.dataset.userId));
-                        } else if (removeBtn) {
-                            removeMember(Number(removeBtn.dataset.boardId), Number(removeBtn.dataset.userId));
-                        }
-                    });
-                }
+                document.getElementById('members-tbody')?.addEventListener('click', (e) => {
+                    const promoteBtn = e.target.closest('.member-promote-btn');
+                    const removeBtn = e.target.closest('.member-remove-btn');
+                    if (promoteBtn) {
+                        promoteToOwner(Number(promoteBtn.dataset.boardId), Number(promoteBtn.dataset.userId));
+                    } else if (removeBtn) {
+                        removeMember(Number(removeBtn.dataset.boardId), Number(removeBtn.dataset.userId));
+                    }
+                });
             }
         }).then((result) => {
             if (result.isConfirmed) {
@@ -1949,20 +1992,19 @@ async function openManageUsersModal(boardId) {
 
     } catch (e) {
         console.error(e);
-        Swal.fire('Error', 'Failed to load members.', 'error');
+        swalAlert('error', 'Error', 'Failed to load members.');
     }
 }
 
 async function promoteToOwner(boardId, userId) {
     if (!checkAuth()) return;
 
-    const confirm = await Swal.fire({
+    const confirm = await swalConfirm({
         title: 'Make Owner?',
-        text: "This user will have full control over the board.",
+        text: 'This user will have full control over the board.',
         icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#805ad5',
-        confirmButtonText: 'Yes, Make Owner'
+        confirmText: `${UI_ICON.owner} Make Owner`,
+        confirmVariant: 'owner'
     });
 
     if (confirm.isConfirmed) {
@@ -1972,26 +2014,23 @@ async function promoteToOwner(boardId, userId) {
                 body: JSON.stringify({ boardId, userId })
             });
             if (response.success) {
-                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                Toast.fire({ icon: 'success', title: 'User promoted to Owner!' });
+                showToast('User promoted to owner', 'success', 2000);
             } else {
-                Swal.fire('Error', response.errorMessage, 'error');
+                swalAlert('error', 'Error', response.errorMessage || 'Failed to promote user.');
             }
         } catch {
-            Swal.fire('Error', 'Failed to promote user', 'error');
+            swalAlert('error', 'Error', 'Failed to promote user.');
         }
         openManageUsersModal(boardId);
     }
 }
 
 async function removeMember(boardId, userId) {
-    const confirm = await Swal.fire({
+    const confirm = await swalConfirm({
         title: 'Remove User?',
-        text: "User will be removed from this board.",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, remove'
+        text: 'This user will be removed from the board.',
+        confirmText: `${UI_ICON.delete} Remove User`,
+        confirmVariant: 'danger'
     });
 
     if (confirm.isConfirmed) {
@@ -2001,26 +2040,24 @@ async function removeMember(boardId, userId) {
                 body: JSON.stringify({ boardId, userId })
             });
             if (response.success) {
-                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                Toast.fire({ icon: 'success', title: 'User removed' });
+                showToast('User removed', 'success', 2000);
             } else {
-                Swal.fire('Error', response.errorMessage, 'error');
+                swalAlert('error', 'Error', response.errorMessage || 'Failed to remove user.');
             }
         } catch (e) {
-            Swal.fire('Error', 'Failed to remove user.', 'error');
+            swalAlert('error', 'Error', 'Failed to remove user.');
         }
         openManageUsersModal(boardId);
     }
 }
 
 async function addUserToBoard(boardId) {
-    const { value: email } = await Swal.fire({
+    const { value: email } = await swalForm({
         title: 'Invite User',
         input: 'email',
         inputLabel: 'Enter the user email address',
         inputPlaceholder: 'user@example.com',
-        showCancelButton: true,
-        confirmButtonText: 'Send Invite'
+        confirmButtonText: `${UI_ICON.send} Send Invite`
     });
     if (email) {
         try {
@@ -2028,23 +2065,21 @@ async function addUserToBoard(boardId) {
                 method: 'POST',
                 body: JSON.stringify({ boardId, email })
             });
-            if (response.success) Swal.fire('Success', 'User invited to board!', 'success');
-            else Swal.fire('Error', response.errorMessage, 'error');
+            if (response.success) showToast('Invite sent', 'success');
+            else swalAlert('error', 'Error', response.errorMessage || 'User could not be invited.');
         } catch {
-            Swal.fire('Error', 'User could not be invited.', 'error');
+            swalAlert('error', 'Error', 'User could not be invited.');
         }
     }
     openManageUsersModal(boardId);
 }
 
 async function deleteBoard(boardId) {
-    const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: 'This board and all its contents will be deleted!',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#f56565',
-        confirmButtonText: 'Yes, delete it!'
+    const result = await swalConfirm({
+        title: 'Delete Board?',
+        text: 'This board and all of its contents will be deleted.',
+        confirmText: `${UI_ICON.delete} Delete Board`,
+        confirmVariant: 'danger'
     });
     if (result.isConfirmed) {
         try {
@@ -2052,7 +2087,7 @@ async function deleteBoard(boardId) {
                 method: 'POST',
                 body: JSON.stringify({ boardId })
             });
-            Swal.fire('Deleted!', 'Board has been deleted.', 'success');
+            showToast('Board deleted', 'success');
             if (AppState.currentBoardId === boardId) {
                 AppState.currentBoardId = null;
                 document.getElementById('board').innerHTML = '';
@@ -2060,7 +2095,7 @@ async function deleteBoard(boardId) {
             }
             loadBoards();
         } catch {
-            Swal.fire('Error', 'Failed to delete board', 'error');
+            swalAlert('error', 'Error', 'Failed to delete board.');
         }
     } else {
         showBoardMenu(boardId);
@@ -2132,7 +2167,7 @@ function openCalendarView() {
                         if (card.dueDate || card.startDate) {
                             calendarEvents.push({
                                 id: card.id,
-                                title: stripHtml(card.desc).substring(0, 30) + '...',
+                                title: cardDisplayTitle(card),
                                 start: card.startDate || card.dueDate,
                                 end: card.dueDate,
                                 backgroundColor: card.calendarColor || '#3b82f6',
@@ -2154,6 +2189,111 @@ function openCalendarView() {
         kanflowCalendar.render();
     }, 10);
 }
+function closeAllColumnMenus() {
+    document.querySelectorAll('.col-menu-dropdown.is-open').forEach(el => {
+        el.classList.remove('is-open');
+        el.previousElementSibling?.setAttribute('aria-expanded', 'false');
+    });
+}
+
+function ensureColumnMenuListener() {
+    if (AppState.columnMenuListenerAttached) return;
+    document.addEventListener('click', closeAllColumnMenus);
+    AppState.columnMenuListenerAttached = true;
+}
+
+function renderColumnHeaderHtml(col, isOwner, cardCountLabel) {
+    const addCardBtn = `
+        <button type="button" class="col-add-card-btn btn btn-sm btn-square btn-primary" data-col-id="${col.id}"
+                title="Add card" aria-label="Add card">${UI_ICON.create}</button>`;
+
+    const editBtn = isOwner
+        ? `<button type="button" class="col-edit-btn btn btn-sm btn-square btn-info" data-col-id="${col.id}"
+                   title="Edit column" aria-label="Edit column">${UI_ICON.rename}</button>`
+        : '';
+
+    const deleteBtn = isOwner
+        ? `<button type="button" class="col-delete-btn btn btn-sm btn-square btn-secondary" data-col-id="${col.id}"
+                   title="Delete column" aria-label="Delete column">${UI_ICON.delete}</button>`
+        : `<button type="button" class="btn btn-sm btn-square btn-secondary" disabled
+                   title="Only the owner can delete columns" aria-label="Delete column">${UI_ICON.delete}</button>`;
+
+    const menuItems = [
+        `<button type="button" class="col-menu-item col-add-card-btn" data-col-id="${col.id}" role="menuitem">
+            <span class="col-menu-item-icon" aria-hidden="true">${UI_ICON.create}</span>
+            <span>Add card</span>
+        </button>`
+    ];
+
+    if (isOwner) {
+        menuItems.push(
+            `<button type="button" class="col-menu-item col-edit-btn" data-col-id="${col.id}" role="menuitem">
+                <span class="col-menu-item-icon" aria-hidden="true">${UI_ICON.rename}</span>
+                <span>Edit column</span>
+            </button>`,
+            `<button type="button" class="col-menu-item col-menu-item--danger col-delete-btn" data-col-id="${col.id}" role="menuitem">
+                <span class="col-menu-item-icon" aria-hidden="true">${UI_ICON.delete}</span>
+                <span>Delete column</span>
+            </button>`
+        );
+    }
+
+    return `
+        <div class="column-header-top">
+            <div class="column-header-main">
+                <h2 class="column-title" title="${escapeHtml(col.title)}">${escapeHtml(col.title)}</h2>
+                <span class="card-count">${cardCountLabel}</span>
+            </div>
+            <div class="column-header-actions column-header-actions--desktop">
+                ${addCardBtn}
+                ${editBtn}
+                ${deleteBtn}
+            </div>
+            <div class="column-header-menu">
+                <button type="button" class="col-menu-btn btn btn-sm btn-square btn-secondary"
+                        data-col-id="${col.id}" aria-label="Column actions" aria-haspopup="menu" aria-expanded="false">⋮</button>
+                <div class="col-menu-dropdown" role="menu">
+                    ${menuItems.join('')}
+                </div>
+            </div>
+        </div>`;
+}
+
+function bindColumnResultInfoToggle(root = document) {
+    const checkbox = root.querySelector('#column-result-check');
+    const info = root.querySelector('#column-result-info');
+    if (!checkbox || !info) return;
+
+    const sync = () => {
+        info.hidden = !checkbox.checked;
+    };
+    checkbox.addEventListener('change', sync);
+    sync();
+}
+
+function columnFormHtml(title = '', isResultColumn = false) {
+    return `
+        <div class="kf-form">
+            <div class="kf-field">
+                <label class="kf-label" for="column-title-input">Column name</label>
+                <input type="text" id="column-title-input" class="kf-input" maxlength="100"
+                       placeholder="Enter column name..." value="${escapeHtml(title)}">
+            </div>
+            <div class="kf-check-row">
+                <input type="checkbox" id="column-result-check" ${isResultColumn ? 'checked' : ''}>
+                <label for="column-result-check">Result column</label>
+            </div>
+            <div id="column-result-info" class="kf-result-info"${isResultColumn ? '' : ' hidden'}>
+                <p class="kf-result-info-title">What changes in a result column?</p>
+                <ul class="kf-result-info-list">
+                    <li>Cards show <strong>only the title</strong>, not the description or dates.</li>
+                    <li>Titles appear with a <strong>strikethrough</strong> to mark them complete.</li>
+                    <li>Cards stay clickable — open them anytime to view or edit details.</li>
+                </ul>
+            </div>
+        </div>`;
+}
+
 function renderColumns(columns, animate = false) {
     const boardDiv = document.getElementById('board');
     const displayColumns = filterColumnsForSearch(columns, AppState.searchQuery);
@@ -2175,53 +2315,38 @@ function renderColumns(columns, animate = false) {
 
     const addColBtn = document.getElementById('btnNewColumn');
     if (addColBtn) {
-        if (isOwner) {
-            addColBtn.removeAttribute('disabled');
-            addColBtn.style.opacity = '1';
-            addColBtn.style.cursor = 'pointer';
-        } else {
-            addColBtn.setAttribute('disabled', 'true');
-            addColBtn.style.opacity = '0.5';
-            addColBtn.style.cursor = 'not-allowed';
-        }
+        addColBtn.disabled = !isOwner;
+        addColBtn.title = isOwner ? 'Add column' : 'Only the owner can add columns';
     }
 
     boardDiv.innerHTML = displayColumns.map(col => {
-        const deleteBtnHtml = isOwner
-            ? `<button class="col-delete-btn btn" data-col-id="${col.id}" style="padding:5px 10px;" title="Delete Column">🗑️</button>`
-            : `<button class="btn" style="padding:5px 10px; opacity:0.3; cursor:not-allowed;" disabled title="Only owner can delete">🗑️</button>`;
-
         const isSearching = !!AppState.searchQuery;
         const totalCards = col.totalCards || col.cards.length;
         const showLoadMore = !isSearching && totalCards > col.cards.length;
         const cardCountLabel = isSearching ? col.cards.length : totalCards;
 
         const loadMoreHtml = showLoadMore
-            ? `<button class="load-more-btn btn btn-secondary" data-col-id="${col.id}" style="opacity: 0; pointer-events: none; transition: opacity 0.3s ease; width:100%; font-size:12px; padding:5px; border-radius:4px;">Show More</button>`
+            ? `<button type="button" class="load-more-btn btn btn-sm btn-secondary" data-col-id="${col.id}">Show More</button>`
             : '';
 
         return `
-        <div class="column">
+        <div class="column${col.isResultColumn ? ' column--result' : ''}" data-col-id="${col.id}">
             <div class="column-header">
-                <div style="display:flex; align-items:center; gap:5px; width: 100%">
-                    <span class="column-title">${escapeHtml(col.title)}</span>
-                    <span class="card-count" style="margin: 0 auto">${cardCountLabel}</span>
-                </div>
-                <div style="display:flex; gap:5px;">
-                    <button class="col-add-card-btn btn btn-primary" data-col-id="${col.id}" style="padding:5px 10px;" title="Add Card">➕</button>
-                    ${deleteBtnHtml}
-                </div>
+                ${renderColumnHeaderHtml(col, isOwner, cardCountLabel)}
             </div>
 
-            <div class="cards-container" data-column-id="${col.id}">
-                ${col.cards.map((card) => createCardHtml(card, col.id, currentUserId)).join('')}
+            <div class="cards-container${col.cards.length === 0 ? ' cards-container--empty' : ''}" data-column-id="${col.id}">
+                ${col.cards.length === 0 ? '<p class="cards-empty-label">Empty</p>' : ''}
+                ${col.cards.map((card) => createCardHtml(card, col.id, currentUserId, col.isResultColumn)).join('')}
             </div>
             
             ${loadMoreHtml}
 
-            <button class="col-add-card-bottom btn btn-success" data-col-id="${col.id}" style="width:100%; margin-top:10px;">+ Add Card</button>
+            <button type="button" class="col-add-card-bottom btn btn-success" data-col-id="${col.id}">${UI_ICON.create} Add Card</button>
         </div>
     `}).join('');
+
+    ensureColumnMenuListener();
 
     const newBoardDiv = boardDiv.cloneNode(true);
     newBoardDiv.classList.toggle('cards-animate', animate);
@@ -2291,9 +2416,32 @@ function renderColumns(columns, animate = false) {
             return;
         }
 
+        const colEditBtn = e.target.closest('.col-edit-btn');
+        if (colEditBtn) {
+            e.stopPropagation();
+            closeAllColumnMenus();
+            const colId = Number(colEditBtn.dataset.colId);
+            if (colId) openEditColumnModal(colId);
+            return;
+        }
+
+        const colMenuBtn = e.target.closest('.col-menu-btn');
+        if (colMenuBtn) {
+            e.stopPropagation();
+            const dropdown = colMenuBtn.nextElementSibling;
+            const wasOpen = dropdown?.classList.contains('is-open');
+            closeAllColumnMenus();
+            if (dropdown && !wasOpen) {
+                dropdown.classList.add('is-open');
+                colMenuBtn.setAttribute('aria-expanded', 'true');
+            }
+            return;
+        }
+
         const colDeleteBtn = e.target.closest('.col-delete-btn');
         if (colDeleteBtn) {
             e.stopPropagation();
+            closeAllColumnMenus();
             const colId = Number(colDeleteBtn.dataset.colId);
             if (colId) deleteColumn(colId);
             return;
@@ -2302,6 +2450,7 @@ function renderColumns(columns, animate = false) {
         const addCardBtn = e.target.closest('.col-add-card-btn') || e.target.closest('.col-add-card-bottom');
         if (addCardBtn) {
             e.stopPropagation();
+            closeAllColumnMenus();
             const colId = Number(addCardBtn.dataset.colId);
             if (colId) openCardModal(colId);
             return;
@@ -2345,7 +2494,7 @@ async function moveCardTop(cardId, colId) {
             refreshedCol.scrollTo({ top: 0, behavior: 'smooth' });
         }
     } catch {
-        Swal.fire('Error', 'Failed to move card', 'error');
+        swalAlert('error', 'Error', 'Failed to move card.');
     }
 }
 
@@ -2372,7 +2521,7 @@ async function moveCardBottom(cardId, colId) {
             refreshedCol.scrollTo({ top: refreshedCol.scrollHeight, behavior: 'smooth' });
         }
     } catch {
-        Swal.fire('Error', 'Failed to move card', 'error');
+        swalAlert('error', 'Error', 'Failed to move card.');
     }
 }
 
@@ -2452,6 +2601,23 @@ const stopScroll = () => {
 document.addEventListener('dragend', stopScroll);
 document.addEventListener('touchend', stopScroll);
 
+function syncColumnEmptyState(container) {
+    if (!container) return;
+    const hasCards = container.querySelector('.card');
+    container.classList.toggle('cards-container--empty', !hasCards);
+    let label = container.querySelector('.cards-empty-label');
+    if (!hasCards) {
+        if (!label) {
+            label = document.createElement('p');
+            label.className = 'cards-empty-label';
+            label.textContent = 'Empty';
+            container.prepend(label);
+        }
+    } else if (label) {
+        label.remove();
+    }
+}
+
 function initSortable() {
     const boardElement = document.getElementById('board');
 
@@ -2462,12 +2628,13 @@ function initSortable() {
             delay: 200,
             delayOnTouchOnly: true,
             touchStartThreshold: 5,
+            emptyInsertThreshold: 24,
             scroll: true,
             scrollSensitivity: 0,
             scrollSpeed: 0,
             bubbleScroll: true,
             ghostClass: 'kanban-card-placeholder',
-            filter: ".card-delete-btn, .move-card-top-btn, .move-card-bottom-btn, .col-add-card-btn",
+            filter: ".card-delete-btn, .move-card-top-btn, .move-card-bottom-btn, .col-add-card-btn, .col-menu-btn, .col-menu-item, .col-edit-btn, .col-delete-btn",
             preventOnFilter: false,
 
             onMove: function (evt) {
@@ -2530,6 +2697,21 @@ function initSortable() {
                     targetCol.cards.splice(newIndex, 0, movedCard);
                 }
 
+                if (evt.from !== evt.to && movedCard && targetCol) {
+                    const currentUserId = AppState.currentUser?.userId ?? 0;
+                    const refreshed = document.createElement('div');
+                    refreshed.innerHTML = createCardHtml(
+                        movedCard,
+                        targetCol.id,
+                        currentUserId,
+                        targetCol.isResultColumn
+                    );
+                    const newCardEl = refreshed.firstElementChild;
+                    if (newCardEl) {
+                        evt.item.replaceWith(newCardEl);
+                    }
+                }
+
                 if (evt.from !== evt.to) {
                     const fromCol = evt.from.closest('.column');
                     if (fromCol) {
@@ -2544,6 +2726,9 @@ function initSortable() {
                     }
                 }
 
+                syncColumnEmptyState(evt.from);
+                syncColumnEmptyState(evt.to);
+
                 try {
                     const res = await apiRequest('/Kanban/MoveCard', {
                         method: 'POST',
@@ -2555,7 +2740,7 @@ function initSortable() {
                     AppState.currentColumns = snapshot;
                     renderColumns(snapshot);
                     initSortable();
-                    Swal.fire('Error', 'Card could not be moved.', 'error');
+                    swalAlert('error', 'Error', 'Card could not be moved.');
                 }
             }
         });
@@ -2568,34 +2753,112 @@ async function openNewColumnModal() {
     const sidebar = document.getElementById('sidebar');
     if (sidebar && sidebar.classList.contains('open')) toggleSidebar();
 
-    const { value: title } = await Swal.fire({
-        title: 'New Column Name',
-        input: 'text',
-        inputPlaceholder: 'Enter column name...',
-        confirmButtonText: 'Create',
-        showCancelButton: true
+    const { value: formValues } = await swalDialog({
+        title: 'New Column',
+        width: swalWidth('440px'),
+        framed: true,
+        html: columnFormHtml(),
+        showCancelButton: true,
+        confirmButtonText: `${UI_ICON.create} Create Column`,
+        cancelButtonText: 'Cancel',
+        focusConfirm: false,
+        didOpen: () => {
+            document.getElementById('column-title-input')?.focus();
+            bindColumnResultInfoToggle(Swal.getPopup());
+        },
+        preConfirm: () => readColumnFormValues()
     });
-    if (title) {
+
+    if (formValues) {
         try {
             await apiRequest('/Kanban/AddColumn', {
                 method: 'POST',
-                body: JSON.stringify({ boardId: AppState.currentBoardId, title })
+                body: JSON.stringify({
+                    boardId: AppState.currentBoardId,
+                    title: formValues.title,
+                    isResultColumn: formValues.isResultColumn
+                })
             });
             loadBoardData();
-            Swal.fire('Success', 'Column created successfully', 'success');
+            showToast('Column created', 'success');
         } catch {
-            Swal.fire('Error', 'Failed to create column', 'error');
+            swalAlert('error', 'Error', 'Failed to create column.');
+        }
+    }
+}
+
+function readColumnFormValues() {
+    const title = document.getElementById('column-title-input')?.value.trim() || '';
+    const isResultColumn = document.getElementById('column-result-check')?.checked === true;
+
+    if (title.length < 1) {
+        Swal.showValidationMessage('Column name is required.');
+        return false;
+    }
+    if (title.length > 100) {
+        Swal.showValidationMessage('Column name cannot exceed 100 characters.');
+        return false;
+    }
+
+    return { title, isResultColumn };
+}
+
+async function openEditColumnModal(columnId) {
+    if (!checkAuth()) return;
+
+    const column = AppState.currentColumns.find(c => c.id === columnId);
+    if (!column) return;
+
+    const { value: formValues } = await swalDialog({
+        title: 'Edit Column',
+        width: swalWidth('440px'),
+        framed: true,
+        html: columnFormHtml(column.title, column.isResultColumn),
+        showCancelButton: true,
+        confirmButtonText: `${UI_ICON.save} Save Changes`,
+        cancelButtonText: 'Cancel',
+        focusConfirm: false,
+        didOpen: () => {
+            const input = document.getElementById('column-title-input');
+            if (input) {
+                input.focus();
+                input.select();
+            }
+            bindColumnResultInfoToggle(Swal.getPopup());
+        },
+        preConfirm: () => readColumnFormValues()
+    });
+
+    if (formValues) {
+        try {
+            const res = await apiRequest('/Kanban/UpdateColumn', {
+                method: 'POST',
+                body: JSON.stringify({
+                    boardId: AppState.currentBoardId,
+                    columnId,
+                    title: formValues.title,
+                    isResultColumn: formValues.isResultColumn
+                })
+            });
+            if (!res?.success) {
+                swalAlert('error', 'Error', res?.errorMessage || 'Failed to update column.');
+                return;
+            }
+            loadBoardData();
+            showToast('Column updated', 'success');
+        } catch {
+            swalAlert('error', 'Error', 'Failed to update column.');
         }
     }
 }
 
 async function deleteColumn(id) {
     if (!checkAuth()) return;
-    const res = await Swal.fire({
-        title: 'Are you sure?',
-        text: 'Column will be deleted!',
-        icon: 'warning',
-        showCancelButton: true
+    const res = await swalConfirm({
+        title: 'Delete Column?',
+        text: 'The column and its cards will be deleted.',
+        confirmText: `${UI_ICON.delete} Delete Column`,
+        confirmVariant: 'danger'
     });
     if (res.isConfirmed) {
         try {
@@ -2603,21 +2866,21 @@ async function deleteColumn(id) {
                 method: 'POST',
                 body: JSON.stringify({ boardId: AppState.currentBoardId, columnId: id })
             });
-            Swal.fire('Success', 'Column deleted successfully', 'success');
+            showToast('Column deleted', 'success');
             loadBoardData();
         } catch {
-            Swal.fire('Error', 'Failed to delete column', 'error');
+            swalAlert('error', 'Error', 'Failed to delete column.');
         }
     }
 }
 
 async function deleteCard(id) {
     if (!checkAuth()) return;
-    const res = await Swal.fire({
-        title: 'Are you sure?',
-        text: 'Card will be deleted!',
-        icon: 'warning',
-        showCancelButton: true
+    const res = await swalConfirm({
+        title: 'Delete Card?',
+        text: 'This card will be permanently deleted.',
+        confirmText: `${UI_ICON.delete} Delete Card`,
+        confirmVariant: 'danger'
     });
     if (res.isConfirmed) {
         try {
@@ -2625,11 +2888,10 @@ async function deleteCard(id) {
                 method: 'POST',
                 body: JSON.stringify({ boardId: AppState.currentBoardId, cardId: id })
             });
-            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-            Toast.fire({ icon: 'success', title: 'Card deleted' });
+            showToast('Card deleted', 'success', 2000);
             loadBoardData();
         } catch {
-            Swal.fire('Error', 'Failed to delete card', 'error');
+            swalAlert('error', 'Error', 'Failed to delete card.');
         }
     } else {
         for (const col of AppState.currentColumns) {
@@ -2639,6 +2901,14 @@ async function deleteCard(id) {
             }
         }
     }
+}
+
+function buildColumnSelectOptions(selectedColumnId) {
+    return AppState.currentColumns.map(col => {
+        const tick = col.isResultColumn ? '✓ ' : '';
+        const selected = col.id == selectedColumnId ? 'selected' : '';
+        return `<option value="${col.id}" ${selected}>${tick}${escapeHtml(col.title)}</option>`;
+    }).join('');
 }
 
 async function openCardModal(columnId, cardId = null) {
@@ -2661,9 +2931,8 @@ async function openCardModal(columnId, cardId = null) {
     const canEdit = !isEditMode || !card.assigneeId || card.assigneeId === currentUserId;
 
     const disabledAttr = canEdit ? '' : 'disabled';
-    const inputStyle = canEdit ? '' : 'background-color:#f7fafc; color:#718096; cursor:not-allowed;';
 
-    const minDate = isEditMode ? new Date('2020-01-01').toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    const minDate = isEditMode ? '2020-01-01' : todayDateInput();
     const membersRes = await apiRequest(`/Kanban/GetBoardMembers?boardId=${AppState.currentBoardId}`);
 
     let membersOptions = `<option value="">-- Unassigned --</option>`;
@@ -2674,14 +2943,15 @@ async function openCardModal(columnId, cardId = null) {
 
     const defaults = {
         title: isEditMode ? (canEdit ? 'Edit Card' : 'View Card Details') : 'New Card',
-        btnText: isEditMode ? 'Save Changes' : 'Create Card',
+        btnText: isEditMode ? `${UI_ICON.save} Save Changes` : `${UI_ICON.create} Create Card`,
+        cardTitle: isEditMode ? (card.title || "") : "",
         desc: isEditMode ? (card.desc || "") : "",
-        date: isEditMode ? new Date(card.dueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        date: isEditMode ? formatDateInput(card.dueDate) : todayDateInput(),
         hasWarning: isEditMode ? (card.warningDays > 0) : false,
         warningDays: isEditMode ? card.warningDays : 1,
         color: isEditMode ? (card.highlightColor || '#ff0000') : '#ff0000',
 
-        startDate: isEditMode && card.startDate ? new Date(card.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        startDate: isEditMode ? formatDateInput(card.startDate) : todayDateInput(),
         calendarColor: isEditMode ? (card.calendarColor || '#3b82f6') : '#3b82f6'
     };
 
@@ -2691,82 +2961,100 @@ async function openCardModal(columnId, cardId = null) {
     let commentsSection = '';
     if (isEditMode) {
         commentsSection = `
-            <div style="margin-top:20px; padding-top:15px; border-top:2px solid #edf2f7;">
-                <h4 style="margin:0 0 10px 0; color:#2d3748; font-size:14px;">💬 Comments</h4>
-                <div id="comments-list" style="max-height:200px; overflow-y:auto; margin-bottom:10px; background:#f8f9fa; padding:10px; border-radius:8px;">
-                    <div style="text-align:center; color:#a0aec0; font-size:12px;">Loading comments...</div>
+            <div class="kf-comments">
+                <h4 class="kf-section-title">💬 Comments</h4>
+                <div id="comments-list" class="kf-comment-list">
+                    <div class="kf-panel-empty">Loading comments...</div>
                 </div>
-                <div style="display:flex; gap:10px;">
-                    <input type="text" id="new-comment-input" class="swal2-input" maxlength="400" placeholder="Write a comment..."
-                           style="margin:0; height:38px; font-size:13px; flex:1;">
-                    <button type="button" id="submit-comment-btn" class="btn btn-primary"
-                            style="padding:0 20px; font-size:13px; height:38px;">Send</button>
+                <div class="kf-comment-form">
+                    <input type="text" id="new-comment-input" class="kf-input" maxlength="400" placeholder="Write a comment..."
+                           aria-label="Write a comment">
+                    <button type="button" id="submit-comment-btn" class="btn btn-sm btn-primary">
+                        ${UI_ICON.send} Send
+                    </button>
                 </div>
             </div>
         `;
     }
 
+    const columnOptions = isEditMode ? buildColumnSelectOptions(columnId) : '';
+    const columnFieldHtml = isEditMode ? `
+                <div class="kf-field">
+                    <label class="kf-label" for="modal-column">Column</label>
+                    <select id="modal-column" class="kf-select" ${disabledAttr}>
+                        ${columnOptions}
+                    </select>
+                </div>
+    ` : '';
+
     let quill;
 
-    const { value: formValues, isDenied } = await Swal.fire({
+    const { value: formValues, isDenied } = await swalDialog({
         title: defaults.title,
-        width: swalWidth('650px'),
+        width: swalWidth('660px'),
+        framed: true,
+        customClass: { popup: 'kf-swal-card' },
         html: `
-            <div style="text-align:left; display:flex; flex-direction:column; gap:15px;">
-                <div>
-                    <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">DESCRIPTION</label>
-                    <div id="editor-container" style="height:120px; background:white; ${canEdit ? '' : 'pointer-events:none; background:#f7fafc;'}"></div>
+            <div class="kf-form ${canEdit ? '' : 'kf-form--readonly'}">
+                ${columnFieldHtml}
+                <div class="kf-field">
+                    <label class="kf-label" for="modal-title">Title</label>
+                    <input type="text" id="modal-title" class="kf-input" ${disabledAttr}
+                           maxlength="${CARD_TITLE_MAX}" placeholder="Short summary of the card"
+                           value="${escapeHtml(defaults.cardTitle)}">
                 </div>
 
-                <div style="display:flex; flex-wrap:wrap; gap:15px;">
-                     <div style="flex:1 1 200px;">
-                        <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">START DATE</label>
-                        <input type="date" id="modal-start-date" class="swal2-input" ${disabledAttr}
-                               style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}"
+                <div>
+                    <span class="kf-label">Description</span>
+                    <div id="editor-container" class="kf-editor"></div>
+                </div>
+
+                <div class="kf-field-grid">
+                     <div class="kf-field">
+                        <label class="kf-label" for="modal-start-date">Start date</label>
+                        <input type="date" id="modal-start-date" class="kf-input" ${disabledAttr}
                                value="${defaults.startDate}">
                     </div>
 
-                    <div style="flex:1 1 200px;">
-                        <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">DUE DATE</label>
-                        <input type="date" id="modal-date" class="swal2-input" ${disabledAttr}
-                               style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}"
+                    <div class="kf-field">
+                        <label class="kf-label" for="modal-date">Due date</label>
+                        <input type="date" id="modal-date" class="kf-input" ${disabledAttr}
                                value="${defaults.date}" min="${minDate}">
                     </div>
 
-                     <div style="flex:1 1 200px;">
-                        <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">ASSIGN TO</label>
-                        <select id="modal-assignee" class="swal2-select" ${disabledAttr} style="width:100%; margin:0; height:40px; border:1px solid #d9d9d9; border-radius:4px; ${inputStyle}">
+                     <div class="kf-field">
+                        <label class="kf-label" for="modal-assignee">Assign to</label>
+                        <select id="modal-assignee" class="kf-select" ${disabledAttr}>
                             ${membersOptions}
                         </select>
                     </div>
 
-                    <div style="flex:1 1 200px;">
-                        <label style="font-weight:bold; color:#718096; font-size:12px; margin-bottom:5px; display:block;">CALENDAR COLOR</label>
-                        <input type="color" id="modal-calendar-color" value="${defaults.calendarColor}" 
-                               style="width:100%; height:40px; padding:2px; border:1px solid #d1d5db; border-radius:4px; cursor:pointer; margin:0;">
+                    <div class="kf-field">
+                        <label class="kf-label" for="modal-calendar-color">Calendar color</label>
+                        <input type="color" id="modal-calendar-color" class="kf-color" ${disabledAttr}
+                               value="${defaults.calendarColor}">
                     </div>
-                   
                 </div>
 
-                <div style="display:flex; align-items:center; gap:8px; margin-top:5px;">
-                    <input type="checkbox" id="modal-reminder-check" style="width:18px; height:18px; cursor:pointer;" ${warningChecked} ${disabledAttr}>
-                    <label for="modal-reminder-check" style="font-weight:bold; cursor:pointer; font-size:13px; color:${canEdit ? 'black' : '#a0aec0'}">Show Warning Settings</label>
+                <div class="kf-check-row">
+                    <input type="checkbox" id="modal-reminder-check" ${warningChecked} ${disabledAttr}>
+                    <label for="modal-reminder-check">Show warning settings</label>
                 </div>
 
-                <div id="warning-area" style="display:${warningDisplay}; padding:10px; background:#fff5f5; border:1px dashed #feb2b2; border-radius:8px; ${canEdit ? '' : 'opacity:0.6; pointer-events:none;'}">
-                    <p style="color:#c53030; font-size:11px; margin-bottom:10px;"><b>⚠️ Note:</b> Card will turn red when approaching due date.</p>
-                    <div style="display:flex; gap:10px; align-items:flex-end;">
+                <div id="warning-area" class="kf-warning-box" style="display:${warningDisplay};">
+                    <p class="kf-warning-note"><b>⚠️ Note:</b> The card will be highlighted when the due date approaches.</p>
+                    <div class="kf-warning-row">
                         <div style="flex:2;">
-                            <label style="font-size:11px; font-weight:bold; display:block;">Reminder Days</label>
-                            <select id="modal-days" class="swal2-select" style="width:100%; margin:5px 0 0 0; font-size:13px; height:35px;">
+                            <label class="kf-label-sm" for="modal-days">Reminder days</label>
+                            <select id="modal-days" class="kf-select">
                                 <option value="1" ${defaults.warningDays == 1 ? 'selected' : ''}>1 Day Remaining</option>
                                 <option value="3" ${defaults.warningDays == 3 ? 'selected' : ''}>3 Days Remaining</option>
                                 <option value="7" ${defaults.warningDays == 7 ? 'selected' : ''}>1 Week Remaining</option>
                             </select>
                         </div>
                         <div style="flex:1;">
-                            <label style="font-size:11px; font-weight:bold; display:block;">Warning Color</label>
-                            <input type="color" id="modal-color" value="${defaults.color}" style="width:100%; height:35px; padding:2px; border:1px solid #d1d5db; border-radius:4px; cursor:pointer; margin-top:5px;">
+                            <label class="kf-label-sm" for="modal-color">Warning color</label>
+                            <input type="color" id="modal-color" class="kf-color" value="${defaults.color}">
                         </div>
                     </div>
                 </div>
@@ -2777,10 +3065,8 @@ async function openCardModal(columnId, cardId = null) {
         showCancelButton: true,
         showConfirmButton: canEdit,
         confirmButtonText: defaults.btnText,
-        confirmButtonColor: '#289f51',
         showDenyButton: isEditMode && canEdit,
-        denyButtonText: '🗑️ Delete',
-        denyButtonColor: '#f56565',
+        denyButtonText: `${UI_ICON.delete} Delete`,
         cancelButtonText: canEdit ? 'Cancel' : 'Close',
 
         didOpen: () => {
@@ -2801,6 +3087,13 @@ async function openCardModal(columnId, cardId = null) {
 
             if (canEdit) {
                 setTimeout(() => {
+                    // A new card starts at the title; an existing one picks up
+                    // where the description left off.
+                    const titleInput = document.getElementById('modal-title');
+                    if (!isEditMode && titleInput) {
+                        titleInput.focus();
+                        return;
+                    }
                     quill.focus();
                     const length = quill.getLength();
                     quill.setSelection(length, length);
@@ -2838,6 +3131,7 @@ async function openCardModal(columnId, cardId = null) {
         preConfirm: () => {
             if (!canEdit) return null;
 
+            const title = document.getElementById('modal-title').value.trim();
             const description = quill.root.innerHTML;
             const assigneeId = document.getElementById('modal-assignee').value;
             const dueDate = document.getElementById('modal-date').value;
@@ -2848,6 +3142,14 @@ async function openCardModal(columnId, cardId = null) {
 
             const startDate = document.getElementById('modal-start-date').value || null;
             const calendarColor = document.getElementById('modal-calendar-color').value;
+            const columnSelect = document.getElementById('modal-column');
+            const targetColumnId = columnSelect ? parseInt(columnSelect.value, 10) : columnId;
+
+            if (!title) {
+                Swal.showValidationMessage('Title is required');
+                document.getElementById('modal-title').focus();
+                return false;
+            }
 
             if (!dueDate) {
                 Swal.showValidationMessage('Due Date is required');
@@ -2859,17 +3161,31 @@ async function openCardModal(columnId, cardId = null) {
                 return false;
             }
 
-            return { description, assigneeId, dueDate, warningDays, highlightColor, startDate, calendarColor };
+            return {
+                title, description, assigneeId, dueDate, warningDays, highlightColor,
+                startDate, calendarColor, targetColumnId
+            };
         }
     });
 
     if (formValues && canEdit) {
+        let startDate = formValues.startDate;
+        if (isEditMode) {
+            // Keep the stored start date when the field is left empty on a saved card.
+            if (!startDate && card?.startDate) {
+                startDate = formatDateInput(card.startDate);
+            }
+        } else if (!startDate) {
+            startDate = todayDateInput();
+        }
+
         const payload = {
+            title: formValues.title,
             description: formValues.description,
             dueDate: formValues.dueDate,
             warningDays: parseInt(formValues.warningDays),
             highlightColor: formValues.highlightColor,
-            startDate: formValues.startDate,
+            startDate,
             calendarColor: formValues.calendarColor,
             assigneeId: formValues.assigneeId ? parseInt(formValues.assigneeId) : 0,
             boardId: AppState.currentBoardId
@@ -2877,24 +3193,40 @@ async function openCardModal(columnId, cardId = null) {
 
         try {
             if (isEditMode) {
+                if (formValues.targetColumnId && formValues.targetColumnId !== columnId) {
+                    const targetCol = AppState.currentColumns.find(c => c.id === formValues.targetColumnId);
+                    const newOrder = (targetCol?.totalCards ?? targetCol?.cards?.length ?? 0) + 1;
+                    const moveRes = await apiRequest('/Kanban/MoveCard', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            boardId: AppState.currentBoardId,
+                            cardId,
+                            newColumnId: formValues.targetColumnId,
+                            newOrder
+                        })
+                    }, false);
+                    if (!moveRes?.success) {
+                        swalAlert('error', 'Error', moveRes?.errorMessage || 'Failed to move card to the selected column.');
+                        return;
+                    }
+                }
+
                 await apiRequest('/Kanban/UpdateCard', {
                     method: 'POST',
                     body: JSON.stringify({ cardId, ...payload })
                 });
-                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                Toast.fire({ icon: 'success', title: 'Card updated' });
+                showToast('Card updated', 'success', 2000);
             } else {
                 await apiRequest('/Kanban/AddCard', {
                     method: 'POST',
                     body: JSON.stringify({ columnId, ...payload })
                 });
-                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                Toast.fire({ icon: 'success', title: 'Card created' });
+                showToast('Card created', 'success', 2000);
             }
             loadBoardData();
         } catch (e) {
             console.error(e);
-            Swal.fire('Error', `Failed to ${isEditMode ? 'update' : 'create'} card`, 'error');
+            swalAlert('error', 'Error', `Failed to ${isEditMode ? 'update' : 'create'} the card.`);
         }
     } else if (isDenied) {
         deleteCard(cardId);
@@ -2912,22 +3244,22 @@ async function loadComments(cardId) {
         if (res.success && res.data.length > 0) {
             listEl.innerHTML = res.data.map(c => {
                 const deleteBtn = (c.userId === currentUserId)
-                    ? `<span class="comment-delete-btn" data-comment-id="${c.id}" data-card-id="${cardId}"
-                            title="Delete Comment"
-                            style="cursor:pointer; color:#e53e3e; margin-left:10px; font-size:14px;">🗑️</span>`
+                    ? `<button type="button" class="kf-icon-btn kf-icon-btn--danger comment-delete-btn"
+                               data-comment-id="${c.id}" data-card-id="${cardId}"
+                               title="Delete comment" aria-label="Delete comment">${UI_ICON.delete}</button>`
                     : '';
 
                 return `
-                    <div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #e2e8f0;">
-                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#718096; margin-bottom:2px;">
+                    <div class="kf-comment">
+                        <div class="kf-comment-head">
                             <div>
                                 <strong>${escapeHtml(c.fullName)}</strong>
                                 <span style="margin-left:5px; color:#cbd5e0;">•</span>
                                 <span style="margin-left:5px;">${new Date(c.createdAt).toLocaleString('tr-TR')}</span>
                             </div>
-                            <div>${deleteBtn}</div>
+                            ${deleteBtn}
                         </div>
-                        <div style="font-size:13px; color:#2d3748; white-space:pre-wrap;">${escapeHtml(c.message)}</div>
+                        <div class="kf-comment-body">${escapeHtml(c.message)}</div>
                     </div>
                 `;
             }).join('');
@@ -2941,10 +3273,10 @@ async function loadComments(cardId) {
                 }
             });
         } else {
-            listEl.innerHTML = '<div style="text-align:center; color:#a0aec0; font-size:12px; padding:10px;">No comments yet.</div>';
+            listEl.innerHTML = '<div class="kf-panel-empty">No comments yet.</div>';
         }
     } catch (e) {
-        listEl.innerHTML = '<div style="text-align:center; color:#e53e3e; font-size:12px;">Failed to load comments.</div>';
+        listEl.innerHTML = '<div class="kf-panel-empty" style="color:var(--danger);">Failed to load comments.</div>';
     }
 }
 
@@ -2981,15 +3313,12 @@ async function submitComment(cardId) {
 
 async function deleteComment(commentId, cardId) {
     if (!checkAuth()) return;
-    const result = await Swal.fire({
-        title: 'Delete comment?',
-        text: "This action cannot be undone.",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        confirmButtonText: 'Yes, delete',
-        cancelButtonText: 'Cancel',
-        width: 300
+    const result = await swalConfirm({
+        title: 'Delete Comment?',
+        text: 'This action cannot be undone.',
+        confirmText: `${UI_ICON.delete} Delete`,
+        confirmVariant: 'danger',
+        width: swalWidth('380px')
     });
 
     if (result.isConfirmed) {
@@ -3001,8 +3330,7 @@ async function deleteComment(commentId, cardId) {
 
             if (res.success) {
                 loadComments(cardId);
-                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
-                Toast.fire({ icon: 'success', title: 'Comment deleted' });
+                showToast('Comment deleted', 'success', 1500);
 
                 let columnId = null;
                 outerLoop:
@@ -3013,11 +3341,11 @@ async function deleteComment(commentId, cardId) {
                 }
                 if (columnId) openCardModal(columnId, cardId);
             } else {
-                Swal.fire('Error', res.errorMessage || 'Could not delete comment', 'error');
+                swalAlert('error', 'Error', res.errorMessage || 'Could not delete comment.');
             }
         } catch (e) {
             console.error(e);
-            Swal.fire('Error', 'Network error', 'error');
+            swalAlert('error', 'Error', 'Network error.');
         }
     }
 }
@@ -3160,22 +3488,12 @@ function handleInviteStatus() {
 
     switch (status) {
         case 'REGISTER':
-            Swal.fire({
-                title: 'Invitation Verified!',
-                text: 'Please register to access the board.',
-                icon: 'info',
-                timer: 3000,
-                showConfirmButton: false
-            });
+            swalFlash('info', 'Invitation Verified!', 'Please register to access the board.', 3000);
             openRegisterModal(window.SERVER_MESSAGE);
             break;
 
         case 'ADDED':
-            Swal.fire({
-                title: 'Success!',
-                text: 'You have been successfully added to the board.',
-                icon: 'success'
-            }).then(() => {
+            swalAlert('success', 'Success!', 'You have been successfully added to the board.').then(() => {
                 if (!AppState.isAuthenticated) {
                     openLoginModal(window.SERVER_MESSAGE);
                 } else {
@@ -3185,7 +3503,7 @@ function handleInviteStatus() {
             break;
 
         case 'ALREADY':
-            Swal.fire('Info', 'You are already a member of this board.', 'info');
+            swalAlert('info', 'Already a Member', 'You are already a member of this board.');
             break;
 
         case 'WRONG_ACC':
@@ -3193,22 +3511,18 @@ function handleInviteStatus() {
             const currentEmail = escapeHtml(parts[0] || "Unknown");
             const targetEmail = escapeHtml(parts[1] || "Unknown");
 
-            Swal.fire({
+            swalConfirm({
                 title: 'Wrong Account Detected',
                 html: `
-                    <div style="text-align:left; font-size:15px;">
+                    <div class="kf-prose">
                         <p>You are currently logged in as: <br><b>${currentEmail}</b></p>
-                        <hr style="margin:10px 0; border:0; border-top:1px solid #eee;">
+                        <div class="kf-menu-sep"></div>
                         <p>This invitation was sent to: <br><b>${targetEmail}</b></p>
-                        <br>
                         <p>Please logout to accept this invitation with the correct account.</p>
                     </div>
                 `,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Logout & Switch',
-                confirmButtonColor: '#d33',
-                cancelButtonText: 'Cancel'
+                confirmText: `${UI_ICON.logout} Logout & Switch`,
+                confirmVariant: 'danger'
             }).then((result) => {
                 if (result.isConfirmed) {
                     handleLogout();
@@ -3217,7 +3531,7 @@ function handleInviteStatus() {
             break;
 
         case 'ERROR':
-            Swal.fire('Error', escapeHtml(window.SERVER_MESSAGE) || 'An error occurred while processing the invitation.', 'error');
+            swalAlert('error', 'Error', window.SERVER_MESSAGE || 'An error occurred while processing the invitation.');
             break;
     }
 }
@@ -3352,27 +3666,11 @@ async function addNote() {
     });
 
     if (!data.success) {
-        await Swal.fire({
-            icon: 'error',
-            title: 'Failed to add note',
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 1000
-        });
+        showToast('Failed to add note', 'error', 1500);
         return;
     }
-    else {
-        await Swal.fire({
-            icon: 'success',
-            title: 'Note added',
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 1000
-        });
-    }
 
+    showToast('Note added', 'success', 1000);
     QuickNoteState.notes.unshift(data.data);
     switchNote(data.data.id);
 }
@@ -3402,15 +3700,21 @@ function renderNoteTable() {
         tdActions.style.textAlign = 'right';
 
         const btnEdit = document.createElement('button');
-        btnEdit.innerHTML = '✏️';
+        btnEdit.type = 'button';
+        btnEdit.textContent = UI_ICON.rename;
         btnEdit.className = 'btn-edit-row';
+        btnEdit.title = 'Rename note';
+        btnEdit.setAttribute('aria-label', 'Rename note');
         btnEdit.style.marginRight = '8px';
         btnEdit.addEventListener('click', () => renameNoteFromTable(note.id));
         tdActions.appendChild(btnEdit);
 
         const btnDelete = document.createElement('button');
-        btnDelete.innerHTML = '🗑️';
+        btnDelete.type = 'button';
+        btnDelete.textContent = UI_ICON.delete;
         btnDelete.className = 'btn-delete-row';
+        btnDelete.title = 'Delete note';
+        btnDelete.setAttribute('aria-label', 'Delete note');
         btnDelete.addEventListener('click', () => deleteNoteFromTable(note.id));
         tdActions.appendChild(btnDelete);
 
@@ -3426,11 +3730,12 @@ function switchNote(id) {
 
 async function renameNoteFromTable(id) {
     const note = QuickNoteState.notes.find(n => n.id === id);
-    const { value: newTitle } = await Swal.fire({
+    const { value: newTitle } = await swalForm({
         title: 'Rename Note',
         input: 'text',
         inputValue: note.title,
-        showCancelButton: true,
+        inputLabel: 'Note title',
+        confirmButtonText: `${UI_ICON.save} Save`,
         inputAttributes: { maxlength: 30 }
     });
 
@@ -3442,27 +3747,11 @@ async function renameNoteFromTable(id) {
     });
 
     if (!ok.success) {
-        await Swal.fire({
-            icon: 'error',
-            title: 'Failed to rename note',
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 1000
-        });
+        showToast('Failed to rename note', 'error', 1500);
         return;
     }
-    else {
-        await Swal.fire({
-            icon: 'success',
-            title: 'Note renamed',
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 1000
-        });
-    }
 
+    showToast('Note renamed', 'success', 1000);
     note.title = newTitle.trim();
     renderNoteTable();
 
@@ -3473,15 +3762,15 @@ async function renameNoteFromTable(id) {
 
 async function deleteNoteFromTable(id) {
     if (QuickNoteState.notes.length <= 1) {
-        Swal.fire({ title: 'Oops', text: 'You must have at least one note.', icon: 'warning', timer: 1500, showConfirmButton: false });
+        swalFlash('warning', 'Oops', 'You must have at least one note.', 1500);
         return;
     }
 
-    const result = await Swal.fire({
-        title: 'Delete note?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Delete',
+    const result = await swalConfirm({
+        title: 'Delete Note?',
+        text: 'This note will be permanently deleted.',
+        confirmText: `${UI_ICON.delete} Delete Note`,
+        confirmVariant: 'danger'
     });
 
     if (!result.isConfirmed) return;
@@ -3492,27 +3781,11 @@ async function deleteNoteFromTable(id) {
     });
 
     if (!ok.success) {
-        await Swal.fire({
-            icon: 'error',
-            title: 'Failed to delete note',
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 1000
-        });
+        showToast('Failed to delete note', 'error', 1500);
         return;
     }
-    else {
-        await Swal.fire({
-            icon: 'success',
-            title: 'Note deleted',
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 1000
-        });
-    }
 
+    showToast('Note deleted', 'success', 1000);
     QuickNoteState.notes = QuickNoteState.notes.filter(n => n.id !== id);
 
     if (QuickNoteState.activeNoteId === id) {
@@ -3548,10 +3821,7 @@ function openAvatarModal(fromMenu = false) {
         selectedAvatarTemp = AppState.currentUser.avatar;
         setTimeout(() => {
             document.querySelectorAll('.avatar-option').forEach(img => {
-                if (img.alt === selectedAvatarTemp) {
-                    img.style.borderColor = '#289f51';
-                    img.style.transform = 'scale(1.1)';
-                }
+                img.classList.toggle('is-selected', img.dataset.avatarName === selectedAvatarTemp);
             });
         }, 100);
     }
@@ -3564,22 +3834,13 @@ function initAvatarSelector() {
     if (!container) return;
     if (container.children.length > 0) return;
 
-    container.style.display = 'grid';
-    container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(60px, 1fr))';
-    container.style.gap = '15px';
-    container.style.maxHeight = '300px';
-    container.style.overflowY = 'auto';
-    container.style.padding = '10px';
-
     container.innerHTML = AVATAR_OPTIONS.map(name => `
-        <div style="text-align:center;">
-            <img src="${getAvatarPath(name)}"
-                 class="avatar-option"
-                 alt="${name}"
-                 data-avatar-name="${name}"
-                 loading="lazy"
-                 style="width:60px; height:60px; border-radius:50%; cursor:pointer; border:4px solid transparent; transition:transform 0.2s;">
-        </div>
+        <img src="${getAvatarPath(name)}"
+             class="avatar-option"
+             alt="${name}"
+             title="${name}"
+             data-avatar-name="${name}"
+             loading="lazy">
     `).join('');
 
     container.addEventListener('click', (e) => {
@@ -3592,12 +3853,8 @@ function initAvatarSelector() {
 
 function selectAvatarTemp(name, imgElement) {
     selectedAvatarTemp = name;
-    document.querySelectorAll('.avatar-option').forEach(img => {
-        img.style.borderColor = 'transparent';
-        img.style.transform = 'scale(1)';
-    });
-    imgElement.style.borderColor = '#289f51';
-    imgElement.style.transform = 'scale(1.1)';
+    document.querySelectorAll('.avatar-option').forEach(img => img.classList.remove('is-selected'));
+    imgElement.classList.add('is-selected');
 }
 
 async function saveMyAvatar() {
@@ -3620,19 +3877,12 @@ async function saveMyAvatar() {
         document.getElementById('avatarModal').classList.remove('active');
         updateAuthUI();
 
-        await Swal.fire({
-            icon: 'success',
-            title: 'Looks great!',
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 1000
-        });
+        showToast('Looks great!', 'success', 1200);
 
         if (avatarOpenedFromMenu) { openProfileMenu(); avatarOpenedFromMenu = false; }
     } catch (e) {
         console.error(e);
-        Swal.fire('Error', 'Could not save avatar', 'error');
+        swalAlert('error', 'Error', 'Could not save avatar.');
     }
 }
 

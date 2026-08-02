@@ -20,8 +20,8 @@ namespace Kanban.Repositories
         Task<string> GetBoardTitle(long boardId);
         Task<Board?> GetBoard(long boardId);
         Task<Board> AddBoard(long userId, string title);
-        Task<BoardCard> AddCard(long userId, long boardId, long columnId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
-        Task UpdateCard(long userId, long cardId, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
+        Task<BoardCard> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
+        Task UpdateCard(long userId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
         Task AddUserToBoard(long userId, long boardId, string roleCode);
         Task MoveCard(long userId, long cardId, long newColumnId, int newOrder);
         Task<bool> ValidateManageBoard(long userId, long boardId);
@@ -38,6 +38,8 @@ namespace Kanban.Repositories
         Task<int> CountActiveOwners(long boardId);
         Task<bool> IsActiveMember(long boardId, long userId);
         Task UpdateBoardTitle(long boardId, string title);
-        Task<BoardColumn> AddColumn(long boardId, string title);
+        Task<BoardColumn> AddColumn(long boardId, string title, bool isResultColumn);
+        Task UpdateColumn(long boardId, long columnId, string title, bool isResultColumn);
+        Task NotifyUser(long userId, string message);
     }
 }
