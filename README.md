@@ -7,10 +7,12 @@ Kanflow is a Kanban task board built with ASP.NET Core and vanilla JavaScript. O
 ## Features
 
 ### Boards & cards
-- Drag-and-drop columns and cards (SortableJS)
+- Drag-and-drop cards between columns (SortableJS)
 - Rich card descriptions (Quill), due dates, highlight/calendar colors, assignees
+- Calendar view for cards with due dates (FullCalendar)
 - Card search (`/`) and quick new-card shortcut (`N`)
 - Optimistic drag-and-drop with rollback on failure
+- Assigned cards can only be moved, edited, or deleted by the assignee
 - Last opened board remembered in `localStorage`
 - Polling for board updates and notification badges
 
@@ -23,13 +25,16 @@ Kanflow is a Kanban task board built with ASP.NET Core and vanilla JavaScript. O
 ### Account
 - Register and password reset via email OTP
 - Login with BCrypt password hashing
+- Change password (invalidates the current session)
 - Cloudflare Turnstile on login, OTP request, register, and reset flows
-- Quick notes (personal scratchpad)
+- Quick notes (personal scratchpad, up to 50 notes per user)
 - Avatar picker from a server-side whitelist
+- Sample board created automatically on first registration
 
 ### UX & reliability
 - Responsive layout for desktop and mobile
-- Offline detection toasts
+- Installable PWA (`manifest.json`, theme color, app icons)
+- Offline detection toasts (connection lost / back online)
 - Centralized JSON error handling for API calls
 
 ## Tech stack
@@ -54,8 +59,11 @@ Kanban/
 ├── Services/          Business logic (Kanban, User, Email, Turnstile)
 ├── Security/          Input sanitization, OTP/login limits, avatar whitelist
 ├── Views/Home/        SPA shell (Index.cshtml)
-└── wwwroot/           site.js, site.css, avatars
+└── wwwroot/           site.js, site.css, icons, manifest.json
+                       (avatar SVGs served from wwwroot/avatars/ — see below)
 ```
+
+Avatar filenames are whitelisted in `Security/AvatarNames.cs` and loaded from `/avatars/{name}.svg`. Add the matching SVG files under `wwwroot/avatars/` for the picker to render correctly.
 
 ## Prerequisites
 
@@ -66,7 +74,7 @@ Kanban/
 
 ## Configuration
 
-Create `Kanban/appsettings.Development.json` (gitignored) or set values in your deployment environment:
+The committed `appsettings.json` only contains commented placeholders. Create `Kanban/appsettings.Development.json` (gitignored) or set values in your deployment environment:
 
 ```json
 {
@@ -81,8 +89,7 @@ Create `Kanban/appsettings.Development.json` (gitignored) or set values in your 
   "JwtSettings": {
     "Key": "<secret-key-min-32-chars>",
     "Issuer": "kanflow",
-    "Audience": "kanflow",
-    "ExpireMinutes": 60
+    "Audience": "kanflow"
   },
   "TurnstileSettings": {
     "SiteKey": "<cloudflare-turnstile-site-key>",
@@ -98,10 +105,13 @@ Create `Kanban/appsettings.Development.json` (gitignored) or set values in your 
 |---------|---------|
 | `ConnectionStrings:DefaultConnection` | SQL Server database |
 | `EmailSettings` | OTP codes and board invite emails |
-| `JwtSettings` | Signed tokens in board invite links (not session auth) |
+| `EmailSettings:Domain` | Hostname used in invite email links |
+| `JwtSettings` | Signing key for board invite links (not session auth) |
 | `TurnstileSettings:SiteKey` | Rendered in the login/register/OTP modals |
 | `TurnstileSettings:SecretKey` | Server-side Turnstile verification |
 | `DataProtection:KeysPath` | Persistent antiforgery/auth cookie keys (see below) |
+
+Board invite JWTs expire **15 minutes** after issuance (`KanbanService.GenerateJwt`); `JwtSettings:ExpireMinutes` is not read by the app.
 
 ## Getting started
 
@@ -112,9 +122,15 @@ dotnet restore
 dotnet run
 ```
 
-Open `https://localhost:7281` (or the URL printed in the console).
+Open `https://localhost:7281` (or the URL printed in the console). The default HTTPS profile also listens on `http://localhost:5199`.
 
-The app expects an existing SQL Server schema matching the EF entities in `Entities/`. There are no bundled migrations in this repository.
+The app expects an existing SQL Server schema matching the EF entities in `Entities/`. There are no bundled migrations in this repository. EF Core tools are pinned in `dotnet-tools.json` if you want to scaffold or add migrations locally:
+
+```bash
+dotnet tool restore
+dotnet ef migrations add InitialCreate
+dotnet ef database update
+```
 
 ### Frontend development
 
@@ -136,6 +152,8 @@ Ensure your proxy forwards:
 - `X-Forwarded-Proto: https`
 - `X-Forwarded-For` (client IP, for rate limiting)
 
+Non-www hostnames are permanently redirected to `www` via `UseRewriter`.
+
 ### Data Protection keys
 
 Auth and antiforgery cookies depend on persisted Data Protection keys. By default they are stored under `App_Data/DataProtection-Keys` inside the content root.
@@ -146,14 +164,15 @@ For production, set `DataProtection:KeysPath` to a **writable folder outside the
 
 | Area | Behavior |
 |------|----------|
-| Rate limits | Login/reset: 10/min (sliding); OTP send: 5/15 min; register/reset complete: 8/min; general auth: 30/min; API: 120/min — all per IP |
+| Rate limits | Login: 10/min (sliding); OTP send: 5/15 min; register/reset complete: 8/min; general auth: 30/min; API: 120/min — all per IP |
 | OTP generation | `RandomNumberGenerator` (6-digit codes) |
 | OTP at rest | SHA-256 hash; compared with timing-safe `FixedTimeEquals` |
 | OTP brute force | 5 failed attempts per email within 15 minutes |
+| Login brute force | 5 failed attempts per email within 15 minutes |
 | Turnstile | Verified on login and OTP flows; register/reset require a prior verified session cached per email + purpose |
 | Passwords | BCrypt hashing |
-| Sessions | HttpOnly `Kanflow.Auth` cookie, Secure in production, SameSite=Strict; stamp revalidated against DB on each request |
-| CSRF | Double-submit cookie (`XSRF-TOKEN` header); token refreshed before every mutating request |
+| Sessions | HttpOnly `Kanflow.Auth` cookie, 7-day sliding expiration, Secure in production, SameSite=Strict; stamp revalidated against DB on each request |
+| CSRF | Double-submit: `XSRF-TOKEN` cookie, `X-XSRF-TOKEN` request header; token refreshed before every mutating request |
 | Content | Card descriptions sanitized (HtmlSanitizer); colors validated as `#RRGGBB`; avatar filenames whitelisted |
 | Headers | CSP, HSTS, `Referrer-Policy`, `Permissions-Policy` |
 
