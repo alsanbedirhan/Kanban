@@ -45,7 +45,9 @@ namespace Kanban.Services
                     u.FullName = fullName;
                     u.HashPassword = hashedPassword;
                     u.IsActive = true;
+                    u.SecurityStamp = Guid.NewGuid().ToString();
                     await _userRepository.SaveContext();
+                    UserSecurityCache.Invalidate(_cache, u.Id);
                     return ServiceResult<User>.Ok(u);
                 }
                 return ServiceResult<User>.Ok(await _userRepository.Create(new User

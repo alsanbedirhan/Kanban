@@ -128,6 +128,14 @@ namespace Kanban.Controllers
             return Ok(ServiceResult.Ok());
         }
 
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult ClearSession()
+        {
+            HttpContext.DeleteCookies();
+            return Redirect("/");
+        }
+
         [HttpPost]
         [AllowAnonymous]
         [EnableRateLimiting("auth-reset")]

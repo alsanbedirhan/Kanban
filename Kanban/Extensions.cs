@@ -9,7 +9,50 @@ namespace Kanban
 {
     public static class Extensions
     {
-        public static CookieOptions cookieOptions = new CookieOptions { Path = "/", SameSite = SameSiteMode.Strict, Secure = true, Expires = DateTimeOffset.UtcNow.AddYears(-1) };
+        private static void DeleteCookie(HttpContext context, string name)
+        {
+            if (!context.Request.Cookies.ContainsKey(name))
+                return;
+
+            var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+            var expired = DateTimeOffset.UtcNow.AddYears(-1);
+            var isHttpOnly = name is "Kanflow.Auth" or "Kanflow.Antiforgery";
+
+            var variants = new List<CookieOptions>
+            {
+                new()
+                {
+                    Path = "/",
+                    SameSite = SameSiteMode.Strict,
+                    Secure = env.IsDevelopment() ? context.Request.IsHttps : true,
+                    HttpOnly = isHttpOnly,
+                    Expires = expired
+                },
+                new()
+                {
+                    Path = "/",
+                    SameSite = SameSiteMode.Strict,
+                    Secure = true,
+                    HttpOnly = isHttpOnly,
+                    Expires = expired
+                },
+                new()
+                {
+                    Path = "/",
+                    SameSite = SameSiteMode.Strict,
+                    Secure = false,
+                    HttpOnly = isHttpOnly,
+                    Expires = expired
+                }
+            };
+
+            foreach (var options in variants)
+            {
+                context.Response.Cookies.Delete(name, options);
+                context.Response.Cookies.Append(name, string.Empty, options);
+            }
+        }
+
         public static long GetUserId(this ClaimsPrincipal user)
         {
             long.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out long userId);
@@ -39,18 +82,12 @@ namespace Kanban
         {
             try
             {
-                if (context.Request.Cookies.ContainsKey("Kanflow.Antiforgery"))
-                    context.Response.Cookies.Delete("Kanflow.Antiforgery", cookieOptions);
-
-                if (context.Request.Cookies.ContainsKey("Kanflow.Auth"))
-                    context.Response.Cookies.Delete("Kanflow.Auth", cookieOptions);
-
-                if (context.Request.Cookies.ContainsKey("XSRF-TOKEN"))
-                    context.Response.Cookies.Delete("XSRF-TOKEN", cookieOptions);
+                DeleteCookie(context, "Kanflow.Antiforgery");
+                DeleteCookie(context, "Kanflow.Auth");
+                DeleteCookie(context, "XSRF-TOKEN");
             }
             catch (Exception)
             {
-
             }
         }
     }

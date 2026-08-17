@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Kanban;
+using Kanban.Models;
+using Kanban.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kanban.Controllers
@@ -9,6 +12,14 @@ namespace Kanban.Controllers
         [Route("[controller]/{statusCode}")]
         public IActionResult HandleError(int statusCode)
         {
+            if (statusCode is 401 or 403)
+            {
+                HttpContext.DeleteCookies();
+                Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+                Response.Headers.Pragma = "no-cache";
+                return Redirect("/");
+            }
+
             return View(new ErrorViewModel
             {
                 ErrorCode = statusCode,

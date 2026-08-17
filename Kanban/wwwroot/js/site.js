@@ -722,6 +722,15 @@ async function checkNewUpdates(isPolling = false) {
     } catch (e) { }
 }
 
+async function silentSessionCleanup() {
+    try {
+        await postLogoutRequest();
+    } catch {
+        // Server may have already invalidated the session.
+    }
+    deleteAppCookies();
+}
+
 async function fetchCurrentUser() {
     try {
         const res = await apiRequest('/Home/Fetch', {}, false);
@@ -739,9 +748,11 @@ async function fetchCurrentUser() {
             initQuickNotes();
         } else {
             clearSessionState();
+            await silentSessionCleanup();
         }
     } catch {
         clearSessionState();
+        await silentSessionCleanup();
     }
     updateAuthUI();
     if (AppState.isAuthenticated) {
@@ -2336,7 +2347,7 @@ function renderColumns(columns, animate = false) {
             </div>
 
             <div class="cards-container${col.cards.length === 0 ? ' cards-container--empty' : ''}" data-column-id="${col.id}">
-                ${col.cards.length === 0 ? '<p class="cards-empty-label">Empty</p>' : ''}
+                ${col.cards.length === 0 ? '<div class="cards-empty-label">Empty</div>' : ''}
                 ${col.cards.map((card) => createCardHtml(card, col.id, currentUserId, col.isResultColumn)).join('')}
             </div>
             
@@ -2608,7 +2619,7 @@ function syncColumnEmptyState(container) {
     let label = container.querySelector('.cards-empty-label');
     if (!hasCards) {
         if (!label) {
-            label = document.createElement('p');
+            label = document.createElement('div');
             label.className = 'cards-empty-label';
             label.textContent = 'Empty';
             container.prepend(label);
@@ -2629,6 +2640,7 @@ function initSortable() {
             delayOnTouchOnly: true,
             touchStartThreshold: 5,
             emptyInsertThreshold: 24,
+            draggable: '.card',
             scroll: true,
             scrollSensitivity: 0,
             scrollSpeed: 0,
@@ -3419,6 +3431,10 @@ function setupVisibilitySync() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
+    if (/^\/Error\/(401|403)\/?$/i.test(window.location.pathname)) {
+        window.location.replace('/Auth/ClearSession');
+        return;
+    }
 
     const serverDataEl = document.getElementById('server-data');
     if (serverDataEl) {

@@ -983,6 +983,11 @@ input::-ms-reveal, input::-ms-clear {
     box-shadow: none !important;
     opacity: 0.7 !important;
     color: transparent !important;
+    min-height: 80px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-bottom: 10px !important;
+    flex-shrink: 0 !important;
 }
 
     .kanban-card-placeholder * {
@@ -1132,18 +1137,20 @@ input::-ms-reveal, input::-ms-clear {
 }
 
     .cards-container--empty {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 120px;
-        margin: 0 10px 10px;
-        border: 1px dashed #d1d9e6;
-        border-radius: var(--radius-sm);
-        background: rgba(255, 255, 255, 0.45);
+        min-height: 140px;
     }
 
 .cards-empty-label {
-    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 80px;
+    margin: 0 0 10px;
+    padding: 12px;
+    border: 2px dashed #d1d9e6;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.55);
+    box-sizing: border-box;
     color: #a0aec0;
     font-size: 12px;
     font-weight: 600;
@@ -1151,7 +1158,12 @@ input::-ms-reveal, input::-ms-clear {
     text-transform: uppercase;
     pointer-events: none;
     user-select: none;
+    flex-shrink: 0;
 }
+
+    .cards-container--empty:has(.kanban-card-placeholder) .cards-empty-label {
+        display: none;
+    }
 
     .cards-container::-webkit-scrollbar {
         width: 6px;

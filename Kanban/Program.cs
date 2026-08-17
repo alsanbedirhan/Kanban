@@ -6,6 +6,8 @@ using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -18,41 +20,7 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-static bool WantsJsonResponse(HttpRequest request)
-{
-    if (string.Equals(request.Headers.XRequestedWith, "XMLHttpRequest", StringComparison.OrdinalIgnoreCase))
-        return true;
-
-    var accept = request.Headers.Accept;
-    var wantsJson = accept.Any(a => a != null && a.Contains("application/json", StringComparison.OrdinalIgnoreCase));
-    var wantsHtml = accept.Any(a => a != null && a.Contains("text/html", StringComparison.OrdinalIgnoreCase));
-
-    return wantsJson && !wantsHtml;
-}
-
-static bool IsApiRequest(HttpRequest request) => WantsJsonResponse(request);
-
-static bool IsStaticAssetRequest(HttpRequest request)
-{
-    var path = request.Path.Value ?? string.Empty;
-    return path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/icons/", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/favicon.ico", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/favicon.svg", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/manifest.json", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/logo.png", StringComparison.OrdinalIgnoreCase);
-}
-
-static void DisableStatusCodePages(HttpContext httpContext)
-{
-    var statusCodePagesFeature = httpContext.Features.Get<IStatusCodePagesFeature>();
-    if (statusCodePagesFeature != null)
-    {
-        statusCodePagesFeature.Enabled = false;
-    }
-}
+static bool IsApiRequest(HttpRequest request) => AuthRecovery.WantsJsonResponse(request);
 
 static (int StatusCode, string Message) MapUnhandledException(Exception? error) => error switch
 {
@@ -132,7 +100,7 @@ builder.Services.AddRateLimiter(options =>
 
         if (IsApiRequest(context.HttpContext.Request))
         {
-            DisableStatusCodePages(context.HttpContext);
+            AuthRecovery.DisableStatusCodePages(context.HttpContext);
             context.HttpContext.Response.ContentType = "application/json; charset=utf-8";
             await context.HttpContext.Response.WriteAsJsonAsync(
                 ServiceResult.Fail("Too many requests. Please try again later."), token);
@@ -230,6 +198,8 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader());
 });
 
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, SessionRecoveryAuthorizationHandler>();
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -241,6 +211,8 @@ builder.Services.AddAuthentication(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = cookieSecurePolicy;
+    options.LoginPath = "/";
+    options.AccessDeniedPath = "/";
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;
 
@@ -281,33 +253,11 @@ builder.Services.AddAuthentication(options =>
         },
         OnRedirectToAccessDenied = async context =>
         {
-            context.HttpContext.DeleteCookies();
-            DisableStatusCodePages(context.HttpContext);
-
-            if (WantsJsonResponse(context.Request))
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                context.Response.ContentType = "application/json; charset=utf-8";
-                await context.Response.WriteAsJsonAsync(ServiceResult.Fail("You do not have permission for this action."));
-                return;
-            }
-
-            context.Response.Redirect("/");
+            await AuthRecovery.RespondAsync(context.HttpContext, forbidden: true);
         },
         OnRedirectToLogin = async context =>
         {
-            context.HttpContext.DeleteCookies();
-            DisableStatusCodePages(context.HttpContext);
-
-            if (WantsJsonResponse(context.Request))
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json; charset=utf-8";
-                await context.Response.WriteAsJsonAsync(ServiceResult.Fail("Your session is not active or has expired."));
-                return;
-            }
-
-            context.Response.Redirect("/");
+            await AuthRecovery.RespondAsync(context.HttpContext, forbidden: false);
         }
     };
 });
@@ -390,13 +340,49 @@ app.Use(async (context, next) =>
 });
 
 app.UseWhen(
-    context => !WantsJsonResponse(context.Request) && !IsStaticAssetRequest(context.Request),
-    branch => branch.UseStatusCodePagesWithReExecute("/Error/{0}"));
+    context => !AuthRecovery.WantsJsonResponse(context.Request) && !AuthRecovery.IsStaticAssetRequest(context.Request),
+    branch => branch.UseStatusCodePages(async statusContext =>
+    {
+        var context = statusContext.HttpContext;
+        var statusCode = context.Response.StatusCode;
+
+        if (statusCode is StatusCodes.Status401Unauthorized or StatusCodes.Status403Forbidden)
+        {
+            await AuthRecovery.RecoverHtmlAuthFailureAsync(context);
+            return;
+        }
+
+        var originalPath = context.Request.Path;
+        var originalQuery = context.Request.QueryString;
+
+        context.Request.Path = $"/Error/{statusCode}";
+        context.Request.QueryString = QueryString.Empty;
+
+        try
+        {
+            await statusContext.Next(context);
+        }
+        finally
+        {
+            context.Request.Path = originalPath;
+            context.Request.QueryString = originalQuery;
+        }
+    }));
 app.UseRouting();
 
 app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (AuthRecovery.HasStaleAuthCookie(context))
+        AuthRecovery.ClearOrphanAuthCookie(context);
+
+    await next();
+
+    if (AuthRecovery.HasStaleAuthCookie(context))
+        AuthRecovery.ClearOrphanAuthCookie(context);
+});
 app.UseAuthorization();
 
 app.MapStaticAssets();

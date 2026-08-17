@@ -21,6 +21,8 @@ namespace Kanban.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Index(string? token)
         {
+            AuthRecovery.ClearOrphanAuthCookie(HttpContext);
+
             if (!string.IsNullOrEmpty(token))
             {
                 var r = await _kanbanService.VerifyActivationToken(User.GetUserId(), token);
