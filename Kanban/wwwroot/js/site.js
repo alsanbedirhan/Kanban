@@ -3005,7 +3005,9 @@ async function openCardModal(columnId, cardId = null) {
         title: defaults.title,
         width: swalWidth('660px'),
         framed: true,
-        customClass: { popup: 'kf-swal-card' },
+        showCloseButton: true,
+        closeButtonAriaLabel: 'Close',
+        customClass: { popup: 'kf-swal-card', closeButton: 'kf-swal-close' },
         html: `
             <div class="kf-form ${canEdit ? '' : 'kf-form--readonly'}">
                 ${columnFieldHtml}
