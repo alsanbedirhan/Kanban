@@ -2322,11 +2322,36 @@ input::-ms-reveal, input::-ms-clear {
 .kf-input[type="date"] {
     min-width: 0;
     max-width: 100%;
+    padding-right: 2.5rem;
 }
 
     .kf-input[type="date"]::-webkit-date-and-time-value {
         min-width: 0;
+        text-align: start;
     }
+
+    .kf-input[type="date"]::-webkit-calendar-picker-indicator {
+        opacity: 1;
+        width: 1.125rem;
+        height: 1.125rem;
+        margin-inline-start: 0.25rem;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+/* iPad/tablet: stack date fields so values and picker icons don't crowd. */
+@media (max-width: 1024px) {
+    .kf-field-grid > .kf-field--date {
+        flex: 1 1 100%;
+    }
+
+    .kf-input[type="date"] {
+        min-height: 44px;
+        height: auto;
+        font-size: 16px;
+        padding: 10px 2.75rem 10px 12px;
+    }
+}
 
 .kf-label {
     display: block;

@@ -631,7 +631,7 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
                 AppState.authFailureCount = 0;
             }
             console.warn('Session expired or unauthorized. Force clearing and redirecting...');
-            handleLogout(true, 'Session expired. Please log in again.');
+            recoverExpiredSession('Session expired. Please log in again.');
             throw new Error('Session expired or unauthorized.');
         }
 
@@ -1524,6 +1524,14 @@ async function postLogoutRequest() {
     return response.ok;
 }
 
+let sessionRecoveryStarted = false;
+
+function recoverExpiredSession(message) {
+    if (sessionRecoveryStarted) return;
+    sessionRecoveryStarted = true;
+    handleLogout(true, message);
+}
+
 async function handleLogout(refresh = true, message = '') {
     const sidebar = document.getElementById('sidebar');
     if (sidebar?.classList.contains('open')) toggleSidebar();
@@ -1539,12 +1547,13 @@ async function handleLogout(refresh = true, message = '') {
     updateAuthUI();
 
     if (refresh) {
+        sessionRecoveryStarted = true;
         if (message.length > 0) {
             await swalFlash('warning', 'Session Expired', message, 1500);
         } else {
             await swalFlash('success', 'Logged Out', 'Logged out successfully.', 500);
         }
-        window.location.replace('/');
+        window.location.replace('/Auth/ClearSession');
     }
 }
 
@@ -3024,13 +3033,13 @@ async function openCardModal(columnId, cardId = null) {
                 </div>
 
                 <div class="kf-field-grid">
-                     <div class="kf-field">
+                     <div class="kf-field kf-field--date">
                         <label class="kf-label" for="modal-start-date">Start date</label>
                         <input type="date" id="modal-start-date" class="kf-input" ${disabledAttr}
                                value="${defaults.startDate}">
                     </div>
 
-                    <div class="kf-field">
+                    <div class="kf-field kf-field--date">
                         <label class="kf-label" for="modal-date">Due date</label>
                         <input type="date" id="modal-date" class="kf-input" ${disabledAttr}
                                value="${defaults.date}" min="${minDate}">

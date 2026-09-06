@@ -1,56 +1,41 @@
 ﻿using Kanban.Entities;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace Kanban
 {
     public static class Extensions
     {
-        private static void DeleteCookie(HttpContext context, string name)
+        private const string CookiesClearedItemKey = "__Kanflow.CookiesCleared";
+
+        private static bool IsSecureRequest(HttpContext context)
         {
-            if (!context.Request.Cookies.ContainsKey(name))
-                return;
-
             var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-            var expired = DateTimeOffset.UtcNow.AddYears(-1);
-            var isHttpOnly = name is "Kanflow.Auth" or "Kanflow.Antiforgery";
+            return env.IsDevelopment() ? context.Request.IsHttps : true;
+        }
 
-            var variants = new List<CookieOptions>
+        private static CookieOptions CreateDeleteOptions(HttpContext context, bool httpOnly)
+        {
+            return new CookieOptions
             {
-                new()
-                {
-                    Path = "/",
-                    SameSite = SameSiteMode.Strict,
-                    Secure = env.IsDevelopment() ? context.Request.IsHttps : true,
-                    HttpOnly = isHttpOnly,
-                    Expires = expired
-                },
-                new()
-                {
-                    Path = "/",
-                    SameSite = SameSiteMode.Strict,
-                    Secure = true,
-                    HttpOnly = isHttpOnly,
-                    Expires = expired
-                },
-                new()
-                {
-                    Path = "/",
-                    SameSite = SameSiteMode.Strict,
-                    Secure = false,
-                    HttpOnly = isHttpOnly,
-                    Expires = expired
-                }
+                Path = "/",
+                Secure = IsSecureRequest(context),
+                HttpOnly = httpOnly,
+                SameSite = SameSiteMode.Strict,
+                IsEssential = true,
+                Expires = DateTimeOffset.UnixEpoch,
+                MaxAge = TimeSpan.Zero
             };
+        }
 
-            foreach (var options in variants)
-            {
-                context.Response.Cookies.Delete(name, options);
-                context.Response.Cookies.Append(name, string.Empty, options);
-            }
+        private static void DeleteCookie(HttpContext context, string name, bool httpOnly)
+        {
+            var options = CreateDeleteOptions(context, httpOnly);
+            var manager = new ChunkingCookieManager();
+            manager.DeleteCookie(context, name, options);
         }
 
         public static long GetUserId(this ClaimsPrincipal user)
@@ -68,23 +53,34 @@ namespace Kanban
         }
         public static CookieOptions CreateXsrfCookieOptions(this HttpContext context)
         {
-            var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
             return new CookieOptions
             {
                 HttpOnly = false,
-                Secure = env.IsDevelopment() ? context.Request.IsHttps : true,
+                Secure = IsSecureRequest(context),
                 SameSite = SameSiteMode.Strict,
-                Path = "/"
+                Path = "/",
+                IsEssential = true
             };
         }
 
         public static void DeleteCookies(this HttpContext context)
         {
+            if (context.Response.HasStarted || context.Items.ContainsKey(CookiesClearedItemKey))
+                return;
+
+            context.Items[CookiesClearedItemKey] = true;
+
             try
             {
-                DeleteCookie(context, "Kanflow.Antiforgery");
-                DeleteCookie(context, "Kanflow.Auth");
-                DeleteCookie(context, "XSRF-TOKEN");
+                DeleteCookie(context, "Kanflow.Auth", httpOnly: true);
+                DeleteCookie(context, "Kanflow.Antiforgery", httpOnly: false);
+                DeleteCookie(context, "XSRF-TOKEN", httpOnly: false);
+
+                foreach (var name in context.Request.Cookies.Keys)
+                {
+                    if (name.StartsWith("Kanflow.AuthC", StringComparison.OrdinalIgnoreCase))
+                        DeleteCookie(context, name, httpOnly: true);
+                }
             }
             catch (Exception)
             {

@@ -115,24 +115,22 @@ namespace Kanban.Controllers
 
         [HttpPost]
         [AllowAnonymous]
+        [IgnoreAntiforgeryToken]
         public async Task<IActionResult> Logout()
         {
-            try
-            {
-                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            }
-            catch (Exception)
-            {
-            }
-            HttpContext.DeleteCookies();
+            await AuthRecovery.ClearSessionAsync(HttpContext);
             return Ok(ServiceResult.Ok());
         }
 
         [HttpGet]
         [AllowAnonymous]
-        public IActionResult ClearSession()
+        [IgnoreAntiforgeryToken]
+        [DisableRateLimiting]
+        public async Task<IActionResult> ClearSession()
         {
-            HttpContext.DeleteCookies();
+            await AuthRecovery.ClearSessionAsync(HttpContext);
+            Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+            Response.Headers.Pragma = "no-cache";
             return Redirect("/");
         }
 
@@ -168,8 +166,7 @@ namespace Kanban.Controllers
             {
                 return Ok(ServiceResult.Fail(result.ErrorMessage));
             }
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            HttpContext.DeleteCookies();
+            await AuthRecovery.ClearSessionAsync(HttpContext);
             return Ok(ServiceResult.Ok());
         }
 

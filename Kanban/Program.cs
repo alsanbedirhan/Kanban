@@ -1,13 +1,10 @@
 using Kanban;
 using Kanban.Entities;
 using Kanban.Repositories;
-using Kanban.Security;
 using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -38,8 +35,7 @@ static bool IsClientDisconnect(Exception? error) =>
 static async Task RejectPrincipalAsync(CookieValidatePrincipalContext context)
 {
     context.RejectPrincipal();
-    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    context.HttpContext.DeleteCookies();
+    await AuthRecovery.ClearSessionAsync(context.HttpContext);
 }
 
 static string GetClientPartitionKey(HttpContext context) =>
@@ -178,6 +174,7 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.HttpOnly = false;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = cookieSecurePolicy;
+    options.Cookie.IsEssential = true;
 });
 
 builder.Services.AddHsts(options =>
@@ -211,8 +208,9 @@ builder.Services.AddAuthentication(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = cookieSecurePolicy;
-    options.LoginPath = "/";
-    options.AccessDeniedPath = "/";
+    options.Cookie.IsEssential = true;
+    options.LoginPath = "/Auth/ClearSession";
+    options.AccessDeniedPath = "/Auth/ClearSession";
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;
 
@@ -274,7 +272,6 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-// İşlenmemiş istisnalar: API → JSON ServiceResult, sayfa → /Error/500
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
@@ -376,12 +373,12 @@ app.UseAuthentication();
 app.Use(async (context, next) =>
 {
     if (AuthRecovery.HasStaleAuthCookie(context))
-        AuthRecovery.ClearOrphanAuthCookie(context);
+        await AuthRecovery.ClearSessionAsync(context);
 
     await next();
 
-    if (AuthRecovery.HasStaleAuthCookie(context))
-        AuthRecovery.ClearOrphanAuthCookie(context);
+    if (!context.Response.HasStarted && AuthRecovery.HasStaleAuthCookie(context))
+        await AuthRecovery.ClearSessionAsync(context);
 });
 app.UseAuthorization();
 

@@ -10,14 +10,14 @@ namespace Kanban.Controllers
     public class ErrorController : Controller
     {
         [Route("[controller]/{statusCode}")]
-        public IActionResult HandleError(int statusCode)
+        public async Task<IActionResult> HandleError(int statusCode)
         {
             if (statusCode is 401 or 403)
             {
-                HttpContext.DeleteCookies();
+                await AuthRecovery.ClearSessionAsync(HttpContext);
                 Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
                 Response.Headers.Pragma = "no-cache";
-                return Redirect("/");
+                return Redirect("/Auth/ClearSession");
             }
 
             return View(new ErrorViewModel

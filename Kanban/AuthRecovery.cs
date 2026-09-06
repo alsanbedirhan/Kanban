@@ -1,4 +1,6 @@
 using Kanban.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Diagnostics;
 
 namespace Kanban;
@@ -37,31 +39,53 @@ public static class AuthRecovery
             statusCodePagesFeature.Enabled = false;
     }
 
-    public static void ClearOrphanAuthCookie(HttpContext context)
+    public static bool HasStaleAuthCookie(HttpContext context)
     {
-        if (context.Request.Cookies.ContainsKey("Kanflow.Auth")
-            && !(context.User.Identity?.IsAuthenticated ?? false))
-        {
-            context.DeleteCookies();
-        }
+        if (context.User.Identity?.IsAuthenticated ?? false)
+            return false;
+
+        return context.Request.Cookies.Keys.Any(IsAuthCookieName);
     }
 
-    public static bool HasStaleAuthCookie(HttpContext context) =>
-        context.Request.Cookies.ContainsKey("Kanflow.Auth")
-        && !(context.User.Identity?.IsAuthenticated ?? false);
+    public static void ClearOrphanAuthCookie(HttpContext context)
+    {
+        if (HasStaleAuthCookie(context))
+            context.DeleteCookies();
+    }
+
+    public static async Task ClearSessionAsync(HttpContext context)
+    {
+        if (context.Response.HasStarted)
+            return;
+
+        const string sessionClearedKey = "__Kanflow.SessionCleared";
+        if (context.Items.ContainsKey(sessionClearedKey))
+            return;
+        context.Items[sessionClearedKey] = true;
+
+        try
+        {
+            await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        }
+        catch (Exception)
+        {
+        }
+
+        context.DeleteCookies();
+    }
+
+    public static Task ClearOrphanAuthCookieAsync(HttpContext context) =>
+        HasStaleAuthCookie(context) ? ClearSessionAsync(context) : Task.CompletedTask;
 
     public static async Task RespondAsync(HttpContext context, bool forbidden)
     {
-        context.DeleteCookies();
+        await ClearSessionAsync(context);
         DisableStatusCodePages(context);
-        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
-        context.Response.Headers.Pragma = "no-cache";
+        ApplyNoStoreHeaders(context);
 
         if (WantsJsonResponse(context.Request))
         {
-            context.Response.StatusCode = forbidden
-                ? StatusCodes.Status403Forbidden
-                : StatusCodes.Status401Unauthorized;
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             context.Response.ContentType = "application/json; charset=utf-8";
             var message = forbidden
                 ? "You do not have permission for this action."
@@ -70,16 +94,36 @@ public static class AuthRecovery
             return;
         }
 
-        context.Response.Redirect("/");
+        RedirectToSessionReset(context);
     }
 
-    public static Task RecoverHtmlAuthFailureAsync(HttpContext context)
+    public static async Task RecoverHtmlAuthFailureAsync(HttpContext context)
     {
-        context.DeleteCookies();
+        await ClearSessionAsync(context);
         DisableStatusCodePages(context);
+        ApplyNoStoreHeaders(context);
+        RedirectToSessionReset(context);
+    }
+
+    private static void ApplyNoStoreHeaders(HttpContext context)
+    {
         context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
         context.Response.Headers.Pragma = "no-cache";
-        context.Response.Redirect("/");
-        return Task.CompletedTask;
     }
+
+    private static void RedirectToSessionReset(HttpContext context)
+    {
+        var path = context.Request.Path.Value ?? string.Empty;
+        if (path.StartsWith("/Auth/ClearSession", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.Redirect("/");
+            return;
+        }
+
+        context.Response.Redirect("/Auth/ClearSession");
+    }
+
+    private static bool IsAuthCookieName(string name) =>
+        name.Equals("Kanflow.Auth", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Kanflow.AuthC", StringComparison.OrdinalIgnoreCase);
 }
