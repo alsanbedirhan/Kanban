@@ -121,7 +121,6 @@ public partial class KanbanDbContext : DbContext
         modelBuilder.Entity<UserNote>(entity =>
         {
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
-            entity.Property(e => e.Note).HasMaxLength(1000);
             entity.Property(e => e.Title).HasMaxLength(100);
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("(getdate())");
             entity.HasOne(d => d.User).WithMany(p => p.UserNotes)
