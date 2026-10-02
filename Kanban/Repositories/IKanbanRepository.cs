@@ -16,7 +16,6 @@ namespace Kanban.Repositories
         Task<BoardCardComment> AddComment(long userId, long cardId, string message);
         Task<List<BoardMemberResultModel>> GetBoardMembers(long boardId);
         Task<bool> CheckBoardMembers(long userId, long boardId);
-        Task<long?> GetCardAssignee(long cardId);
         Task<string> GetBoardTitle(long boardId);
         Task<Board?> GetBoard(long boardId);
         Task<Board> AddBoard(long userId, string title);
@@ -27,7 +26,8 @@ namespace Kanban.Repositories
         Task<bool> ValidateManageBoard(long userId, long boardId);
         Task<bool> ValidateBoardWithBoardId(long userId, long boardId);
         Task<bool> ValidateBoardColumn(long boardId, long columnId);
-        Task<bool> ValidateBoardCard(long boardId, long cardId);
+        Task<bool> ValidateBoardCard(long boardId, long cardId, long userId);
+        Task<bool> ValidateBoardCardWithoutUser(long boardId, long cardId);
         Task<bool> ValidateBoardComment(long boardId, long commentId);
         Task DeleteColumn(long columnId);
         Task DeleteBoard(long userId, long boardId);

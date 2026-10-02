@@ -11,10 +11,14 @@ namespace Kanban.Services
 {
     public class KanbanService : IKanbanService
     {
-        // Mirrors the BoardCards.Title column width.
         private const int CardTitleMaxLength = 150;
+        private const int BoardAndColumnTitleMaxLength = 100;
+        private const int CommentMaxLength = 400;
+        private const int MaxBoardCount = 10;
+        private const int MaxBoardColumnCount = 10;
+        private const int MaxBoardCard = 200;
 
-        private readonly JwtSettings? _jwtSettings;
+        private readonly JwtSettings _jwtSettings;
         private readonly IKanbanRepository _kanbanRepository;
         private readonly IEmailService _emailService;
         private readonly IUserRepository _userRepository;
@@ -23,14 +27,14 @@ namespace Kanban.Services
         public KanbanService(IConfiguration config, IKanbanRepository kanbanRepository,
             IUserRepository userRepository, IEmailService emailService, IDBDateTimeProvider dbDate)
         {
-            _jwtSettings = config.GetSection("JwtSettings").Get<JwtSettings>() ?? null;
+            _jwtSettings = config.GetSection("JwtSettings").Get<JwtSettings>() ?? throw new ArgumentNullException(nameof(_jwtSettings));
             _kanbanRepository = kanbanRepository;
             _userRepository = userRepository;
             _emailService = emailService;
             _dbDate = dbDate;
         }
 
-        public async Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate,
+        public async Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string? title, string desc, DateOnly dueDate,
             int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
             try
@@ -44,6 +48,10 @@ namespace Kanban.Services
                 {
                     return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
                 }
+                if (await _userRepository.GetBoardCardsCount(boardId) >= MaxBoardCard)
+                {
+                    return ServiceResult<BoardCard>.Fail("Maximum number of cards reached for this board.");
+                }
                 if (assigneeId > 0 && !await _kanbanRepository.IsActiveMember(boardId, assigneeId))
                 {
                     return ServiceResult<BoardCard>.Fail("Assignee must be a member of this board.");
@@ -54,13 +62,9 @@ namespace Kanban.Services
                 }
 
                 title = InputSanitizer.SanitizePlainText(title);
-                if (string.IsNullOrWhiteSpace(title))
-                {
-                    return ServiceResult<BoardCard>.Fail("Card title is required.");
-                }
                 if (title.Length > CardTitleMaxLength)
                 {
-                    return ServiceResult<BoardCard>.Fail($"Card title cannot exceed {CardTitleMaxLength} characters.");
+                    return ServiceResult<BoardCard>.Fail($"Card title must be less than {CardTitleMaxLength} characters.");
                 }
 
                 desc = InputSanitizer.SanitizeRichText(desc);
@@ -85,13 +89,14 @@ namespace Kanban.Services
                 }
 
                 title = InputSanitizer.SanitizePlainText(title);
-                if (string.IsNullOrWhiteSpace(title))
+                if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
                 {
-                    return ServiceResult<BoardColumn>.Fail("Column name is required.");
+                    return ServiceResult<BoardColumn>.Fail($"Column title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
                 }
-                if (title.Length > 100)
+
+                if (await _userRepository.GetBoardColumnsCount(boardId) >= MaxBoardColumnCount)
                 {
-                    return ServiceResult<BoardColumn>.Fail("Column name cannot exceed 100 characters.");
+                    return ServiceResult<BoardColumn>.Fail("Maximum number of columns reached for this board.");
                 }
 
                 return ServiceResult<BoardColumn>.Ok(await _kanbanRepository.AddColumn(boardId, title, isResultColumn));
@@ -113,13 +118,9 @@ namespace Kanban.Services
                 }
 
                 title = InputSanitizer.SanitizePlainText(title);
-                if (string.IsNullOrWhiteSpace(title))
+                if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
                 {
-                    return ServiceResult.Fail("Column name is required.");
-                }
-                if (title.Length > 100)
-                {
-                    return ServiceResult.Fail("Column name cannot exceed 100 characters.");
+                    return ServiceResult.Fail($"Column title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
                 }
 
                 await _kanbanRepository.UpdateColumn(boardId, columnId, title, isResultColumn);
@@ -184,6 +185,15 @@ namespace Kanban.Services
         {
             try
             {
+                title = InputSanitizer.SanitizePlainText(title);
+                if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
+                {
+                    return ServiceResult<Board>.Fail($"Board title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
+                }
+                if (await _userRepository.GetBoardsCount(userId) >= MaxBoardCount)
+                {
+                    return ServiceResult<Board>.Fail($"Maximum number of boards reached.");
+                }
                 return ServiceResult<Board>.Ok(await _kanbanRepository.AddBoard(userId, title));
             }
             catch (Exception)
@@ -230,16 +240,11 @@ namespace Kanban.Services
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId))
                 {
                     return ServiceResult.Fail("You do not have permission to access this board.");
                 }
-                var card = await _kanbanRepository.GetCardAssignee(cardId);
 
-                if (card != null && card > 0 && userId != card)
-                {
-                    return ServiceResult.Fail("Only the assigned user can delete this card.");
-                }
                 await _kanbanRepository.DeleteCard(cardId);
                 return ServiceResult.Ok();
             }
@@ -320,16 +325,9 @@ namespace Kanban.Services
                     return ServiceResult.Fail("You do not have permission to access this board.");
                 }
 
-                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, newColumnId))
+                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId) || !await _kanbanRepository.ValidateBoardColumn(boardId, newColumnId))
                 {
                     return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-
-                var card = await _kanbanRepository.GetCardAssignee(cardId);
-
-                if (card != null && card > 0 && userId != card)
-                {
-                    return ServiceResult<List<BoardColumn>>.Fail("Only the assigned user can move this card.");
                 }
 
                 await _kanbanRepository.MoveCard(userId, cardId, newColumnId, newOrder);
@@ -394,7 +392,7 @@ namespace Kanban.Services
                 var i = await _userRepository.GetInvite(v.InviteId);
                 if (i == null || i.IsAccepted || v.Email != i.Email || v.BoardId != i.BoardId)
                 {
-                    throw new Exception();
+                    return ServiceResult<InviteStatus>.Ok(InviteStatus.ERROR);
                 }
                 var u = await _userRepository.GetUserIdByEmail(v.Email);
                 if (u != null)
@@ -408,7 +406,7 @@ namespace Kanban.Services
                         return ServiceResult<InviteStatus>.Ok(InviteStatus.WRONG_ACC);
                     }
                 }
-                await _userRepository.SetAcceptedInvite(v.InviteId, (u != null ? u.Value : 0));
+                await _userRepository.SetAcceptedInvite(v.InviteId, u ?? 0);
                 if (u != null)
                 {
                     await _kanbanRepository.AddUserToBoard(u.Value, v.BoardId, "MEMBER");
@@ -509,21 +507,14 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor,
+        public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string? title, string desc, DateOnly dueDate, int warningDays, string highlightColor,
             long assigneeId, DateOnly startDate, string calendarColor)
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId))
                 {
                     return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-
-                var card = await _kanbanRepository.GetCardAssignee(cardId);
-
-                if (card != null && card > 0 && userId != card)
-                {
-                    return ServiceResult.Fail("Only the assigned user can update this card.");
                 }
 
                 if (assigneeId > 0 && !await _kanbanRepository.IsActiveMember(boardId, assigneeId))
@@ -533,17 +524,13 @@ namespace Kanban.Services
 
                 if (startDate > dueDate)
                 {
-                    return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
+                    return ServiceResult.Fail("Start Date cannot be after the Due Date.");
                 }
 
                 title = InputSanitizer.SanitizePlainText(title);
-                if (string.IsNullOrWhiteSpace(title))
-                {
-                    return ServiceResult.Fail("Card title is required.");
-                }
                 if (title.Length > CardTitleMaxLength)
                 {
-                    return ServiceResult.Fail($"Card title cannot exceed {CardTitleMaxLength} characters.");
+                    return ServiceResult.Fail($"Card title must be less than {CardTitleMaxLength} characters.");
                 }
 
                 desc = InputSanitizer.SanitizeRichText(desc);
@@ -672,7 +659,7 @@ namespace Kanban.Services
                     return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
                 }
 
-                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                if (!await _kanbanRepository.ValidateBoardCardWithoutUser(boardId, cardId))
                 {
                     return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
                 }
@@ -689,15 +676,15 @@ namespace Kanban.Services
         {
             try
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId))
+                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCardWithoutUser(boardId, cardId))
                 {
                     return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
                 }
 
                 message = InputSanitizer.SanitizePlainText(message);
-                if (string.IsNullOrWhiteSpace(message))
+                if (string.IsNullOrWhiteSpace(message) || message.Length > CommentMaxLength)
                 {
-                    return ServiceResult<BoardCardComment>.Fail("Comment cannot be empty.");
+                    return ServiceResult<BoardCardComment>.Fail($"Comment cannot be empty and must be less than {CommentMaxLength} characters.");
                 }
 
                 return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message));
@@ -737,6 +724,12 @@ namespace Kanban.Services
                 if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
                 {
                     return ServiceResult.Fail("You do not have permission to manage this board.");
+                }
+
+                title = InputSanitizer.SanitizePlainText(title);
+                if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
+                {
+                    return ServiceResult.Fail($"Board title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
                 }
 
                 await _kanbanRepository.UpdateBoardTitle(boardId, title);

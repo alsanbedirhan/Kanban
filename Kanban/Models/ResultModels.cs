@@ -4,7 +4,7 @@ namespace Kanban.Models
     public class UserResultModel
     {
         public long UserId { get; set; }
-        public string? FullName { get; set; }
+        public string FullName { get; set; }
         public string Email { get; set; }
     }
     public class BoardRefreshResultModel
@@ -44,9 +44,13 @@ namespace Kanban.Models
     {
         public long Id { get; set; }
     }
+    public class BoardUpdateModel : BoardInputModel
+    {
+        public long BoardId { get; set; }
+    }
     public class BoardInputModel
     {
-        public string? Title { get; set; }
+        public string Title { get; set; }
     }
     public class BoardUserInviteModel
     {
@@ -73,7 +77,7 @@ namespace Kanban.Models
         public long BoardId { get; set; }
         public int WarningDays { get; set; }
         public string HighlightColor { get; set; }
-        public string Title { get; set; }
+        public string? Title { get; set; }
         public string Description { get; set; }
         public DateOnly DueDate { get; set; }
         public long AssigneeId { get; set; }
@@ -120,12 +124,12 @@ namespace Kanban.Models
     public class BoardColumnInputModel
     {
         public long BoardId { get; set; }
-        public string? Title { get; set; }
+        public string Title { get; set; }
         public bool IsResultColumn { get; set; }
     }
     public class BoardColumnUpdateModel : BoardColumnDeleteModel
     {
-        public string? Title { get; set; }
+        public string Title { get; set; }
         public bool IsResultColumn { get; set; }
     }
     public class BoardMemberInputModel
@@ -155,7 +159,7 @@ namespace Kanban.Models
     public class BoardMemberResultModel
     {
         public long UserId { get; set; }
-        public string? FullName { get; set; }
+        public string FullName { get; set; }
         public string Email { get; set; }
         public string RoleCode { get; set; }
     }

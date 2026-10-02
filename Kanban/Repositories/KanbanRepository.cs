@@ -2,7 +2,6 @@
 using Kanban.Models;
 using Kanban.Security;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Kanban.Repositories
@@ -65,11 +64,11 @@ namespace Kanban.Repositories
                 UserId = userId,
                 UpdatedAt = now,
                 CreatedAt = now,
-                BoardColumns = new List<BoardColumn> {
+                BoardColumns = [
                     new BoardColumn { IsActive = true, Title = "To Do" },
                     new BoardColumn { IsActive = true, Title = "Progress" },
                     new BoardColumn { IsActive = true, Title = "Done", IsResultColumn = true }
-                }
+                ]
             };
             await _context.BoardMembers.AddAsync(new BoardMember
             {
@@ -358,7 +357,7 @@ namespace Kanban.Repositories
         public async Task<bool> ValidateBoardWithBoardId(long userId, long boardId)
         {
             var members = await GetCachedBoardMembers(boardId);
-            return members.Any(m => m.UserId == userId);
+            return members?.Any(m => m.UserId == userId) ?? false;
         }
 
         public async Task<List<BoardMemberResultModel>> GetBoardMembers(long boardId)
@@ -369,17 +368,10 @@ namespace Kanban.Repositories
                 .ToListAsync();
         }
 
-        public async Task<long?> GetCardAssignee(long cardId)
-        {
-            return await _context.BoardCards.AsNoTracking()
-                .Where(bc => bc.Id == cardId && bc.IsActive)
-                .Select(bc => bc.AssigneeUserId).FirstOrDefaultAsync();
-        }
-
         public async Task<bool> ValidateManageBoard(long userId, long boardId)
         {
             var members = await GetCachedBoardMembers(boardId);
-            return members.Any(m => m.UserId == userId && m.RoleCode == "OWNER");
+            return members?.Any(m => m.UserId == userId && m.RoleCode == "OWNER") ?? false;
         }
 
         public async Task DeleteMember(long boardId, long userId)
@@ -453,14 +445,12 @@ namespace Kanban.Repositories
             _cache.Remove($"Board_{boardId}_Members");
         }
 
-        private async Task<List<BoardMember>> GetCachedBoardMembers(long boardId)
+        private async Task<List<BoardMember>?> GetCachedBoardMembers(long boardId)
         {
             string cacheKey = $"Board_{boardId}_Members";
 
-            if (!_cache.TryGetValue(cacheKey, out List<BoardMember> members))
+            if (!_cache.TryGetValue(cacheKey, out List<BoardMember>? members) || members == null)
             {
-                // Board.IsActive must be part of the gate: DeleteBoard only soft-deletes the board
-                // and leaves member rows active, so membership alone would still grant API access.
                 members = await _context.BoardMembers
                     .AsNoTracking()
                     .Where(b => b.BoardId == boardId && b.IsActive && b.Board.IsActive)
@@ -570,14 +560,20 @@ namespace Kanban.Repositories
             return await _context.BoardColumns.AnyAsync(c => c.Id == columnId && c.BoardId == boardId && c.IsActive);
         }
 
-        public async Task<bool> ValidateBoardCard(long boardId, long cardId)
+        public async Task<bool> ValidateBoardCard(long boardId, long cardId, long userId)
         {
-            return await _context.BoardCards.AnyAsync(c => c.Id == cardId && c.BoardColumn.BoardId == boardId && c.IsActive);
+            return await _context.BoardCards.AnyAsync(c => c.Id == cardId && c.BoardColumn.BoardId == boardId && c.IsActive &&
+            (c.AssigneeUserId > 0 ? c.AssigneeUserId == userId : c.CreatedBy == userId));
         }
 
         public async Task<bool> ValidateBoardComment(long boardId, long commentId)
         {
             return await _context.BoardCardComments.AnyAsync(c => c.Id == commentId && c.BoardCard.BoardColumn.BoardId == boardId && !c.IsDeleted);
+        }
+
+        public async Task<bool> ValidateBoardCardWithoutUser(long boardId, long cardId)
+        {
+            return await _context.BoardCards.AnyAsync(c => c.Id == cardId && c.BoardColumn.BoardId == boardId && c.IsActive);
         }
     }
 }

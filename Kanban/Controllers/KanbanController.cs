@@ -307,7 +307,7 @@ namespace Kanban.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> UpdateBoardTitle([FromBody] BoardColumnInputModel model)
+        public async Task<IActionResult> UpdateBoardTitle([FromBody] BoardUpdateModel model)
         {
             var r = await _kanbanService.UpdateBoardTitle(User.GetUserId(), model.BoardId, model.Title);
             if (!r.Success)

@@ -3168,12 +3168,6 @@ async function openCardModal(columnId, cardId = null) {
             const columnSelect = document.getElementById('modal-column');
             const targetColumnId = columnSelect ? parseInt(columnSelect.value, 10) : columnId;
 
-            if (!title) {
-                Swal.showValidationMessage('Title is required');
-                document.getElementById('modal-title').focus();
-                return false;
-            }
-
             if (!dueDate) {
                 Swal.showValidationMessage('Due Date is required');
                 return false;

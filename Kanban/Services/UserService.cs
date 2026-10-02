@@ -10,6 +10,9 @@ namespace Kanban.Services
 {
     public class UserService : IUserService
     {
+        private const int NoteMaxLength = 5000;
+        public const int NoteMaxCount = 50;
+        public const int NoteTitleMaxLenght = 30;
         private static string GenerateOtpCode() =>
             RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
 
@@ -294,10 +297,19 @@ namespace Kanban.Services
         {
             try
             {
-                if (await _userRepository.GetQuickNoteCount(userId) >= QuickNoteLimits.MaxNotesPerUser)
+                if (await _userRepository.GetQuickNoteCount(userId) >= NoteMaxCount)
                 {
-                    return ServiceResult<UserNote>.Fail(
-                        $"You can have at most {QuickNoteLimits.MaxNotesPerUser} notes.");
+                    return ServiceResult<UserNote>.Fail($"You can have at most {NoteMaxCount} notes.");
+                }
+                title = InputSanitizer.SanitizePlainText(title);
+                if (title.Length > NoteTitleMaxLenght)
+                {
+                    return ServiceResult<UserNote>.Fail($"Title must be less than {NoteTitleMaxLenght} characters.");
+                }
+                note = InputSanitizer.SanitizePlainText(note);
+                if (note.Length > NoteMaxLength)
+                {
+                    return ServiceResult<UserNote>.Fail($"Note must be less than {NoteMaxLength} characters.");
                 }
                 return ServiceResult<UserNote>.Ok(await _userRepository.AddQuickNote(userId, title, note));
             }
@@ -314,6 +326,11 @@ namespace Kanban.Services
                 if (!await _userRepository.ValidateQuickNote(userId, noteId))
                 {
                     return ServiceResult.Fail("You do not have permission to manage this note.");
+                }
+                title = InputSanitizer.SanitizePlainText(title);
+                if (title.Length > NoteTitleMaxLenght)
+                {
+                    return ServiceResult<UserNote>.Fail($"Title must be less than {NoteTitleMaxLenght} characters.");
                 }
                 await _userRepository.RenameQuickNote(userId, noteId, title);
                 return ServiceResult.Ok();
@@ -352,6 +369,11 @@ namespace Kanban.Services
                 if (!await _userRepository.ValidateQuickNote(userId, noteId))
                 {
                     return ServiceResult.Fail("You do not have permission to manage this note.");
+                }
+                note = InputSanitizer.SanitizePlainText(note);
+                if (note.Length > NoteMaxLength)
+                {
+                    return ServiceResult<BoardColumn>.Fail($"Note must be less than {NoteMaxLength} characters.");
                 }
                 await _userRepository.UpdateQuickNote(userId, noteId, note);
                 return ServiceResult.Ok();

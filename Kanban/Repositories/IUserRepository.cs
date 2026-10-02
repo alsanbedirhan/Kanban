@@ -11,6 +11,9 @@ namespace Kanban.Repositories
         Task<bool> CheckInvite(long userId, long boardId, string email);
         Task<UserInvite?> GetInvite(long id);
         Task<List<InviteResultModel>> GetInvites(string email);
+        Task<int> GetBoardsCount(long userId);
+        Task<int> GetBoardColumnsCount(long userId);
+        Task<int> GetBoardCardsCount(long userId);
         Task SetAcceptedInvite(long inviteId, long userId);
         Task<UserInvite> AddInvite(long senderUserId, long boardId, string email, long userId);
         Task<int> CheckInviteCountToday(string email);

@@ -5,7 +5,7 @@ namespace Kanban.Models
 {
     public class MyClaims : UserResultModel
     {
-        public string? SecurityStamp { get; set; }
+        public string SecurityStamp { get; set; }
     }
     public class LoginViewModel 
     {

@@ -298,6 +298,7 @@ namespace Kanban.Repositories
         {
             return await _context.UserNotes.AnyAsync(c => c.Id == noteId && c.UserId == userId && !c.IsDeleted);
         }
+
         public async Task DeleteQuickNote(long userId, long noteId)
         {
             await _context.UserNotes.Where(n => n.Id == noteId)
@@ -305,10 +306,26 @@ namespace Kanban.Repositories
 
             _cache.Remove($"NOTE:{userId}");
         }
+
         public async Task<int> GetQuickNoteCount(long userId)
         {
             var c = await GetQuickNotes(userId);
             return c.Count;
+        }
+
+        public async Task<int> GetBoardsCount(long boardId)
+        {
+            return await _context.Boards.CountAsync(b => b.Id == boardId && b.IsActive);
+        }
+
+        public async Task<int> GetBoardColumnsCount(long boardId)
+        {
+            return await _context.BoardColumns.CountAsync(c => c.BoardId == boardId && c.IsActive);
+        }
+
+        public async Task<int> GetBoardCardsCount(long boardId)
+        {
+            return await _context.BoardCards.CountAsync(c => c.BoardColumn.IsActive && c.BoardColumn.BoardId == boardId && c.IsActive);
         }
     }
 }

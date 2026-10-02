@@ -22,8 +22,8 @@ namespace Kanban.Services
         Task<ServiceResult> EnsureWelcomeBoard(long userId);
         Task<ServiceResult<BoardColumn>> AddColumn(long userId, long boardId, string title, bool isResultColumn);
         Task<ServiceResult> UpdateColumn(long userId, long boardId, long columnId, string title, bool isResultColumn);
-        Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
-        Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
+        Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string? title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
+        Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string? title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
         Task<ServiceResult> MoveCard(long userId, long boardId, long cardId, long newColumnId, int newOrder);
         Task<ServiceResult> DeleteColumn(long userId, long boardId, long columnId);
         Task<ServiceResult> DeleteBoard(long userId, long boardId);
