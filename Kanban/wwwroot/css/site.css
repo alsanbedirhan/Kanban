@@ -4,17 +4,14 @@
     --primary-soft: #e7f5ed;
     --accent: #2b6cb0;
     --accent-dark: #22548a;
-    --accent-soft: #e6f0f9;
     --danger: #e53e3e;
     --danger-dark: #c53030;
     --danger-soft: #fff5f5;
     --danger-border: #fed7d7;
-    --neutral: #718096;
     --neutral-dark: #4a5568;
     --owner: #6b46c1;
     --owner-dark: #553c9a;
     --owner-soft: #ede9fb;
-    --success: #289f51;
     --bg-gradient: linear-gradient(90deg, #1a6b36 0%, #207d41 40%, #2b4e91 100%);
     --sidebar-width: 260px;
     --text-dark: #2d3748;
@@ -22,12 +19,7 @@
     --surface: #ffffff;
     --surface-muted: #f8f9fa;
     --text-muted: #718096;
-    --shadow: rgba(0, 0, 0, 0.05);
-    --radius: 12px;
     --radius-sm: 8px;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
 }
 
 .u-hidden {
@@ -181,11 +173,6 @@
     font-size: 14px;
 }
 
-.form-link-row {
-    text-align: right;
-    margin-top: 5px;
-}
-
 .btn-link {
     background: none;
     border: none;
@@ -200,10 +187,6 @@
 
 .btn-link:hover {
     color: var(--primary-dark);
-}
-
-.btn-link-sm {
-    font-size: 12px;
 }
 
 .agreement-row {
@@ -268,8 +251,8 @@
     justify-content: center;
     font-size: 0.85rem;
     color: var(--text-muted);
-    background: var(--bg-soft, #f7fafc);
-    border: 1px dashed var(--border-color, #e2e8f0);
+    background: var(--surface-muted);
+    border: 1px dashed var(--border-color);
     pointer-events: none;
 }
 
@@ -305,9 +288,9 @@
     display: none;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--border-color, #e2e8f0);
-    background: var(--bg-soft, #f7fafc);
-    color: var(--text-muted, #718096);
+    border: 1px solid var(--border-color);
+    background: var(--surface-muted);
+    color: var(--text-muted);
     font-size: 0.8rem;
     padding: 0.4rem 0.85rem;
     border-radius: 8px;
@@ -316,8 +299,8 @@
 }
 
 .turnstile-retry-btn:hover {
-    color: var(--text-main, #2d3748);
-    border-color: var(--primary-color, #289f51);
+    color: var(--text-dark);
+    border-color: var(--primary-color);
 }
 
 .turnstile-wrap:not(.is-loaded) .turnstile-retry-btn,
@@ -447,10 +430,6 @@
     padding: 1px 6px;
     border-radius: 4px;
     font-family: inherit;
-}
-
-.card.card-search-hidden {
-    display: none !important;
 }
 
 @media (min-width: 769px) {
@@ -613,9 +592,9 @@
         display: none;
     }
 
-    #header-avatar-img {
-        width: 38px !important;
-        height: 38px !important;
+    .header-avatar-img {
+        width: 38px;
+        height: 38px;
     }
 }
 
@@ -752,6 +731,84 @@ input::-ms-reveal, input::-ms-clear {
     top: 0;
     z-index: 5;
     background: var(--surface);
+}
+
+#kf-toast-host {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 999999;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.kf-toast {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 300px;
+    max-width: min(440px, calc(100vw - 40px));
+    padding: 16px 22px;
+    background: #fff;
+    color: var(--text-dark);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity .25s, transform .25s;
+}
+
+    .kf-toast.is-visible {
+        opacity: 1;
+        transform: none;
+    }
+
+.kf-toast-icon {
+    flex-shrink: 0;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.kf-toast-text {
+    overflow-wrap: anywhere;
+}
+
+.kf-toast--success {
+    border-left: 6px solid #289f51;
+}
+
+.kf-toast--error {
+    border-left: 6px solid #e53e3e;
+}
+
+.kf-toast--warning {
+    border-left: 6px solid #dd6b20;
+}
+
+.kf-toast--info {
+    border-left: 6px solid #3182ce;
+}
+
+@media (max-width: 768px) {
+    #kf-toast-host {
+        top: 12px;
+        left: 12px;
+        right: 12px;
+        align-items: stretch;
+    }
+
+    .kf-toast {
+        min-width: 0;
+        max-width: none;
+        padding: 14px 18px;
+        font-size: 15px;
+    }
 }
 
 @media (max-width: 768px) {
@@ -942,6 +999,56 @@ input::-ms-reveal, input::-ms-clear {
     flex: 1;
     overflow-y: auto;
     padding-top: 10px;
+}
+
+.header-avatar-wrap {
+    position: relative;
+    cursor: pointer;
+}
+
+.header-avatar-img {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border-color);
+    transition: transform 0.2s, border-color 0.2s;
+}
+
+    .header-avatar-wrap:hover .header-avatar-img {
+        transform: scale(1.05);
+        border-color: var(--primary-color);
+    }
+
+.sidebar-user-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+}
+
+.sidebar-user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: white;
+}
+
+.sidebar-user-info {
+    overflow: hidden;
+}
+
+.sidebar-user-name {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.sidebar-user-email {
+    font-size: 11px;
+    color: #a0aec0;
 }
 
 .sidebar-footer {
@@ -1280,14 +1387,12 @@ input::-ms-reveal, input::-ms-clear {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-    cursor: grab;
     background: white;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 12px;
     margin-bottom: 10px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    cursor: grab;
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     cursor: pointer;
     display: flex;
@@ -1763,7 +1868,6 @@ input::-ms-reveal, input::-ms-clear {
     justify-content: space-between;
     align-items: center;
     background: #fcd34d;
-    font-size: 10px;
     color: #4b5563;
     font-weight: bold;
     font-size: 15px;
@@ -1957,10 +2061,13 @@ input::-ms-reveal, input::-ms-clear {
         align-items: center;
         padding: 10px;
         gap: 5px;
+        margin-top: 0;
+        margin-bottom: 10px;
     }
 
     #kanflowheadertitle {
         gap: 2px;
+        font-size: 18px;
     }
 
     .header h1 {
@@ -1976,19 +2083,10 @@ input::-ms-reveal, input::-ms-clear {
         height: 28px;
     }
 
-    #kanflowheadertitle {
-        font-size: 18px;
-    }
-
     .secondary-header {
         padding: 8px 10px;
         margin-bottom: 8px;
         margin-top: 0;
-    }
-
-    .header {
-        margin-top: 0;
-        margin-bottom: 10px;
     }
 
     .board {

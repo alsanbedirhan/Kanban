@@ -38,7 +38,7 @@ public partial class KanbanDbContext : DbContext
         {
             entity.Property(e => e.CalendarColor).HasMaxLength(10);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
-            entity.Property(e => e.Desc).HasColumnType("text");
+            entity.Property(e => e.Desc).HasColumnType("nvarchar(max)");
             entity.Property(e => e.Title).HasMaxLength(150);
             entity.Property(e => e.HighlightColor).HasMaxLength(10);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
@@ -79,7 +79,7 @@ public partial class KanbanDbContext : DbContext
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.RoleCode)
                 .HasMaxLength(50)
-                .HasDefaultValue("MEM");
+                .HasDefaultValue("MEMBER");
             entity.HasOne(d => d.Board).WithMany(p => p.BoardMembers)
                 .HasForeignKey(d => d.BoardId)
                 .OnDelete(DeleteBehavior.ClientSetNull)

@@ -16,6 +16,8 @@ namespace Kanban.Repositories
         Task<BoardCardComment> AddComment(long userId, long cardId, string message);
         Task<List<BoardMemberResultModel>> GetBoardMembers(long boardId);
         Task<bool> CheckBoardMembers(long userId, long boardId);
+        Task<int> GetBoardMembersCount(long boardId);
+        Task<int> GetInviteCountToday(long boardId);
         Task<string> GetBoardTitle(long boardId);
         Task<Board?> GetBoard(long boardId);
         Task<Board> AddBoard(long userId, string title);

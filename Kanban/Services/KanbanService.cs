@@ -17,326 +17,255 @@ namespace Kanban.Services
         private const int MaxBoardCount = 10;
         private const int MaxBoardColumnCount = 10;
         private const int MaxBoardCard = 200;
+        private const int MaxBoardMembersCount = 10;
+        private const int MaxDailyInvitesPerUser = 20;
 
         private readonly JwtSettings _jwtSettings;
         private readonly IKanbanRepository _kanbanRepository;
         private readonly IEmailService _emailService;
         private readonly IUserRepository _userRepository;
-        private readonly IDBDateTimeProvider _dbDate;
+        private readonly TimeProvider _time;
 
         public KanbanService(IConfiguration config, IKanbanRepository kanbanRepository,
-            IUserRepository userRepository, IEmailService emailService, IDBDateTimeProvider dbDate)
+            IUserRepository userRepository, IEmailService emailService, TimeProvider time)
         {
             _jwtSettings = config.GetSection("JwtSettings").Get<JwtSettings>() ?? throw new ArgumentNullException(nameof(_jwtSettings));
             _kanbanRepository = kanbanRepository;
             _userRepository = userRepository;
             _emailService = emailService;
-            _dbDate = dbDate;
+            _time = time;
         }
 
         public async Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string? title, string desc, DateOnly dueDate,
             int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
-            try
+            var now = _time.LocalNow();
+            if (dueDate < DateOnly.FromDateTime(now.Date))
             {
-                var now = await _dbDate.Now();
-                if (dueDate < DateOnly.FromDateTime(now.Date))
-                {
-                    return ServiceResult<BoardCard>.Fail("Due date cannot be in the past.");
-                }
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
-                {
-                    return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
-                }
-                if (await _userRepository.GetBoardCardsCount(boardId) >= MaxBoardCard)
-                {
-                    return ServiceResult<BoardCard>.Fail("Maximum number of cards reached for this board.");
-                }
-                if (assigneeId > 0 && !await _kanbanRepository.IsActiveMember(boardId, assigneeId))
-                {
-                    return ServiceResult<BoardCard>.Fail("Assignee must be a member of this board.");
-                }
-                if (startDate > dueDate)
-                {
-                    return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
-                }
-
-                title = InputSanitizer.SanitizePlainText(title);
-                if (title.Length > CardTitleMaxLength)
-                {
-                    return ServiceResult<BoardCard>.Fail($"Card title must be less than {CardTitleMaxLength} characters.");
-                }
-
-                desc = InputSanitizer.SanitizeRichText(desc);
-                highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
-                calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
-
-                return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor));
+                return ServiceResult<BoardCard>.Fail("Due date cannot be in the past.");
             }
-            catch (Exception)
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
             {
-                return ServiceResult<BoardCard>.Fail("A database error occurred, please try again.");
+                return ServiceResult<BoardCard>.Fail("You do not have permission to access this board.");
             }
+            if (await _userRepository.GetBoardCardsCount(boardId) >= MaxBoardCard)
+            {
+                return ServiceResult<BoardCard>.Fail("Maximum number of cards reached for this board.");
+            }
+            if (assigneeId > 0 && !await _kanbanRepository.IsActiveMember(boardId, assigneeId))
+            {
+                return ServiceResult<BoardCard>.Fail("Assignee must be a member of this board.");
+            }
+            if (startDate > dueDate)
+            {
+                return ServiceResult<BoardCard>.Fail("Start Date cannot be after the Due Date.");
+            }
+
+            title = InputSanitizer.SanitizePlainText(title);
+            if (title.Length > CardTitleMaxLength)
+            {
+                return ServiceResult<BoardCard>.Fail($"Card title must be less than {CardTitleMaxLength} characters.");
+            }
+
+            desc = InputSanitizer.SanitizeRichText(desc);
+            highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
+            calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
+
+            return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor));
         }
 
         public async Task<ServiceResult<BoardColumn>> AddColumn(long userId, long boardId, string title, bool isResultColumn)
         {
-            try
+            if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
-                {
-                    return ServiceResult<BoardColumn>.Fail("You do not have permission to manage this board.");
-                }
-
-                title = InputSanitizer.SanitizePlainText(title);
-                if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
-                {
-                    return ServiceResult<BoardColumn>.Fail($"Column title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
-                }
-
-                if (await _userRepository.GetBoardColumnsCount(boardId) >= MaxBoardColumnCount)
-                {
-                    return ServiceResult<BoardColumn>.Fail("Maximum number of columns reached for this board.");
-                }
-
-                return ServiceResult<BoardColumn>.Ok(await _kanbanRepository.AddColumn(boardId, title, isResultColumn));
+                return ServiceResult<BoardColumn>.Fail("You do not have permission to manage this board.");
             }
-            catch (Exception)
+
+            title = InputSanitizer.SanitizePlainText(title);
+            if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
             {
-                return ServiceResult<BoardColumn>.Fail("A database error occurred, please try again.");
+                return ServiceResult<BoardColumn>.Fail($"Column title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
             }
+
+            if (await _userRepository.GetBoardColumnsCount(boardId) >= MaxBoardColumnCount)
+            {
+                return ServiceResult<BoardColumn>.Fail("Maximum number of columns reached for this board.");
+            }
+
+            return ServiceResult<BoardColumn>.Ok(await _kanbanRepository.AddColumn(boardId, title, isResultColumn));
         }
 
         public async Task<ServiceResult> UpdateColumn(long userId, long boardId, long columnId, string title, bool isResultColumn)
         {
-            try
+            if (!await _kanbanRepository.ValidateManageBoard(userId, boardId)
+                || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
             {
-                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId)
-                    || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
-                {
-                    return ServiceResult.Fail("You do not have permission to manage this board.");
-                }
-
-                title = InputSanitizer.SanitizePlainText(title);
-                if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
-                {
-                    return ServiceResult.Fail($"Column title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
-                }
-
-                await _kanbanRepository.UpdateColumn(boardId, columnId, title, isResultColumn);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to manage this board.");
             }
-            catch (Exception)
+
+            title = InputSanitizer.SanitizePlainText(title);
+            if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail($"Column title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
             }
+
+            await _kanbanRepository.UpdateColumn(boardId, columnId, title, isResultColumn);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> InviteUserToBoard(long senderUserId, string senderFullName, string senderEmail, long boardId, string email)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(senderUserId, boardId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(senderUserId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-
-                if (await _userRepository.CheckInvite(senderUserId, boardId, email))
-                {
-                    return ServiceResult.Fail("An invitation has already been sent for this board.");
-                }
-
-                var u = await _userRepository.GetUserIdByEmail(email);
-                if (u != null && await _kanbanRepository.CheckBoardMembers(u.Value, boardId))
-                {
-                    return ServiceResult.Fail("User is already a member.");
-                }
-
-                if (u == null && await _userRepository.CheckInviteCountToday(email) > 0)
-                {
-                    return ServiceResult.Fail("You have exceeded the daily invitation limit for non-members.");
-                }
-
-                var i = await _userRepository.AddInvite(senderUserId, boardId, email, (u != null ? u.Value : 0));
-
-                var b = await _kanbanRepository.GetBoardTitle(boardId);
-
-                var token = GenerateJwt(email, i.Id, boardId);
-
-                await _emailService.SendInvite(email, senderFullName, senderEmail, b, token);
-
-                if (u != null)
-                {
-                    var inviterName = InputSanitizer.SanitizePlainText(senderFullName);
-                    await _kanbanRepository.NotifyUser(
-                        u.Value,
-                        $"{inviterName} invited you to board '{b}'");
-                }
-
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
+
+            // Per sender as well as per board: deleting and recreating boards must not reset the quota.
+            if (await _userRepository.GetSentInviteCountToday(senderUserId) >= MaxDailyInvitesPerUser)
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail($"You can send at most {MaxDailyInvitesPerUser} invitations per day.");
             }
+
+            if (await _kanbanRepository.GetInviteCountToday(boardId) >= MaxBoardMembersCount)
+            {
+                return ServiceResult.Fail($"Daily invitation limit ({MaxBoardMembersCount}) reached for this board.");
+            }
+
+            if (await _userRepository.CheckInvite(boardId, email))
+            {
+                return ServiceResult.Fail("An invitation has already been sent to this email address today.");
+            }
+
+            if (await _kanbanRepository.GetBoardMembersCount(boardId) >= MaxBoardMembersCount)
+            {
+                return ServiceResult.Fail($"This board has reached its maximum member limit ({MaxBoardMembersCount}).");
+            }
+
+            var u = await _userRepository.GetUserIdByEmail(email);
+            if (u != null && await _kanbanRepository.CheckBoardMembers(u.Value, boardId))
+            {
+                return ServiceResult.Fail("User is already a member.");
+            }
+
+            var i = await _userRepository.AddInvite(senderUserId, boardId, email, (u != null ? u.Value : 0));
+
+            var b = await _kanbanRepository.GetBoardTitle(boardId);
+
+            var token = GenerateJwt(email, i.Id, boardId);
+
+            var sent = await _emailService.SendInvite(email, senderFullName, senderEmail, b, token);
+
+            // Without an account the email is the only way to reach the invitee.
+            if (!sent && u == null)
+            {
+                await _userRepository.RemoveInvite(i.Id);
+                return ServiceResult.Fail("The invitation email could not be sent right now. Please try again later.");
+            }
+
+            if (u != null)
+            {
+                var inviterName = InputSanitizer.SanitizePlainText(senderFullName);
+                await _kanbanRepository.NotifyUser(
+                    u.Value,
+                    $"{inviterName} invited you to board '{b}'");
+            }
+
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult<Board>> CreateBoard(long userId, string title)
         {
-            try
+            title = InputSanitizer.SanitizePlainText(title);
+            if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
             {
-                title = InputSanitizer.SanitizePlainText(title);
-                if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
-                {
-                    return ServiceResult<Board>.Fail($"Board title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
-                }
-                if (await _userRepository.GetBoardsCount(userId) >= MaxBoardCount)
-                {
-                    return ServiceResult<Board>.Fail($"Maximum number of boards reached.");
-                }
-                return ServiceResult<Board>.Ok(await _kanbanRepository.AddBoard(userId, title));
+                return ServiceResult<Board>.Fail($"Board title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
             }
-            catch (Exception)
+            if (await _userRepository.GetBoardsCount(userId) >= MaxBoardCount)
             {
-                return ServiceResult<Board>.Fail("A database error occurred, please try again.");
+                return ServiceResult<Board>.Fail($"Maximum number of boards reached.");
             }
+            return ServiceResult<Board>.Ok(await _kanbanRepository.AddBoard(userId, title));
         }
 
         public async Task<ServiceResult> EnsureWelcomeBoard(long userId)
         {
-            try
-            {
-                var boards = await _kanbanRepository.GetBoards(userId);
-                if (boards.Count > 0)
-                    return ServiceResult.Ok();
-
-                await _kanbanRepository.AddBoard(userId, "Sample Board");
+            var boards = await _kanbanRepository.GetBoards(userId);
+            if (boards.Count > 0)
                 return ServiceResult.Ok();
-            }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("A database error occurred, please try again.");
-            }
+
+            await _kanbanRepository.AddBoard(userId, "Sample Board");
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> DeleteBoard(long userId, long boardId)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-                await _kanbanRepository.DeleteBoard(userId, boardId);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("A database error occurred, please try again.");
-            }
+            await _kanbanRepository.DeleteBoard(userId, boardId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> DeleteCard(long userId, long boardId, long cardId)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
+                return ServiceResult.Fail("You do not have permission to access this board.");
+            }
 
-                await _kanbanRepository.DeleteCard(cardId);
-                return ServiceResult.Ok();
-            }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("A database error occurred, please try again.");
-            }
+            await _kanbanRepository.DeleteCard(cardId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> DeleteColumn(long userId, long boardId, long columnId)
         {
-            try
+            if (!await _kanbanRepository.ValidateManageBoard(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
             {
-                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
-                {
-                    return ServiceResult.Fail("You do not have permission to manage this board.");
-                }
-                await _kanbanRepository.DeleteColumn(columnId);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to manage this board.");
             }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("A database error occurred, please try again.");
-            }
+            await _kanbanRepository.DeleteColumn(columnId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult<List<BoardColumnResultModel>>> GetBoardDetail(long userId, long boardId)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult<List<BoardColumnResultModel>>.Fail("You do not have permission to access this board.");
-                }
+                return ServiceResult<List<BoardColumnResultModel>>.Fail("You do not have permission to access this board.");
+            }
 
-                return ServiceResult<List<BoardColumnResultModel>>.Ok(await _kanbanRepository.GetBoardDetail(boardId));
-            }
-            catch (Exception)
-            {
-                return ServiceResult<List<BoardColumnResultModel>>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<List<BoardColumnResultModel>>.Ok(await _kanbanRepository.GetBoardDetail(boardId));
         }
 
         public async Task<ServiceResult<List<BoardOwnerResultModel>>> GetBoards(long userId)
         {
-            try
-            {
-                return ServiceResult<List<BoardOwnerResultModel>>.Ok(await _kanbanRepository.GetBoards(userId));
-            }
-            catch (Exception)
-            {
-                return ServiceResult<List<BoardOwnerResultModel>>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<List<BoardOwnerResultModel>>.Ok(await _kanbanRepository.GetBoards(userId));
         }
 
         public async Task<ServiceResult<List<BoardCardResultModel>>> GetMoreCardsForColumn(long userId, long boardId, long columnId, int skipCount)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
-                {
-                    return ServiceResult<List<BoardCardResultModel>>.Fail("You do not have permission to access this board.");
-                }
-                return ServiceResult<List<BoardCardResultModel>>.Ok(await _kanbanRepository.GetMoreCardsForColumn(columnId, skipCount));
+                return ServiceResult<List<BoardCardResultModel>>.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
-            {
-                return ServiceResult<List<BoardCardResultModel>>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<List<BoardCardResultModel>>.Ok(await _kanbanRepository.GetMoreCardsForColumn(columnId, skipCount));
         }
 
         public async Task<ServiceResult> MoveCard(long userId, long boardId, long cardId, long newColumnId, int newOrder)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-
-                if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId) || !await _kanbanRepository.ValidateBoardColumn(boardId, newColumnId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-
-                await _kanbanRepository.MoveCard(userId, cardId, newColumnId, newOrder);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
+
+            if (!await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId) || !await _kanbanRepository.ValidateBoardColumn(boardId, newColumnId))
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("You do not have permission to access this board.");
             }
+
+            await _kanbanRepository.MoveCard(userId, cardId, newColumnId, newOrder);
+            return ServiceResult.Ok();
         }
 
         public string GenerateJwt(string email, long inviteId, long boardId)
@@ -351,23 +280,23 @@ namespace Kanban.Services
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+            var expireHours = _jwtSettings.InviteExpireHours > 0 ? _jwtSettings.InviteExpireHours : 72;
             var token = new JwtSecurityToken(
                 issuer: _jwtSettings.Issuer,
                 audience: _jwtSettings.Audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(15),
+                expires: _time.GetUtcNow().UtcDateTime.AddHours(expireHours),
                 signingCredentials: creds
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        public async Task<ServiceResult<InviteStatus>> VerifyActivationToken(long activeUserId, string token)
+        // Signature, issuer, audience and lifetime check only; no state change.
+        private BoardUserInviteModel? ReadInviteToken(string token)
         {
             try
             {
-                var handler = new JwtSecurityTokenHandler();
-
                 var validations = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -380,15 +309,46 @@ namespace Kanban.Services
                     ClockSkew = TimeSpan.Zero
                 };
 
-                var claims = handler.ValidateToken(token, validations, out var tokenSecure) ?? throw new Exception();
+                var claims = new JwtSecurityTokenHandler().ValidateToken(token, validations, out _);
 
-                var v = new BoardUserInviteModel
+                return new BoardUserInviteModel
                 {
                     InviteId = long.Parse(claims.FindFirst("InviteId")!.Value),
                     Email = claims.FindFirst(ClaimTypes.Email)!.Value,
                     BoardId = long.Parse(claims.FindFirst("BoardId")!.Value)
                 };
-                var now = await _dbDate.Now();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // Read-only preview for the confirmation screen opened from the email link.
+        // Opening the link must not accept the invite: mail scanners prefetch links.
+        public async Task<string?> GetInvitePreview(string token)
+        {
+            var v = ReadInviteToken(token);
+            if (v == null)
+                return null;
+
+            var i = await _userRepository.GetInvite(v.InviteId);
+            if (i == null || i.IsAccepted || i.IsUsed || v.Email != i.Email || v.BoardId != i.BoardId)
+                return null;
+
+            var title = await _kanbanRepository.GetBoardTitle(v.BoardId);
+            return string.IsNullOrEmpty(title) ? null : title;
+        }
+
+        public async Task<ServiceResult<InviteStatus>> VerifyActivationToken(long activeUserId, string token)
+        {
+            try
+            {
+                var v = ReadInviteToken(token);
+                if (v == null)
+                {
+                    return ServiceResult<InviteStatus>.Ok(InviteStatus.ERROR);
+                }
                 var i = await _userRepository.GetInvite(v.InviteId);
                 if (i == null || i.IsAccepted || v.Email != i.Email || v.BoardId != i.BoardId)
                 {
@@ -403,7 +363,9 @@ namespace Kanban.Services
                     }
                     if (activeUserId > 0 && activeUserId != u.Value)
                     {
-                        return ServiceResult<InviteStatus>.Ok(InviteStatus.WRONG_ACC);
+                        var wrong = ServiceResult<InviteStatus>.Ok(InviteStatus.WRONG_ACC);
+                        wrong.ErrorMessage = i.Email;
+                        return wrong;
                     }
                 }
                 await _userRepository.SetAcceptedInvite(v.InviteId, u ?? 0);
@@ -426,319 +388,214 @@ namespace Kanban.Services
 
         public async Task<ServiceResult<List<BoardMemberResultModel>>> GetBoardMembers(long userId, long boardId)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult<List<BoardMemberResultModel>>.Fail("You do not have permission to access this board.");
-                }
-                return ServiceResult<List<BoardMemberResultModel>>.Ok(await _kanbanRepository.GetBoardMembers(boardId));
+                return ServiceResult<List<BoardMemberResultModel>>.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
-            {
-                return ServiceResult<List<BoardMemberResultModel>>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<List<BoardMemberResultModel>>.Ok(await _kanbanRepository.GetBoardMembers(boardId));
         }
 
         public async Task<ServiceResult> DeleteMember(long userId, long boardId, long removeUserId)
         {
-            try
+            if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to manage this board.");
-                }
-                if (removeUserId == userId)
-                {
-                    return ServiceResult.Fail("Use leave board to remove yourself.");
-                }
-                var targetRole = await _kanbanRepository.GetMemberRole(boardId, removeUserId);
-                if (targetRole == null)
-                {
-                    return ServiceResult.Fail("User is not a member of this board.");
-                }
-                if (targetRole == "OWNER")
-                {
-                    return ServiceResult.Fail("Owners cannot be removed. Transfer ownership first.");
-                }
-                await _kanbanRepository.DeleteMember(boardId, removeUserId);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to manage this board.");
             }
-            catch (Exception)
+            if (removeUserId == userId)
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("Use leave board to remove yourself.");
             }
+            var targetRole = await _kanbanRepository.GetMemberRole(boardId, removeUserId);
+            if (targetRole == null)
+            {
+                return ServiceResult.Fail("User is not a member of this board.");
+            }
+            if (targetRole == "OWNER")
+            {
+                return ServiceResult.Fail("Owners cannot be removed. Transfer ownership first.");
+            }
+            await _kanbanRepository.DeleteMember(boardId, removeUserId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> PromoteToOwner(long userId, long boardId, long promoteUserId)
         {
-            try
+            if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to manage this board.");
-                }
-                if (!await _kanbanRepository.IsActiveMember(boardId, promoteUserId))
-                {
-                    return ServiceResult.Fail("User must be an active board member.");
-                }
-                await _kanbanRepository.PromoteToOwner(boardId, promoteUserId);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to manage this board.");
             }
-            catch (Exception)
+            if (!await _kanbanRepository.IsActiveMember(boardId, promoteUserId))
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("User must be an active board member.");
             }
+            await _kanbanRepository.PromoteToOwner(boardId, promoteUserId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult<BoardRefreshResultModel>> GetBoardVersion(long userId, long boardId)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult<BoardRefreshResultModel>.Fail("You do not have permission to access this board.");
-                }
-                return ServiceResult<BoardRefreshResultModel>.Ok(await _kanbanRepository.GetBoardVersion(boardId));
+                return ServiceResult<BoardRefreshResultModel>.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
-            {
-                return ServiceResult<BoardRefreshResultModel>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<BoardRefreshResultModel>.Ok(await _kanbanRepository.GetBoardVersion(boardId));
         }
 
         public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string? title, string desc, DateOnly dueDate, int warningDays, string highlightColor,
             long assigneeId, DateOnly startDate, string calendarColor)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
-
-                if (assigneeId > 0 && !await _kanbanRepository.IsActiveMember(boardId, assigneeId))
-                {
-                    return ServiceResult.Fail("Assignee must be a member of this board.");
-                }
-
-                if (startDate > dueDate)
-                {
-                    return ServiceResult.Fail("Start Date cannot be after the Due Date.");
-                }
-
-                title = InputSanitizer.SanitizePlainText(title);
-                if (title.Length > CardTitleMaxLength)
-                {
-                    return ServiceResult.Fail($"Card title must be less than {CardTitleMaxLength} characters.");
-                }
-
-                desc = InputSanitizer.SanitizeRichText(desc);
-                highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
-                calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
-
-                await _kanbanRepository.UpdateCard(userId, cardId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
+
+            if (assigneeId > 0 && !await _kanbanRepository.IsActiveMember(boardId, assigneeId))
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("Assignee must be a member of this board.");
             }
+
+            if (startDate > dueDate)
+            {
+                return ServiceResult.Fail("Start Date cannot be after the Due Date.");
+            }
+
+            title = InputSanitizer.SanitizePlainText(title);
+            if (title.Length > CardTitleMaxLength)
+            {
+                return ServiceResult.Fail($"Card title must be less than {CardTitleMaxLength} characters.");
+            }
+
+            desc = InputSanitizer.SanitizeRichText(desc);
+            highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
+            calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
+
+            await _kanbanRepository.UpdateCard(userId, cardId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult<List<InviteResultModel>>> GetInvites(string email)
         {
-            try
-            {
-                return ServiceResult<List<InviteResultModel>>.Ok(await _userRepository.GetInvites(email));
-            }
-            catch (Exception)
-            {
-                return ServiceResult<List<InviteResultModel>>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<List<InviteResultModel>>.Ok(await _userRepository.GetInvites(email));
         }
 
         public async Task<ServiceResult> WorkInvite(string email, long userId, long inviteId, bool isAccepted)
         {
-            try
+            var i = await _userRepository.GetInvite(inviteId);
+            if (i == null)
             {
-                var i = await _userRepository.GetInvite(inviteId);
-                if (i == null)
-                {
-                    return ServiceResult.Fail("Invitation not found.");
-                }
-                if (i.IsUsed)
-                {
-                    return ServiceResult.Fail("Invitation has already been used.");
-                }
-                if (i.IsAccepted)
-                {
-                    return ServiceResult.Fail("Invitation has already been accepted.");
-                }
-                if (i.Email != email)
-                {
-                    return ServiceResult.Fail("Invitation does not match the email address.");
-                }
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(i.SenderUserId, i.BoardId))
-                {
-                    return ServiceResult.Fail("The inviting user no longer has authority.");
-                }
-                if (isAccepted && await _kanbanRepository.IsActiveMember(i.BoardId, userId))
-                {
-                    return ServiceResult.Fail("You are already a member of this board.");
-                }
-                await _kanbanRepository.WorkInvite(inviteId, userId, i.BoardId, isAccepted);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("Invitation not found.");
             }
-            catch (Exception)
+            if (i.IsUsed)
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("Invitation has already been used.");
             }
+            if (i.IsAccepted)
+            {
+                return ServiceResult.Fail("Invitation has already been accepted.");
+            }
+            if (i.Email != email)
+            {
+                return ServiceResult.Fail("Invitation does not match the email address.");
+            }
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(i.SenderUserId, i.BoardId))
+            {
+                return ServiceResult.Fail("The inviting user no longer has authority.");
+            }
+            if (isAccepted && await _kanbanRepository.IsActiveMember(i.BoardId, userId))
+            {
+                return ServiceResult.Fail("You are already a member of this board.");
+            }
+            await _kanbanRepository.WorkInvite(inviteId, userId, i.BoardId, isAccepted);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult<List<NotificationResultModel>>> GetNotifications(long userId)
         {
-            try
-            {
-                return ServiceResult<List<NotificationResultModel>>.Ok(await _userRepository.GetNotifications(userId));
-            }
-            catch (Exception)
-            {
-                return ServiceResult<List<NotificationResultModel>>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<List<NotificationResultModel>>.Ok(await _userRepository.GetNotifications(userId));
         }
 
         public async Task<ServiceResult> DeleteNotification(long userId, long id)
         {
-            try
+            if (!await _userRepository.CheckNotification(userId, id))
             {
-                if (!await _userRepository.CheckNotification(userId, id))
-                {
-                    return ServiceResult.Fail("You do not have permission to delete this notification.");
-                }
-                await _userRepository.DeleteNotification(id, userId);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to delete this notification.");
             }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("A database error occurred, please try again.");
-            }
+            await _userRepository.DeleteNotification(id, userId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> DeleteNotifications(long userId)
         {
-            try
-            {
-                await _userRepository.DeleteNotifications(userId);
-                return ServiceResult.Ok();
-            }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("A database error occurred, please try again.");
-            }
+            await _userRepository.DeleteNotifications(userId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult<bool>> CheckUpdates(long userId, string email)
         {
-            try
-            {
-                return ServiceResult<bool>.Ok(await _userRepository.CheckUpdates(userId, email));
-            }
-            catch (Exception)
-            {
-                return ServiceResult<bool>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<bool>.Ok(await _userRepository.CheckUpdates(userId, email));
         }
 
         public async Task<ServiceResult<List<CommentResultModel>>> GetComments(long userId, long boardId, long cardId)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId))
-                {
-                    return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
-                }
-
-                if (!await _kanbanRepository.ValidateBoardCardWithoutUser(boardId, cardId))
-                {
-                    return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
-                }
-
-                return ServiceResult<List<CommentResultModel>>.Ok(await _kanbanRepository.GetComments(cardId));
+                return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
+
+            if (!await _kanbanRepository.ValidateBoardCardWithoutUser(boardId, cardId))
             {
-                return ServiceResult<List<CommentResultModel>>.Fail("A database error occurred, please try again.");
+                return ServiceResult<List<CommentResultModel>>.Fail("You do not have permission to access this board.");
             }
+
+            return ServiceResult<List<CommentResultModel>>.Ok(await _kanbanRepository.GetComments(cardId));
         }
 
         public async Task<ServiceResult<BoardCardComment>> AddComment(long userId, long boardId, long cardId, string message)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCardWithoutUser(boardId, cardId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCardWithoutUser(boardId, cardId))
-                {
-                    return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
-                }
-
-                message = InputSanitizer.SanitizePlainText(message);
-                if (string.IsNullOrWhiteSpace(message) || message.Length > CommentMaxLength)
-                {
-                    return ServiceResult<BoardCardComment>.Fail($"Comment cannot be empty and must be less than {CommentMaxLength} characters.");
-                }
-
-                return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message));
+                return ServiceResult<BoardCardComment>.Fail("You do not have permission to access this board.");
             }
-            catch (Exception)
+
+            message = InputSanitizer.SanitizePlainText(message);
+            if (string.IsNullOrWhiteSpace(message) || message.Length > CommentMaxLength)
             {
-                return ServiceResult<BoardCardComment>.Fail("A database error occurred, please try again.");
+                return ServiceResult<BoardCardComment>.Fail($"Comment cannot be empty and must be less than {CommentMaxLength} characters.");
             }
+
+            return ServiceResult<BoardCardComment>.Ok(await _kanbanRepository.AddComment(userId, cardId, message));
         }
 
         public async Task<ServiceResult> DeleteComment(long userId, long boardId, long commentId)
         {
-            try
+            if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardComment(boardId, commentId))
             {
-                if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardComment(boardId, commentId))
-                {
-                    return ServiceResult.Fail("You do not have permission to access this board.");
-                }
+                return ServiceResult.Fail("You do not have permission to access this board.");
+            }
 
-                if (!await _kanbanRepository.ValidateComment(userId, commentId))
-                {
-                    return ServiceResult.Fail("You do not have permission to delete this comment.");
-                }
-                await _kanbanRepository.DeleteComment(commentId);
-                return ServiceResult.Ok();
-            }
-            catch (Exception)
+            if (!await _kanbanRepository.ValidateComment(userId, commentId))
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("You do not have permission to delete this comment.");
             }
+            await _kanbanRepository.DeleteComment(commentId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> UpdateBoardTitle(long userId, long boardId, string title)
         {
-            try
+            if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
             {
-                if (!await _kanbanRepository.ValidateManageBoard(userId, boardId))
-                {
-                    return ServiceResult.Fail("You do not have permission to manage this board.");
-                }
-
-                title = InputSanitizer.SanitizePlainText(title);
-                if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
-                {
-                    return ServiceResult.Fail($"Board title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
-                }
-
-                await _kanbanRepository.UpdateBoardTitle(boardId, title);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to manage this board.");
             }
-            catch (Exception)
+
+            title = InputSanitizer.SanitizePlainText(title);
+            if (string.IsNullOrWhiteSpace(title) || title.Length > BoardAndColumnTitleMaxLength)
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail($"Board title cannot be empty and must be less than {BoardAndColumnTitleMaxLength} characters.");
             }
+
+            await _kanbanRepository.UpdateBoardTitle(boardId, title);
+            return ServiceResult.Ok();
         }
     }
 }

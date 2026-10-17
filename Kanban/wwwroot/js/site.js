@@ -6,7 +6,13 @@ const AppState = {
     currentBoardId: null,
     boards: [],
     currentColumns: [],
-    isRequestPending: false,
+    // Counters, not booleans: overlapping requests must not clear each other's state.
+    pendingRequests: 0,
+    loadingRequests: 0,
+
+    get isRequestPending() {
+        return this.pendingRequests > 0;
+    },
 
     isDragging: false,
 
@@ -30,6 +36,7 @@ function clearSessionState() {
     AppState.isDragging = false;
     AppState.searchQuery = '';
     AppState.stopPolling();
+    stopBoardSync();
     renderBoardList();
     renderColumns([]);
     QuickNoteState.reset();
@@ -60,6 +67,41 @@ function stripHtml(html) {
     return doc.body.textContent || "";
 }
 
+// Card descriptions are user-authored HTML from other board members. Quill 1.x
+// (incl. dangerouslyPasteHTML) writes HTML into a live node, so event handlers
+// like <img onerror> would run. DOMPurify cleans it first, limited to what the
+// editor toolbar can produce.
+const RICH_TEXT_CONFIG = {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'ol', 'ul', 'li', 'span'],
+    ALLOWED_ATTR: ['class', 'style']
+};
+const RICH_TEXT_STYLE = /^\s*(color|background-color)\s*:\s*(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]+)\s*$/i;
+let richTextHookInstalled = false;
+
+function installRichTextHook() {
+    if (richTextHookInstalled) return;
+    // DOMPurify allows class/style wholesale; narrow them to Quill's own values.
+    DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+        if (data.attrName === 'class') {
+            data.attrValue = data.attrValue.split(/\s+/).filter(c => /^ql-[a-z0-9-]+$/i.test(c)).join(' ');
+        } else if (data.attrName === 'style') {
+            data.attrValue = data.attrValue.split(';').filter(d => RICH_TEXT_STYLE.test(d)).join(';');
+        } else {
+            return;
+        }
+        if (!data.attrValue) data.keepAttr = false;
+    });
+    richTextHookInstalled = true;
+}
+
+function sanitizeRichText(html) {
+    if (!html) return '';
+    // Fail closed: if DOMPurify did not load, show the text without markup.
+    if (!window.DOMPurify?.sanitize) return escapeHtml(stripHtml(html));
+    installRichTextHook();
+    return DOMPurify.sanitize(String(html), RICH_TEXT_CONFIG);
+}
+
 function formatDateInput(value) {
     if (!value) return '';
     const str = String(value);
@@ -70,6 +112,11 @@ function formatDateInput(value) {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
+}
+
+function addDaysToDateInput(dateInput, days) {
+    const [y, m, d] = dateInput.split('-').map(Number);
+    return formatDateInput(new Date(y, m - 1, d + days));
 }
 
 function todayDateInput() {
@@ -83,6 +130,9 @@ function swalWidth(desktop = '650px') {
 
 // Mirrors the BoardCards.Title column width.
 const CARD_TITLE_MAX = 150;
+
+// Dates follow the viewer's browser language (undefined = browser default).
+const UI_LOCALE = undefined;
 
 // Every dialog button maps to one of these roles, so colors stay predictable:
 // primary = confirm/save/create, danger = destructive, info = edit,
@@ -203,12 +253,30 @@ function bindSwalPasswordToggles(root = Swal.getPopup()) {
 }
 
 function showToast(title, icon = 'info', timer = 2500) {
-    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer });
-    Toast.fire({ icon, title });
+    const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+
+    let host = document.getElementById('kf-toast-host');
+    if (!host) {
+        host = document.createElement('div');
+        host.id = 'kf-toast-host';
+        host.setAttribute('aria-live', 'polite');
+        document.body.appendChild(host);
+    }
+
+    const el = document.createElement('div');
+    el.className = `kf-toast kf-toast--${icon}`;
+    el.innerHTML = `
+        <span class="kf-toast-icon" aria-hidden="true">${icons[icon] || icons.info}</span>
+        <span class="kf-toast-text">${escapeHtml(title)}</span>`;
+    host.appendChild(el);
+
+    requestAnimationFrame(() => el.classList.add('is-visible'));
+    setTimeout(() => {
+        el.classList.remove('is-visible');
+        setTimeout(() => el.remove(), 300);
+    }, timer);
 }
 
-// Cards created before titles existed can still have an empty one, so fall
-// back to the description rather than rendering a blank heading.
 function cardDisplayTitle(card) {
     const title = (card.title || '').trim();
     if (title) return title;
@@ -514,6 +582,7 @@ function cloneColumnsState() {
 }
 
 function showLoading() {
+    AppState.loadingRequests++;
     const el = document.getElementById('loadingOverlay');
     if (el) {
         el.style.display = 'flex';
@@ -522,6 +591,8 @@ function showLoading() {
 }
 
 function hideLoading() {
+    AppState.loadingRequests = Math.max(0, AppState.loadingRequests - 1);
+    if (AppState.loadingRequests > 0) return;
     const el = document.getElementById('loadingOverlay');
     if (el) {
         el.style.display = 'none';
@@ -567,7 +638,7 @@ async function refreshXsrfToken() {
 async function apiRequest(endpoint, options = {}, showload = true, isPooling = false) {
     if (showload) showLoading();
     if (!isPooling) {
-        AppState.isRequestPending = true;
+        AppState.pendingRequests++;
     }
     try {
         const method = (options.method || 'GET').toUpperCase();
@@ -587,6 +658,12 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
 
             if (token) {
                 headers['X-XSRF-TOKEN'] = token;
+            }
+
+            // Lets the server skip echoing this tab's own change back to it.
+            const connectionId = BoardSync.connection?.connectionId;
+            if (connectionId) {
+                headers['X-Board-Connection'] = connectionId;
             }
 
             return fetch(endpoint, {
@@ -609,7 +686,6 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
                 const errData = await response.json();
                 if (errData.errorMessage) rateLimitMsg = errData.errorMessage;
             } catch (e) { }
-            if (showload) swalAlert('warning', 'Slow Down', rateLimitMsg);
             throw new Error(rateLimitMsg);
         }
 
@@ -653,43 +729,67 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
         return await response.text();
 
     } catch (error) {
-        if (error.message !== 'Session expired or unauthorized.') {
+        const expired = error.message === 'Session expired or unauthorized.';
+        if (!expired) {
             console.error('API Error:', error);
             if (showload) {
                 swalAlert('error', 'Error', error.message || 'A connection error occurred.');
             }
         }
+        // failed: the request itself failed (network/HTTP), not a business-rule success:false.
+        // handled: the user was already told (alert shown or session recovery started).
+        return {
+            success: false,
+            failed: true,
+            handled: showload || expired,
+            errorMessage: error.message || 'A connection error occurred.'
+        };
     } finally {
         if (showload) hideLoading();
         if (!isPooling) {
-            AppState.isRequestPending = false;
+            AppState.pendingRequests = Math.max(0, AppState.pendingRequests - 1);
         }
     }
+}
+
+// Shows the failure unless apiRequest already reported it to the user.
+function alertApiFailure(res, fallback) {
+    if (res?.handled) return Promise.resolve();
+    return swalAlert('error', 'Error', res?.errorMessage || fallback);
+}
+
+function canRefreshBoardNow() {
+    if (!AppState.currentBoardId || !AppState.lastSyncTime || AppState.isDragging) return false;
+    if (document.body.classList.contains('swal2-shown')) return false;
+    if (AppState.isRequestPending) return false;
+    if (document.getElementById('sidebar')?.classList.contains('open')) return false;
+    if (document.getElementById('quickNoteContainer')?.classList.contains('active')) return false;
+    return true;
 }
 
 AppState.startPolling = function () {
     this.stopPolling();
 
     this.syncInterval = setInterval(async () => {
-        if (!this.currentBoardId || !this.lastSyncTime || this.isDragging) return;
-        if (document.body.classList.contains('swal2-shown')) return;
-        if (AppState.isRequestPending) return;
+        if (!canRefreshBoardNow()) return;
 
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar && sidebar.classList.contains('open')) return;
-
-        const container = document.getElementById('quickNoteContainer');
-        if (container?.classList.contains('active')) return;
+        // With a live SignalR connection only apply changes it announced; the
+        // version polling below is the fallback while disconnected.
+        if (isBoardSyncConnected()) {
+            await flushBoardSync();
+            return;
+        }
 
         try {
             const res = await apiRequest(`/Kanban/CheckBoardVersion?boardId=${this.currentBoardId}`, {}, false, true);
             if (!res?.success || !res?.data) return;
 
-            const serverTime = new Date(res.data.lastUpdate).getTime();
-            const localTime = new Date(res.data.now).getTime();
+            // Reload when the board changed after our last full load (both server clock).
+            const boardUpdatedAt = new Date(res.data.lastUpdate).getTime();
+            const loadedAt = new Date(this.lastSyncTime).getTime();
 
-            if (serverTime > localTime) {
-                loadBoardData(false);
+            if (boardUpdatedAt > loadedAt) {
+                await loadBoardData(false);
             }
             checkNewUpdates(true);
         } catch (e) {
@@ -705,12 +805,102 @@ AppState.stopPolling = function () {
     }
 };
 
+const BoardSync = {
+    connection: null,
+    joinedBoardId: null,
+    dirty: false,
+    restartTimer: null
+};
+
+function isBoardSyncConnected() {
+    return !!window.signalR && BoardSync.connection?.state === signalR.HubConnectionState.Connected;
+}
+
+function startBoardSync() {
+    if (BoardSync.connection || !window.signalR || !AppState.isAuthenticated) return;
+
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl('/hubs/board')
+        .withAutomaticReconnect()
+        .build();
+
+    connection.on('BoardChanged', (boardId) => {
+        if (boardId !== AppState.currentBoardId) return;
+        BoardSync.dirty = true;
+        flushBoardSync();
+    });
+
+    connection.on('UpdatesChanged', () => checkNewUpdates(false));
+
+    connection.onreconnected(async () => {
+        // Group membership is per connection, and changes may have been missed meanwhile.
+        BoardSync.joinedBoardId = null;
+        await joinCurrentBoard();
+        BoardSync.dirty = true;
+        flushBoardSync();
+        checkNewUpdates(false);
+    });
+
+    connection.onclose(() => {
+        if (BoardSync.connection !== connection) return;
+        BoardSync.connection = null;
+        BoardSync.joinedBoardId = null;
+        clearTimeout(BoardSync.restartTimer);
+        if (AppState.isAuthenticated) {
+            BoardSync.restartTimer = setTimeout(startBoardSync, 30000);
+        }
+    });
+
+    BoardSync.connection = connection;
+    connection.start()
+        .then(joinCurrentBoard)
+        .catch(err => console.warn('Live updates unavailable, falling back to polling:', err));
+}
+
+function stopBoardSync() {
+    clearTimeout(BoardSync.restartTimer);
+    const connection = BoardSync.connection;
+    BoardSync.connection = null;
+    BoardSync.joinedBoardId = null;
+    BoardSync.dirty = false;
+    connection?.stop().catch(() => { });
+}
+
+async function joinCurrentBoard() {
+    const connection = BoardSync.connection;
+    if (!isBoardSyncConnected()) return;
+
+    const target = AppState.currentBoardId;
+    if (BoardSync.joinedBoardId === target) return;
+
+    if (BoardSync.joinedBoardId) {
+        await connection.invoke('LeaveBoard', BoardSync.joinedBoardId).catch(() => { });
+        BoardSync.joinedBoardId = null;
+    }
+    if (target && await connection.invoke('JoinBoard', target).catch(() => false)) {
+        BoardSync.joinedBoardId = target;
+    }
+}
+
+async function flushBoardSync() {
+    if (!BoardSync.dirty || !canRefreshBoardNow()) return;
+    BoardSync.dirty = false;
+
+    const loaded = await loadBoardData(false);
+    if (loaded === null) {
+        BoardSync.dirty = true;
+    } else if (loaded === false) {
+        // Access was lost: removed from the board or the board was deleted.
+        loadBoards();
+    }
+}
+
 async function checkNewUpdates(isPolling = false) {
     if (!AppState.isAuthenticated) return;
     try {
         const res = await apiRequest('/Kanban/CheckUpdates', {}, false, isPolling);
         const badge = document.getElementById('nav-badge');
-        if (!badge || !res) return;
+        if (!badge || !res || res.failed) return;
 
         if (res.success && res.data) {
             badge.style.display = 'block';
@@ -734,7 +924,12 @@ async function silentSessionCleanup() {
 async function fetchCurrentUser() {
     try {
         const res = await apiRequest('/Home/Fetch', {}, false);
-        if (res.success) {
+        if (res?.failed) {
+            // Transient network/server error: keep the current session instead of logging out.
+            updateAuthUI();
+            return;
+        }
+        if (res?.success) {
             AppState.isAuthenticated = true;
             AppState.currentUser = res.data;
 
@@ -746,6 +941,7 @@ async function fetchCurrentUser() {
                 }, 500);
             }
             initQuickNotes();
+            startBoardSync();
         } else {
             clearSessionState();
             await silentSessionCleanup();
@@ -777,7 +973,12 @@ async function openNotifications() {
     try {
         const res = await apiRequest('/Kanban/GetNotifications');
 
-        if (!res.success || !res.data || res.data.length === 0) {
+        if (!res?.success) {
+            alertApiFailure(res, 'Could not load notifications.');
+            return;
+        }
+
+        if (!res.data || res.data.length === 0) {
             return swalAlert('info', 'Notifications', 'No new notifications.')
                 .then(() => openProfileMenu());
         }
@@ -789,7 +990,7 @@ async function openNotifications() {
                     <div>
                         <div class="kf-notif-text">${escapeHtml(n.message)}</div>
                         <div class="kf-notif-time">
-                            ${new Date(n.createdAt).toLocaleDateString('tr-TR')} ${new Date(n.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                            ${new Date(n.createdAt).toLocaleDateString(UI_LOCALE)} ${new Date(n.createdAt).toLocaleTimeString(UI_LOCALE, { hour: '2-digit', minute: '2-digit' })}
                         </div>
                     </div>
                 </div>
@@ -837,25 +1038,21 @@ async function deleteNotification(id) {
             body: JSON.stringify({ notificationId: id })
         }, false);
 
-        if (!res) {
-            swalAlert('error', 'Error', 'Could not delete notification.');
+        if (!res?.success) {
+            alertApiFailure(res, 'Could not delete notification.');
             return;
         }
 
-        if (res.success) {
-            const el = document.getElementById(`notif-${id}`);
-            if (el) {
-                el.style.opacity = '0';
-                setTimeout(() => {
-                    el.remove();
-                    checkIfEmpty();
-                    checkNewUpdates(false);
-                }, 300);
-            } else {
+        const el = document.getElementById(`notif-${id}`);
+        if (el) {
+            el.style.opacity = '0';
+            setTimeout(() => {
+                el.remove();
+                checkIfEmpty();
                 checkNewUpdates(false);
-            }
+            }, 300);
         } else {
-            swalAlert('error', 'Error', res.errorMessage || 'Failed to delete');
+            checkNewUpdates(false);
         }
     } catch (e) {
         console.error(e);
@@ -875,16 +1072,12 @@ async function deleteAllNotifications() {
     if (confirm.isConfirmed) {
         try {
             const res = await apiRequest('/Kanban/DeleteNotifications', { method: 'POST' });
-            if (!res) {
-                swalAlert('error', 'Error', 'Network error.');
+            if (!res?.success) {
+                alertApiFailure(res, 'Failed to delete all notifications.');
                 return;
             }
-            if (res.success) {
-                swalFlash('success', 'Deleted', 'All notifications have been cleared.');
-                checkNewUpdates(false);
-            } else {
-                swalAlert('error', 'Error', res.errorMessage || 'Failed to delete all');
-            }
+            showToast('All notifications have been cleared.', 'success');
+            checkNewUpdates(false);
         } catch (e) {
             console.error(e);
             swalAlert('error', 'Error', 'Network error.');
@@ -905,7 +1098,12 @@ async function openPendingInvites() {
     try {
         const res = await apiRequest('/Kanban/GetInvites');
 
-        if (!res.success || !res.data || res.data.length === 0) {
+        if (!res?.success) {
+            alertApiFailure(res, 'Could not load invites.');
+            return;
+        }
+
+        if (!res.data || res.data.length === 0) {
             return swalAlert('info', 'Invites', 'You have no pending invites.')
                 .then(() => openProfileMenu());
         }
@@ -956,18 +1154,20 @@ async function handleInviteResponse(inviteId, isAccepted) {
             body: JSON.stringify({ inviteId, isAccepted })
         }, false);
 
-        if (!res) {
-            swalAlert('error', 'Error', 'Network error occurred.');
+        if (!res?.success) {
+            alertApiFailure(res, 'Operation failed.');
             return;
         }
 
-        if (res.success) {
-            swalFlash('success', isAccepted ? 'Joined Board!' : 'Invite Declined');
-            checkNewUpdates(false);
-            if (isAccepted) loadBoards();
-        } else {
-            swalAlert('error', 'Error', res.errorMessage || 'Operation failed');
+        showToast(isAccepted ? 'Joined board!' : 'Invite declined', 'success');
+        const inviteEl = document.querySelector(`.invite-accept-btn[data-invite-id="${inviteId}"]`)?.closest('.kf-invite');
+        inviteEl?.remove();
+        const wrapper = document.getElementById('invites-wrapper');
+        if (wrapper && wrapper.children.length === 0) {
+            wrapper.innerHTML = '<div class="kf-panel-empty">You have no pending invites.</div>';
         }
+        checkNewUpdates(false);
+        if (isAccepted) loadBoards();
     } catch (e) {
         console.error(e);
         swalAlert('error', 'Error', 'Network error occurred.');
@@ -1018,7 +1218,7 @@ async function openChangePasswordModal() {
                 method: 'POST',
                 body: JSON.stringify(passwordData)
             });
-            if (res.success) {
+            if (res?.success) {
                 const temp = AppState.currentUser.email;
 
                 await swalDialog({
@@ -1029,8 +1229,9 @@ async function openChangePasswordModal() {
                 });
                 sessionStorage.setItem('kanflow:prefillEmail', temp);
                 await handleLogout(true);
-            } else if (res) {
-                await swalAlert('error', 'Error', res.errorMessage || 'Failed to update password.');
+            } else if (!res?.failed) {
+                // Business-rule failure (e.g. wrong current password): let the user retry.
+                await swalAlert('error', 'Error', res?.errorMessage || 'Failed to update password.');
                 openChangePasswordModal();
             }
         } catch (e) {
@@ -1105,35 +1306,22 @@ function updateAuthUI() {
         const avatarPath = getAvatarPath(AppState.currentUser.avatar || 'def');
 
         area.innerHTML = `
-            <div id="header-avatar-wrap" style="cursor:pointer; position:relative;" title="Menu">
-                <img src="${avatarPath}" id="header-avatar-img"
-                     style="width:45px; height:45px; border-radius:50%; object-fit:cover; border:2px solid #e2e8f0; transition:transform 0.2s;">
+            <div id="header-avatar-wrap" class="header-avatar-wrap" title="Menu">
+                <img src="${avatarPath}" id="header-avatar-img" class="header-avatar-img" alt="">
                 <span id="nav-badge" class="notification-badge"></span>
             </div>
         `;
 
         setTimeout(() => {
-            const wrap = document.getElementById('header-avatar-wrap');
-            const img = document.getElementById('header-avatar-img');
-            if (wrap && img) {
-                wrap.addEventListener('click', () => openProfileMenu());
-                img.addEventListener('mouseenter', () => {
-                    img.style.transform = 'scale(1.05)';
-                    img.style.borderColor = '#289f51';
-                });
-                img.addEventListener('mouseleave', () => {
-                    img.style.transform = 'scale(1)';
-                    img.style.borderColor = '#e2e8f0';
-                });
-            }
+            document.getElementById('header-avatar-wrap')?.addEventListener('click', () => openProfileMenu());
         }, 0);
 
         authSection.innerHTML = `
-            <div style="display:flex; align-items:center; gap:12px; padding:15px; background:rgba(255,255,255,0.05); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
-                <img src="${avatarPath}" style="width:40px; height:40px; border-radius:50%; background:white;">
-                <div style="overflow:hidden;">
-                    <div style="font-weight:bold; font-size:14px;">${safeName}</div>
-                    <div style="font-size:11px; color:#a0aec0;">${escapeHtml(AppState.currentUser.email)}</div>
+            <div class="sidebar-user-card">
+                <img src="${avatarPath}" class="sidebar-user-avatar" alt="">
+                <div class="sidebar-user-info">
+                    <div class="sidebar-user-name">${safeName}</div>
+                    <div class="sidebar-user-email">${escapeHtml(AppState.currentUser.email)}</div>
                 </div>
             </div>
             <button type="button" id="sidebar-menu-btn" class="btn btn-secondary btn-block">⚙️ Menu</button>
@@ -1221,7 +1409,11 @@ async function handleLogin() {
             body: JSON.stringify({ email, password, turnstileToken })
         });
 
-        if (!response) return;
+        if (!response || response.failed) {
+            // apiRequest already showed the error; the Turnstile token is single-use.
+            refreshModalTurnstile('loginModal');
+            return;
+        }
 
         if (response.success) {
             await fetchCurrentUser();
@@ -1229,7 +1421,7 @@ async function handleLogin() {
             swalFlash('success', 'Welcome Back!', `Hello ${AppState.currentUser.fullName}`);
             loadBoards();
         } else {
-            swalAlert('error', 'Login Failed', response.errorMessage || 'Login failed.');
+            await swalAlert('error', 'Login Failed', response.errorMessage || 'Login failed.');
             refreshModalTurnstile('loginModal');
         }
     } catch (err) {
@@ -1307,7 +1499,7 @@ async function handleRegister() {
 
         if (!verify?.success) {
             refreshModalTurnstile('registerModal');
-            return swalAlert('error', 'Error', verify?.errorMessage || 'Failed to send verification code.');
+            return alertApiFailure(verify, 'Failed to send verification code.');
         }
 
         let isRegistered = false;
@@ -1345,7 +1537,9 @@ async function handleRegister() {
             });
 
             resetKanbanTurnstile(OTP_TURNSTILE_CONTAINER);
-            if (dismiss === Swal.DismissReason.cancel || dismiss === Swal.DismissReason.backdrop) return;
+            // Any dismissal (Cancel, backdrop, Esc, close) ends the flow; only a
+            // confirmed dialog without values should reopen it.
+            if (dismiss) return;
             if (!formValues) continue;
 
             const response = await apiRequest('/Auth/Register', {
@@ -1359,7 +1553,7 @@ async function handleRegister() {
                 })
             });
 
-            if (!response) break;
+            if (!response || response.failed) break;
 
             if (response.success) {
                 isRegistered = true;
@@ -1419,12 +1613,12 @@ async function handleForgotPassword() {
 
         if (!verify?.success) {
             refreshModalTurnstile('loginModal');
-            return swalAlert('error', 'Error', verify?.errorMessage || 'Failed to send verification code.');
+            return alertApiFailure(verify, 'Failed to send verification code.');
         }
 
         const otpHtml = document.getElementById('otpTemplate').innerHTML;
         const combinedHtml = `
-            <p class="kf-dialog-hint">A 6-digit code has been sent to <b>${escapeHtml(email)}</b>.</p>
+            <p class="kf-dialog-hint">If an account exists for <b>${escapeHtml(email)}</b>, a 6-digit code has been sent to it.</p>
             ${otpHtml}
             ${swalPasswordField('swal-new-password', 'New Password')}
             ${swalPasswordField('swal-confirm-password', 'Confirm New Password')}
@@ -1495,11 +1689,11 @@ async function handleForgotPassword() {
             })
         });
 
-        if (resetResponse.success) {
+        if (resetResponse?.success) {
             swalFlash('success', 'Password Reset', 'Your password has been reset. You can now log in.', 2500);
             openLoginModal(email);
         } else {
-            swalAlert('error', 'Error', resetResponse.errorMessage || 'Password reset failed. The code might be invalid or expired.');
+            alertApiFailure(resetResponse, 'Password reset failed. The code might be invalid or expired.');
         }
 
     } catch (error) {
@@ -1660,6 +1854,8 @@ async function selectBoard(id) {
     localStorage.setItem('kanflow:lastBoardId', String(id));
     renderBoardList();
     await loadBoardData(true, true);
+    BoardSync.dirty = false;
+    joinCurrentBoard();
     AppState.startPolling();
 }
 
@@ -1677,16 +1873,16 @@ async function openNewBoardModal() {
         }
     });
     if (tt && tt.trim()) {
-        try {
-            await apiRequest('/Kanban/CreateBoard', {
-                method: 'POST',
-                body: JSON.stringify({ title: tt.trim() })
-            });
-            showToast('Board created', 'success');
-            loadBoards();
-        } catch {
-            swalAlert('error', 'Error', 'Failed to create board.');
+        const res = await apiRequest('/Kanban/CreateBoard', {
+            method: 'POST',
+            body: JSON.stringify({ title: tt.trim() })
+        });
+        if (!res?.success) {
+            alertApiFailure(res, 'Failed to create board.');
+            return;
         }
+        loadBoards();
+        showToast('Board created', 'success');
     }
 }
 
@@ -1744,7 +1940,7 @@ function createCardHtml(card, colId, currentUserId, isResultColumn = false) {
             <div class="card-head-row">
                 <div class="card-head-meta">
                     ${lockIcon}
-                    <span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString('tr-TR')}</span>
+                    ${card.dueDate ? `<span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString(UI_LOCALE)}</span>` : ''}
                 </div>
                 <button type="button" class="card-delete-btn" data-card-id="${card.id}"
                         title="Delete card" aria-label="Delete card">×</button>
@@ -1767,10 +1963,15 @@ function createCardHtml(card, colId, currentUserId, isResultColumn = false) {
     `;
 }
 
+// Returns true on success, false when the server refused, null on a network/HTTP failure.
 async function loadBoardData(showLoad = true, animate = false) {
-    if (!AppState.currentBoardId) return;
+    if (!AppState.currentBoardId) return false;
     try {
         const res = await apiRequest(`/Kanban/GetBoard?boardId=${AppState.currentBoardId}`, {}, showLoad);
+        if (!res?.success || !res.data) {
+            if (showLoad) alertApiFailure(res, 'Data could not be loaded.');
+            return res?.failed ? null : false;
+        }
         const columnsRes = res.data.item1;
         const timeRes = res.data.item2;
 
@@ -1791,9 +1992,11 @@ async function loadBoardData(showLoad = true, animate = false) {
         if (kanflowCalendar && !document.getElementById('calendar')?.classList.contains('u-hidden')) {
             kanflowCalendar.refetchEvents();
         }
+        return true;
     } catch (e) {
         console.error(e);
         if (showLoad) swalAlert('error', 'Error', 'Data could not be loaded.');
+        return null;
     }
 }
 
@@ -1811,6 +2014,12 @@ async function handleLoadMore(colId, btnElement) {
 
     try {
         const res = await apiRequest(`/Kanban/GetMoreCards?boardId=${AppState.currentBoardId}&columnId=${colId}&skipCount=${skipCount}`, {}, false);
+        if (!res?.success) {
+            btnElement.disabled = false;
+            btnElement.textContent = originalText;
+            showToast(res?.errorMessage || 'Could not load more cards', 'error');
+            return;
+        }
         const newCards = res.data;
 
         if (newCards && newCards.length > 0) {
@@ -1862,26 +2071,25 @@ async function startRenameProcess(boardId) {
     const newTitle = result.value;
     if (result.isConfirmed && newTitle && newTitle.trim() !== currentName) {
         const finalTitle = newTitle.trim();
-        try {
-            await apiRequest('/Kanban/UpdateBoardTitle', {
-                method: 'POST',
-                body: JSON.stringify({ boardId, title: finalTitle })
-            }, false);
-
-            const b = AppState.boards.find(b => b.id === boardId);
-            if (b) b.title = finalTitle;
-
-            if (AppState.currentBoardId === boardId) {
-                const headerTitle = document.getElementById('boardHeaderTitle');
-                if (headerTitle) headerTitle.innerText = finalTitle;
-            }
-
-            renderBoardList();
-            showToast('Board renamed', 'success');
-        } catch (error) {
-            console.error("Rename error", error);
-            swalAlert('error', 'Error', 'Failed to rename board.');
+        const res = await apiRequest('/Kanban/UpdateBoardTitle', {
+            method: 'POST',
+            body: JSON.stringify({ boardId, title: finalTitle })
+        }, false);
+        if (!res?.success) {
+            alertApiFailure(res, 'Failed to rename board.');
+            return;
         }
+
+        const b = AppState.boards.find(b => b.id === boardId);
+        if (b) b.title = finalTitle;
+
+        if (AppState.currentBoardId === boardId) {
+            const headerTitle = document.getElementById('boardHeaderTitle');
+            if (headerTitle) headerTitle.innerText = finalTitle;
+        }
+
+        renderBoardList();
+        showToast('Board renamed', 'success');
     } else if (result.isDismissed) {
         showBoardMenu(boardId);
     }
@@ -1893,20 +2101,25 @@ async function showBoardMenu(boardId) {
     const board = AppState.boards.find(b => b.id === boardId);
     if (!board) return;
 
+    // Only owners can rename or delete; for members the server's delete is "leave board".
+    const isOwner = board.isOwner === true;
+
     await swalPanel({
         title: escapeHtml(board.title),
         width: swalWidth('400px'),
         html: `
             <div id="board-menu" class="kf-menu">
+                ${isOwner ? `
                 <button type="button" class="kf-menu-btn" data-menu-action="rename">
                     <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.rename}</span> Rename Board
-                </button>
+                </button>` : ''}
                 <button type="button" class="kf-menu-btn" data-menu-action="manage">
                     <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.members}</span> Manage Users
                 </button>
                 <div class="kf-menu-sep"></div>
                 <button type="button" class="kf-menu-btn kf-menu-btn--danger" data-menu-action="delete">
-                    <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.delete}</span> Delete Board
+                    <span class="kf-menu-icon" aria-hidden="true">${isOwner ? UI_ICON.delete : UI_ICON.logout}</span>
+                    ${isOwner ? 'Delete Board' : 'Leave Board'}
                 </button>
             </div>
         `,
@@ -1929,6 +2142,10 @@ async function showBoardMenu(boardId) {
 async function openManageUsersModal(boardId) {
     try {
         const res = await apiRequest(`/Kanban/GetBoardMembers?boardId=${boardId}`);
+        if (!res?.success || !res.data) {
+            alertApiFailure(res, 'Failed to load members.');
+            return;
+        }
         const members = res.data;
 
         const currentUserId = AppState.currentUser.userId;
@@ -2028,18 +2245,14 @@ async function promoteToOwner(boardId, userId) {
     });
 
     if (confirm.isConfirmed) {
-        try {
-            const response = await apiRequest(`/Kanban/PromoteToOwner`, {
-                method: 'POST',
-                body: JSON.stringify({ boardId, userId })
-            });
-            if (response.success) {
-                showToast('User promoted to owner', 'success', 2000);
-            } else {
-                swalAlert('error', 'Error', response.errorMessage || 'Failed to promote user.');
-            }
-        } catch {
-            swalAlert('error', 'Error', 'Failed to promote user.');
+        const response = await apiRequest(`/Kanban/PromoteToOwner`, {
+            method: 'POST',
+            body: JSON.stringify({ boardId, userId })
+        });
+        if (response?.success) {
+            showToast('User promoted to owner', 'success', 2000);
+        } else {
+            await alertApiFailure(response, 'Failed to promote user.');
         }
         openManageUsersModal(boardId);
     }
@@ -2054,18 +2267,14 @@ async function removeMember(boardId, userId) {
     });
 
     if (confirm.isConfirmed) {
-        try {
-            const response = await apiRequest('/Kanban/DeleteMember', {
-                method: 'POST',
-                body: JSON.stringify({ boardId, userId })
-            });
-            if (response.success) {
-                showToast('User removed', 'success', 2000);
-            } else {
-                swalAlert('error', 'Error', response.errorMessage || 'Failed to remove user.');
-            }
-        } catch (e) {
-            swalAlert('error', 'Error', 'Failed to remove user.');
+        const response = await apiRequest('/Kanban/DeleteMember', {
+            method: 'POST',
+            body: JSON.stringify({ boardId, userId })
+        });
+        if (response?.success) {
+            showToast('User removed', 'success', 2000);
+        } else {
+            await alertApiFailure(response, 'Failed to remove user.');
         }
         openManageUsersModal(boardId);
     }
@@ -2080,43 +2289,51 @@ async function addUserToBoard(boardId) {
         confirmButtonText: `${UI_ICON.send} Send Invite`
     });
     if (email) {
-        try {
-            const response = await apiRequest('/Kanban/InviteUserToBoard', {
-                method: 'POST',
-                body: JSON.stringify({ boardId, email })
-            });
-            if (response.success) showToast('Invite sent', 'success');
-            else swalAlert('error', 'Error', response.errorMessage || 'User could not be invited.');
-        } catch {
-            swalAlert('error', 'Error', 'User could not be invited.');
+        const response = await apiRequest('/Kanban/InviteUserToBoard', {
+            method: 'POST',
+            body: JSON.stringify({ boardId, email })
+        });
+        if (response?.success) {
+            showToast('Invite sent', 'success');
+        } else {
+            await alertApiFailure(response, 'User could not be invited.');
         }
     }
     openManageUsersModal(boardId);
 }
 
 async function deleteBoard(boardId) {
+    // For non-owners the server's DeleteBoard removes only their membership.
+    const isOwner = AppState.boards.find(b => b.id === boardId)?.isOwner === true;
     const result = await swalConfirm({
-        title: 'Delete Board?',
-        text: 'This board and all of its contents will be deleted.',
-        confirmText: `${UI_ICON.delete} Delete Board`,
+        ...(isOwner ? {
+            title: 'Delete Board?',
+            text: 'This board and all of its contents will be deleted.',
+            confirmText: `${UI_ICON.delete} Delete Board`
+        } : {
+            title: 'Leave Board?',
+            text: 'You will lose access to this board until you are invited again.',
+            confirmText: `${UI_ICON.logout} Leave Board`
+        }),
         confirmVariant: 'danger'
     });
     if (result.isConfirmed) {
-        try {
-            await apiRequest(`/Kanban/DeleteBoard`, {
-                method: 'POST',
-                body: JSON.stringify({ boardId })
-            });
-            showToast('Board deleted', 'success');
-            if (AppState.currentBoardId === boardId) {
-                AppState.currentBoardId = null;
-                document.getElementById('board').innerHTML = '';
-                document.getElementById("boardHeader").style.display = "none";
-            }
-            loadBoards();
-        } catch {
-            swalAlert('error', 'Error', 'Failed to delete board.');
+        const res = await apiRequest(`/Kanban/DeleteBoard`, {
+            method: 'POST',
+            body: JSON.stringify({ boardId })
+        });
+        if (!res?.success) {
+            alertApiFailure(res, isOwner ? 'Failed to delete board.' : 'Failed to leave board.');
+            return;
         }
+        if (AppState.currentBoardId === boardId) {
+            AppState.currentBoardId = null;
+            document.getElementById('board').innerHTML = '';
+            document.getElementById("boardHeader").style.display = "none";
+            joinCurrentBoard();
+        }
+        loadBoards();
+        showToast(isOwner ? 'Board deleted' : 'You left the board', 'success');
     } else {
         showBoardMenu(boardId);
     }
@@ -2185,11 +2402,15 @@ function openCalendarView() {
                 AppState.currentColumns.forEach(col => {
                     col.cards.forEach(card => {
                         if (card.dueDate || card.startDate) {
+                            // Cards are date-only. FullCalendar treats `end` as exclusive,
+                            // so the due day itself needs end = due + 1 day.
+                            const due = formatDateInput(card.dueDate);
                             calendarEvents.push({
                                 id: card.id,
                                 title: cardDisplayTitle(card),
-                                start: card.startDate || card.dueDate,
-                                end: card.dueDate,
+                                allDay: true,
+                                start: formatDateInput(card.startDate || card.dueDate),
+                                end: due ? addDaysToDateInput(due, 1) : undefined,
                                 backgroundColor: card.calendarColor || '#3b82f6',
                                 borderColor: card.calendarColor || '#3b82f6',
                                 extendedProps: { columnId: col.id }
@@ -2414,7 +2635,7 @@ function renderColumns(columns, animate = false) {
         if (deleteBtn) {
             e.stopPropagation();
             const cardId = Number(deleteBtn.dataset.cardId);
-            if (cardId) deleteCard(cardId);
+            if (cardId) deleteCard(cardId, false);
             return;
         }
 
@@ -2495,26 +2716,26 @@ async function moveCardTop(cardId, colId) {
     if (!checkAuth() || !cardId || !colId) return;
 
     const column = AppState.currentColumns.find(c => c.id == colId);
-    if (column.cards.length < 2) return;
+    if (!column || column.cards.length < 2) return;
 
-    try {
-        await apiRequest('/Kanban/MoveCard', {
-            method: 'POST',
-            body: JSON.stringify({
-                boardId: AppState.currentBoardId,
-                cardId: cardId,
-                newColumnId: colId,
-                newOrder: 1
-            })
-        });
-        await loadBoardData(false);
+    const res = await apiRequest('/Kanban/MoveCard', {
+        method: 'POST',
+        body: JSON.stringify({
+            boardId: AppState.currentBoardId,
+            cardId: cardId,
+            newColumnId: colId,
+            newOrder: 1
+        })
+    });
+    if (!res?.success) {
+        alertApiFailure(res, 'Failed to move card.');
+        return;
+    }
+    await loadBoardData(false);
 
-        const refreshedCol = document.querySelector(`.cards-container[data-column-id="${colId}"]`);
-        if (refreshedCol) {
-            refreshedCol.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-    } catch {
-        swalAlert('error', 'Error', 'Failed to move card.');
+    const refreshedCol = document.querySelector(`.cards-container[data-column-id="${colId}"]`);
+    if (refreshedCol) {
+        refreshedCol.scrollTo({ top: 0, behavior: 'smooth' });
     }
 }
 
@@ -2522,26 +2743,26 @@ async function moveCardBottom(cardId, colId) {
     if (!checkAuth() || !cardId || !colId) return;
 
     const column = AppState.currentColumns.find(c => c.id == colId);
-    if (column.cards.length < 2) return;
+    if (!column || column.cards.length < 2) return;
 
-    try {
-        await apiRequest('/Kanban/MoveCard', {
-            method: 'POST',
-            body: JSON.stringify({
-                boardId: AppState.currentBoardId,
-                cardId: cardId,
-                newColumnId: colId,
-                newOrder: 999999
-            })
-        });
-        await loadBoardData(false);
+    const res = await apiRequest('/Kanban/MoveCard', {
+        method: 'POST',
+        body: JSON.stringify({
+            boardId: AppState.currentBoardId,
+            cardId: cardId,
+            newColumnId: colId,
+            newOrder: 999999
+        })
+    });
+    if (!res?.success) {
+        alertApiFailure(res, 'Failed to move card.');
+        return;
+    }
+    await loadBoardData(false);
 
-        const refreshedCol = document.querySelector(`.cards-container[data-column-id="${colId}"]`);
-        if (refreshedCol) {
-            refreshedCol.scrollTo({ top: refreshedCol.scrollHeight, behavior: 'smooth' });
-        }
-    } catch {
-        swalAlert('error', 'Error', 'Failed to move card.');
+    const refreshedCol = document.querySelector(`.cards-container[data-column-id="${colId}"]`);
+    if (refreshedCol) {
+        refreshedCol.scrollTo({ top: refreshedCol.scrollHeight, behavior: 'smooth' });
     }
 }
 
@@ -2642,6 +2863,9 @@ function initSortable() {
     const boardElement = document.getElementById('board');
 
     document.querySelectorAll('.cards-container').forEach(container => {
+        // Called again after "Show More" and after re-renders; a second instance on the
+        // same container would fire onEnd twice and send MoveCard twice.
+        if (Sortable.get(container)) return;
         Sortable.create(container, {
             group: 'kanban',
             animation: 150,
@@ -2759,9 +2983,8 @@ function initSortable() {
                 } catch (error) {
                     console.error(error);
                     AppState.currentColumns = snapshot;
-                    renderColumns(snapshot);
-                    initSortable();
-                    swalAlert('error', 'Error', 'Card could not be moved.');
+                    renderColumns(snapshot); // also re-initialises Sortable
+                    swalAlert('error', 'Error', error.message || 'Card could not be moved.');
                 }
             }
         });
@@ -2791,20 +3014,20 @@ async function openNewColumnModal() {
     });
 
     if (formValues) {
-        try {
-            await apiRequest('/Kanban/AddColumn', {
-                method: 'POST',
-                body: JSON.stringify({
-                    boardId: AppState.currentBoardId,
-                    title: formValues.title,
-                    isResultColumn: formValues.isResultColumn
-                })
-            });
-            loadBoardData();
-            showToast('Column created', 'success');
-        } catch {
-            swalAlert('error', 'Error', 'Failed to create column.');
+        const res = await apiRequest('/Kanban/AddColumn', {
+            method: 'POST',
+            body: JSON.stringify({
+                boardId: AppState.currentBoardId,
+                title: formValues.title,
+                isResultColumn: formValues.isResultColumn
+            })
+        });
+        if (!res?.success) {
+            alertApiFailure(res, 'Failed to create column.');
+            return;
         }
+        loadBoardData();
+        showToast('Column created', 'success');
     }
 }
 
@@ -2851,25 +3074,21 @@ async function openEditColumnModal(columnId) {
     });
 
     if (formValues) {
-        try {
-            const res = await apiRequest('/Kanban/UpdateColumn', {
-                method: 'POST',
-                body: JSON.stringify({
-                    boardId: AppState.currentBoardId,
-                    columnId,
-                    title: formValues.title,
-                    isResultColumn: formValues.isResultColumn
-                })
-            });
-            if (!res?.success) {
-                swalAlert('error', 'Error', res?.errorMessage || 'Failed to update column.');
-                return;
-            }
-            loadBoardData();
-            showToast('Column updated', 'success');
-        } catch {
-            swalAlert('error', 'Error', 'Failed to update column.');
+        const res = await apiRequest('/Kanban/UpdateColumn', {
+            method: 'POST',
+            body: JSON.stringify({
+                boardId: AppState.currentBoardId,
+                columnId,
+                title: formValues.title,
+                isResultColumn: formValues.isResultColumn
+            })
+        });
+        if (!res?.success) {
+            alertApiFailure(res, 'Failed to update column.');
+            return;
         }
+        loadBoardData();
+        showToast('Column updated', 'success');
     }
 }
 
@@ -2882,20 +3101,22 @@ async function deleteColumn(id) {
         confirmVariant: 'danger'
     });
     if (res.isConfirmed) {
-        try {
-            await apiRequest(`/Kanban/DeleteColumn`, {
-                method: 'POST',
-                body: JSON.stringify({ boardId: AppState.currentBoardId, columnId: id })
-            });
-            showToast('Column deleted', 'success');
-            loadBoardData();
-        } catch {
-            swalAlert('error', 'Error', 'Failed to delete column.');
+        const apiRes = await apiRequest(`/Kanban/DeleteColumn`, {
+            method: 'POST',
+            body: JSON.stringify({ boardId: AppState.currentBoardId, columnId: id })
+        });
+        if (!apiRes?.success) {
+            alertApiFailure(apiRes, 'Failed to delete column.');
+            return;
         }
+        loadBoardData();
+        showToast('Column deleted', 'success');
     }
 }
 
-async function deleteCard(id) {
+// reopenOnCancel: true when the delete started from the card modal (its Delete
+// button), so cancelling returns the user there instead of to the board.
+async function deleteCard(id, reopenOnCancel = true) {
     if (!checkAuth()) return;
     const res = await swalConfirm({
         title: 'Delete Card?',
@@ -2904,17 +3125,17 @@ async function deleteCard(id) {
         confirmVariant: 'danger'
     });
     if (res.isConfirmed) {
-        try {
-            await apiRequest(`/Kanban/DeleteCard`, {
-                method: 'POST',
-                body: JSON.stringify({ boardId: AppState.currentBoardId, cardId: id })
-            });
-            showToast('Card deleted', 'success', 2000);
-            loadBoardData();
-        } catch {
-            swalAlert('error', 'Error', 'Failed to delete card.');
+        const apiRes = await apiRequest(`/Kanban/DeleteCard`, {
+            method: 'POST',
+            body: JSON.stringify({ boardId: AppState.currentBoardId, cardId: id })
+        });
+        if (!apiRes?.success) {
+            alertApiFailure(apiRes, 'Failed to delete card.');
+            return;
         }
-    } else {
+        loadBoardData();
+        showToast('Card deleted', 'success', 2000);
+    } else if (reopenOnCancel) {
         for (const col of AppState.currentColumns) {
             if (col.cards.some(c => c.id == id)) {
                 openCardModal(col.id, id);
@@ -2955,6 +3176,11 @@ async function openCardModal(columnId, cardId = null) {
 
     const minDate = isEditMode ? '2020-01-01' : todayDateInput();
     const membersRes = await apiRequest(`/Kanban/GetBoardMembers?boardId=${AppState.currentBoardId}`);
+    if (!membersRes?.success || !membersRes.data) {
+        // Without the member list a save would silently drop the assignee.
+        alertApiFailure(membersRes, 'Could not load card details.');
+        return;
+    }
 
     let membersOptions = `<option value="">-- Unassigned --</option>`;
     membersRes.data.forEach(m => {
@@ -3055,7 +3281,7 @@ async function openCardModal(columnId, cardId = null) {
                     <div class="kf-field">
                         <label class="kf-label" for="modal-calendar-color">Calendar color</label>
                         <input type="color" id="modal-calendar-color" class="kf-color" ${disabledAttr}
-                               value="${defaults.calendarColor}">
+                               value="${escapeHtml(defaults.calendarColor)}">
                     </div>
                 </div>
 
@@ -3077,7 +3303,7 @@ async function openCardModal(columnId, cardId = null) {
                         </div>
                         <div style="flex:1;">
                             <label class="kf-label-sm" for="modal-color">Warning color</label>
-                            <input type="color" id="modal-color" class="kf-color" value="${defaults.color}">
+                            <input type="color" id="modal-color" class="kf-color" value="${escapeHtml(defaults.color)}">
                         </div>
                     </div>
                 </div>
@@ -3106,7 +3332,7 @@ async function openCardModal(columnId, cardId = null) {
                     ] : false
                 }
             });
-            quill.root.innerHTML = defaults.desc;
+            quill.root.innerHTML = sanitizeRichText(defaults.desc);
 
             if (canEdit) {
                 setTimeout(() => {
@@ -3132,6 +3358,15 @@ async function openCardModal(columnId, cardId = null) {
             }
 
             if (isEditMode) {
+                // Bound once per modal; loadComments only re-renders the list contents.
+                document.getElementById('comments-list')?.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.comment-delete-btn');
+                    if (!btn) return;
+                    const commentId = Number(btn.dataset.commentId);
+                    const cCardId = Number(btn.dataset.cardId);
+                    if (commentId && cCardId) deleteComment(commentId, cCardId);
+                });
+
                 loadComments(cardId);
 
                 const commentInput = document.getElementById('new-comment-input');
@@ -3208,43 +3443,43 @@ async function openCardModal(columnId, cardId = null) {
             boardId: AppState.currentBoardId
         };
 
-        try {
-            if (isEditMode) {
-                if (formValues.targetColumnId && formValues.targetColumnId !== columnId) {
-                    const targetCol = AppState.currentColumns.find(c => c.id === formValues.targetColumnId);
-                    const newOrder = (targetCol?.totalCards ?? targetCol?.cards?.length ?? 0) + 1;
-                    const moveRes = await apiRequest('/Kanban/MoveCard', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            boardId: AppState.currentBoardId,
-                            cardId,
-                            newColumnId: formValues.targetColumnId,
-                            newOrder
-                        })
-                    }, false);
-                    if (!moveRes?.success) {
-                        swalAlert('error', 'Error', moveRes?.errorMessage || 'Failed to move card to the selected column.');
-                        return;
-                    }
-                }
-
-                await apiRequest('/Kanban/UpdateCard', {
-                    method: 'POST',
-                    body: JSON.stringify({ cardId, ...payload })
-                });
-                showToast('Card updated', 'success', 2000);
-            } else {
-                await apiRequest('/Kanban/AddCard', {
-                    method: 'POST',
-                    body: JSON.stringify({ columnId, ...payload })
-                });
-                showToast('Card created', 'success', 2000);
+        if (isEditMode && formValues.targetColumnId && formValues.targetColumnId !== columnId) {
+            const targetCol = AppState.currentColumns.find(c => c.id === formValues.targetColumnId);
+            const newOrder = (targetCol?.totalCards ?? targetCol?.cards?.length ?? 0) + 1;
+            const moveRes = await apiRequest('/Kanban/MoveCard', {
+                method: 'POST',
+                body: JSON.stringify({
+                    boardId: AppState.currentBoardId,
+                    cardId,
+                    newColumnId: formValues.targetColumnId,
+                    newOrder
+                })
+            }, false);
+            if (!moveRes?.success) {
+                alertApiFailure(moveRes, 'Failed to move card to the selected column.');
+                return;
             }
-            loadBoardData();
-        } catch (e) {
-            console.error(e);
-            swalAlert('error', 'Error', `Failed to ${isEditMode ? 'update' : 'create'} the card.`);
         }
+
+        const saveRes = isEditMode
+            ? await apiRequest('/Kanban/UpdateCard', {
+                method: 'POST',
+                body: JSON.stringify({ cardId, ...payload })
+            })
+            : await apiRequest('/Kanban/AddCard', {
+                method: 'POST',
+                body: JSON.stringify({ columnId, ...payload })
+            });
+
+        if (!saveRes?.success) {
+            // A column move may already have succeeded, so refresh either way.
+            if (isEditMode) loadBoardData(false);
+            alertApiFailure(saveRes, `Failed to ${isEditMode ? 'update' : 'create'} the card.`);
+            return;
+        }
+
+        loadBoardData();
+        showToast(isEditMode ? 'Card updated' : 'Card created', 'success', 2000);
     } else if (isDenied) {
         deleteCard(cardId);
     }
@@ -3258,7 +3493,12 @@ async function loadComments(cardId) {
     try {
         const res = await apiRequest(`/Kanban/GetComments?boardId=${AppState.currentBoardId}&cardId=${cardId}`, {}, false);
 
-        if (res.success && res.data.length > 0) {
+        if (!res?.success) {
+            listEl.innerHTML = '<div class="kf-panel-empty" style="color:var(--danger);">Failed to load comments.</div>';
+            return;
+        }
+
+        if (res.data?.length > 0) {
             listEl.innerHTML = res.data.map(c => {
                 const deleteBtn = (c.userId === currentUserId)
                     ? `<button type="button" class="kf-icon-btn kf-icon-btn--danger comment-delete-btn"
@@ -3272,7 +3512,7 @@ async function loadComments(cardId) {
                             <div>
                                 <strong>${escapeHtml(c.fullName)}</strong>
                                 <span style="margin-left:5px; color:#cbd5e0;">•</span>
-                                <span style="margin-left:5px;">${new Date(c.createdAt).toLocaleString('tr-TR')}</span>
+                                <span style="margin-left:5px;">${new Date(c.createdAt).toLocaleString(UI_LOCALE)}</span>
                             </div>
                             ${deleteBtn}
                         </div>
@@ -3280,15 +3520,6 @@ async function loadComments(cardId) {
                     </div>
                 `;
             }).join('');
-
-            listEl.addEventListener('click', (e) => {
-                const btn = e.target.closest('.comment-delete-btn');
-                if (btn) {
-                    const commentId = Number(btn.dataset.commentId);
-                    const cCardId = Number(btn.dataset.cardId);
-                    if (commentId && cCardId) deleteComment(commentId, cCardId);
-                }
-            });
         } else {
             listEl.innerHTML = '<div class="kf-panel-empty">No comments yet.</div>';
         }
@@ -3314,11 +3545,11 @@ async function submitComment(cardId) {
             body: JSON.stringify({ cardId, message, boardId: AppState.currentBoardId })
         }, false);
 
-        if (res.success) {
+        if (res?.success) {
             input.value = '';
             loadComments(cardId);
         } else {
-            Swal.showValidationMessage('Failed to post comment');
+            Swal.showValidationMessage(res?.errorMessage || 'Failed to post comment');
         }
     } catch (e) {
         console.error(e);
@@ -3338,33 +3569,40 @@ async function deleteComment(commentId, cardId) {
         width: swalWidth('380px')
     });
 
-    if (result.isConfirmed) {
-        try {
-            const res = await apiRequest(`/Kanban/DeleteComment`, {
-                method: 'POST',
-                body: JSON.stringify({ boardId: AppState.currentBoardId, commentId })
-            }, false);
-
-            if (res.success) {
-                loadComments(cardId);
-                showToast('Comment deleted', 'success', 1500);
-
-                let columnId = null;
-                outerLoop:
-                for (const col of AppState.currentColumns) {
-                    for (const c of col.cards) {
-                        if (c.id == cardId) { columnId = col.id; break outerLoop; }
-                    }
-                }
-                if (columnId) openCardModal(columnId, cardId);
-            } else {
-                swalAlert('error', 'Error', res.errorMessage || 'Could not delete comment.');
+    // The confirm dialog replaced the card modal; bring it back in every case.
+    const reopenCard = () => {
+        for (const col of AppState.currentColumns) {
+            if (col.cards.some(c => c.id == cardId)) {
+                openCardModal(col.id, cardId);
+                return;
             }
-        } catch (e) {
-            console.error(e);
-            swalAlert('error', 'Error', 'Network error.');
         }
+    };
+
+    if (!result.isConfirmed) {
+        reopenCard();
+        return;
     }
+
+    const res = await apiRequest(`/Kanban/DeleteComment`, {
+        method: 'POST',
+        body: JSON.stringify({ boardId: AppState.currentBoardId, commentId })
+    }, false);
+
+    if (!res?.success) {
+        await alertApiFailure(res, 'Could not delete comment.');
+        reopenCard();
+        return;
+    }
+
+    reopenCard();
+    showToast('Comment deleted', 'success', 1500);
+}
+
+function closeModal(modal) {
+    modal.classList.remove('active');
+    // A dismissed avatar picker must not reopen the profile menu on a later save.
+    if (modal.id === 'avatarModal') avatarOpenedFromMenu = false;
 }
 
 function setupModalsAndKeyboard() {
@@ -3373,7 +3611,7 @@ function setupModalsAndKeyboard() {
             if (e.target !== modal) return;
             if (modal.id === 'loginModal') closeLoginModal();
             else if (modal.id === 'registerModal') closeRegisterModal();
-            else modal.classList.remove('active');
+            else closeModal(modal);
         });
     });
 
@@ -3399,7 +3637,7 @@ function setupModalsAndKeyboard() {
                 closeRegisterModal();
                 return;
             }
-            document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
+            document.querySelectorAll('.modal.active').forEach(closeModal);
             return;
         }
 
@@ -3442,9 +3680,25 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     const serverDataEl = document.getElementById('server-data');
-    if (serverDataEl) {
-        window.SERVER_INVITE_STATUS = serverDataEl.getAttribute('data-invite-status');
-        window.SERVER_MESSAGE = serverDataEl.getAttribute('data-server-message');
+    const invite = {
+        status: serverDataEl?.getAttribute('data-invite-status') || 'NONE',
+        message: serverDataEl?.getAttribute('data-server-message') || '',
+        token: serverDataEl?.getAttribute('data-invite-token') || ''
+    };
+
+    // Keep the invite token out of the address bar and history once read.
+    if (new URLSearchParams(window.location.search).has('token')) {
+        history.replaceState(null, '', window.location.pathname);
+    }
+
+    // Resume an invite interrupted by "Logout & Switch".
+    if (invite.status === 'NONE') {
+        const pendingToken = sessionStorage.getItem(PENDING_INVITE_KEY);
+        if (pendingToken) {
+            sessionStorage.removeItem(PENDING_INVITE_KEY);
+            window.location.replace(`/?token=${encodeURIComponent(pendingToken)}`);
+            return;
+        }
     }
 
     document.querySelectorAll(".toggle-password").forEach(btn => {
@@ -3500,23 +3754,49 @@ window.addEventListener('DOMContentLoaded', async () => {
         toggleSidebar();
     }
 
-    handleInviteStatus();
+    handleInviteStatus(invite.status, invite.message, invite.token);
 });
 
-function handleInviteStatus() {
-    const status = window.SERVER_INVITE_STATUS;
+const PENDING_INVITE_KEY = 'kanflow:pendingInvite';
+
+async function confirmInvite(boardTitle, token) {
+    const result = await swalConfirm({
+        title: 'Board Invitation',
+        html: `<p class="kf-dialog-hint">You have been invited to join <b>${escapeHtml(boardTitle)}</b>.</p>`,
+        icon: 'question',
+        confirmText: `${UI_ICON.accept} Accept Invite`,
+        cancelText: 'Not Now'
+    });
+    if (!result.isConfirmed) return;
+
+    const res = await apiRequest('/Home/AcceptInvite', {
+        method: 'POST',
+        body: JSON.stringify({ token })
+    });
+    if (!res?.success) {
+        alertApiFailure(res, 'An error occurred while processing the invitation.');
+        return;
+    }
+    handleInviteStatus(res.data, res.errorMessage || '', token);
+}
+
+function handleInviteStatus(status, message, token) {
     if (!status || status === 'NONE') return;
 
     switch (status) {
+        case 'PENDING':
+            confirmInvite(message, token);
+            break;
+
         case 'REGISTER':
-            swalFlash('info', 'Invitation Verified!', 'Please register to access the board.', 3000);
-            openRegisterModal(window.SERVER_MESSAGE);
+            swalFlash('info', 'Invitation Accepted!', 'Please register to access the board.', 3000);
+            openRegisterModal(message);
             break;
 
         case 'ADDED':
             swalAlert('success', 'Success!', 'You have been successfully added to the board.').then(() => {
                 if (!AppState.isAuthenticated) {
-                    openLoginModal(window.SERVER_MESSAGE);
+                    openLoginModal(message);
                 } else {
                     loadBoards();
                 }
@@ -3527,8 +3807,8 @@ function handleInviteStatus() {
             swalAlert('info', 'Already a Member', 'You are already a member of this board.');
             break;
 
-        case 'WRONG_ACC':
-            const parts = (window.SERVER_MESSAGE || "").split('|');
+        case 'WRONG_ACC': {
+            const parts = (message || "").split('|');
             const currentEmail = escapeHtml(parts[0] || "Unknown");
             const targetEmail = escapeHtml(parts[1] || "Unknown");
 
@@ -3546,13 +3826,15 @@ function handleInviteStatus() {
                 confirmVariant: 'danger'
             }).then((result) => {
                 if (result.isConfirmed) {
+                    if (token) sessionStorage.setItem(PENDING_INVITE_KEY, token);
                     handleLogout();
                 }
             });
             break;
+        }
 
         case 'ERROR':
-            swalAlert('error', 'Error', window.SERVER_MESSAGE || 'An error occurred while processing the invitation.');
+            swalAlert('error', 'Invitation Unavailable', message || 'This invitation is invalid, expired, or has already been used.');
             break;
     }
 }
@@ -3568,6 +3850,9 @@ document.addEventListener('click', (e) => {
 });
 
 let quickNoteTimeout;
+// The edit waiting for the debounce, bound to the note it was typed into, so
+// switching notes or a server refresh cannot redirect or overwrite it.
+let pendingNoteSave = null;
 const quickNoteArea = document.getElementById('quickNoteArea');
 const saveStatus = document.getElementById('saveStatus');
 
@@ -3578,6 +3863,9 @@ const QuickNoteState = {
     reset() {
         this.notes = [];
         this.activeNoteId = null;
+        clearTimeout(quickNoteTimeout);
+        pendingNoteSave = null;
+        if (quickNoteArea) quickNoteArea.value = '';
     }
 };
 
@@ -3597,9 +3885,15 @@ async function initQuickNotes() {
     if (!checkAuth()) return;
 
     const data = await apiRequest('/Auth/GetQuickNotes', {}, false);
-    if (!data.success) return;
+    if (!data?.success || !data.data) return;
 
     QuickNoteState.notes = data.data;
+
+    // Keep text the user typed but has not been saved yet.
+    if (pendingNoteSave) {
+        const pendingNote = QuickNoteState.notes.find(n => n.id === pendingNoteSave.noteId);
+        if (pendingNote) pendingNote.note = pendingNoteSave.text;
+    }
 
     if (QuickNoteState.activeNoteId == null || !QuickNoteState.notes.some(n => n.id === QuickNoteState.activeNoteId)) {
         QuickNoteState.activeNoteId = data.data.length > 0 ? data.data[0].id : null;
@@ -3620,29 +3914,41 @@ function updateMainView() {
 }
 
 function saveActiveNote() {
+    const activeNote = QuickNoteState.notes.find(n => n.id === QuickNoteState.activeNoteId);
+    if (!activeNote) return;
+
+    // Update local state right away; only the network call is debounced.
+    activeNote.note = quickNoteArea.value;
+    pendingNoteSave = { noteId: activeNote.id, text: activeNote.note };
+
     saveStatus.style.opacity = '1';
     saveStatus.innerText = 'Typing...';
 
     clearTimeout(quickNoteTimeout);
+    quickNoteTimeout = setTimeout(flushNoteSave, 1000);
+}
 
-    quickNoteTimeout = setTimeout(async () => {
-        const activeNote = QuickNoteState.notes.find(n => n.id === QuickNoteState.activeNoteId);
-        if (!activeNote) return;
+async function flushNoteSave() {
+    clearTimeout(quickNoteTimeout);
+    if (!pendingNoteSave) return;
 
-        activeNote.note = quickNoteArea.value;
-        saveStatus.innerText = 'Saving...';
+    const { noteId, text } = pendingNoteSave;
+    pendingNoteSave = null;
+    saveStatus.innerText = 'Saving...';
 
-        try {
-            await apiRequest('/Auth/UpdateQuickNote', {
-                method: 'POST',
-                body: JSON.stringify({ userNoteId: QuickNoteState.activeNoteId, note: quickNoteArea.value })
-            }, false);
-            saveStatus.innerText = 'Saved ✅';
-            setTimeout(() => { saveStatus.style.opacity = '0'; }, 2000);
-        } catch (error) {
-            saveStatus.innerText = 'Error! ❌';
-        }
-    }, 1000);
+    const res = await apiRequest('/Auth/UpdateQuickNote', {
+        method: 'POST',
+        body: JSON.stringify({ userNoteId: noteId, note: text })
+    }, false);
+    if (!res?.success) {
+        // Re-queue unless newer text for the same note arrived meanwhile.
+        if (!pendingNoteSave) pendingNoteSave = { noteId, text };
+        saveStatus.innerText = 'Error! ❌';
+        return;
+    }
+    if (pendingNoteSave) return; // a newer edit is queued; let it report its own status
+    saveStatus.innerText = 'Saved ✅';
+    setTimeout(() => { saveStatus.style.opacity = '0'; }, 2000);
 }
 
 quickNoteArea.addEventListener('input', () => {
@@ -3659,11 +3965,19 @@ document.getElementById('noteHeader').addEventListener('click', async () => {
 
 document.getElementById('btnTrash').addEventListener('click', async () => {
     const note = QuickNoteState.notes.find(n => n.id === QuickNoteState.activeNoteId);
-    if (!note) return;
+    if (!note || !note.note) return;
+
+    const result = await swalConfirm({
+        title: 'Clear Note?',
+        text: 'The content of this note will be erased.',
+        confirmText: `${UI_ICON.delete} Clear`,
+        confirmVariant: 'danger'
+    });
+    if (!result.isConfirmed) return;
 
     quickNoteArea.value = '';
-    note.note = '';
-    await saveActiveNote();
+    saveActiveNote();
+    flushNoteSave();
 });
 
 document.getElementById('btnOpenNoteTable').addEventListener('click', () => {
@@ -3686,14 +4000,14 @@ async function addNote() {
         body: JSON.stringify({ title, note: '' })
     });
 
-    if (!data.success) {
+    if (!data?.success) {
         showToast('Failed to add note', 'error', 1500);
         return;
     }
 
-    showToast('Note added', 'success', 1000);
     QuickNoteState.notes.unshift(data.data);
     switchNote(data.data.id);
+    showToast('Note added', 'success', 1000);
 }
 
 function renderNoteTable() {
@@ -3744,6 +4058,7 @@ function renderNoteTable() {
     });
 }
 function switchNote(id) {
+    flushNoteSave();
     QuickNoteState.activeNoteId = id;
     updateMainView();
     document.getElementById('noteListOverlay').classList.remove('active');
@@ -3767,18 +4082,18 @@ async function renameNoteFromTable(id) {
         body: JSON.stringify({ userNoteId: id, title: newTitle.trim() })
     });
 
-    if (!ok.success) {
+    if (!ok?.success) {
         showToast('Failed to rename note', 'error', 1500);
         return;
     }
 
-    showToast('Note renamed', 'success', 1000);
     note.title = newTitle.trim();
     renderNoteTable();
 
     if (QuickNoteState.activeNoteId === id) {
         updateMainView();
     }
+    showToast('Note renamed', 'success', 1000);
 }
 
 async function deleteNoteFromTable(id) {
@@ -3801,13 +4116,16 @@ async function deleteNoteFromTable(id) {
         body: JSON.stringify({ userNoteId: id })
     });
 
-    if (!ok.success) {
+    if (!ok?.success) {
         showToast('Failed to delete note', 'error', 1500);
         return;
     }
 
-    showToast('Note deleted', 'success', 1000);
     QuickNoteState.notes = QuickNoteState.notes.filter(n => n.id !== id);
+    if (pendingNoteSave?.noteId === id) {
+        clearTimeout(quickNoteTimeout);
+        pendingNoteSave = null;
+    }
 
     if (QuickNoteState.activeNoteId === id) {
         QuickNoteState.activeNoteId = QuickNoteState.notes[0].id;
@@ -3815,6 +4133,7 @@ async function deleteNoteFromTable(id) {
     }
 
     renderNoteTable();
+    showToast('Note deleted', 'success', 1000);
 }
 
 const AVATAR_OPTIONS = [
@@ -3880,31 +4199,29 @@ function selectAvatarTemp(name, imgElement) {
 
 async function saveMyAvatar() {
     if (!checkAuth()) return;
-    try {
-        if (AppState.currentUser.avatar == selectedAvatarTemp) {
-            document.getElementById('avatarModal').classList.remove('active');
-            if (avatarOpenedFromMenu) { openProfileMenu(); avatarOpenedFromMenu = false; }
-            return;
-        }
-
-        await apiRequest(`/Auth/UpdateAvatar`, {
-            method: 'POST',
-            body: JSON.stringify({ avatar: selectedAvatarTemp })
-        });
-
-        if (AppState.currentUser) {
-            AppState.currentUser.avatar = selectedAvatarTemp;
-        }
+    if (AppState.currentUser.avatar == selectedAvatarTemp) {
         document.getElementById('avatarModal').classList.remove('active');
-        updateAuthUI();
-
-        showToast('Looks great!', 'success', 1200);
-
         if (avatarOpenedFromMenu) { openProfileMenu(); avatarOpenedFromMenu = false; }
-    } catch (e) {
-        console.error(e);
-        swalAlert('error', 'Error', 'Could not save avatar.');
+        return;
     }
+
+    const res = await apiRequest(`/Auth/UpdateAvatar`, {
+        method: 'POST',
+        body: JSON.stringify({ avatar: selectedAvatarTemp })
+    });
+    if (!res?.success) {
+        alertApiFailure(res, 'Could not save avatar.');
+        return;
+    }
+
+    if (AppState.currentUser) {
+        AppState.currentUser.avatar = selectedAvatarTemp;
+    }
+    document.getElementById('avatarModal').classList.remove('active');
+    updateAuthUI();
+
+    if (avatarOpenedFromMenu) { openProfileMenu(); avatarOpenedFromMenu = false; }
+    showToast('Looks great!', 'success', 1200);
 }
 
 Object.assign(window, {

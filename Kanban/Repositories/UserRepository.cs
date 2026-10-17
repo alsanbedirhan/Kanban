@@ -1,6 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Security;
+using Kanban.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System;
@@ -14,13 +15,21 @@ namespace Kanban.Repositories
     {
         private readonly IMemoryCache _cache;
         private readonly KanbanDbContext _context;
-        private readonly IDBDateTimeProvider _dbDate;
+        private readonly TimeProvider _time;
+        private readonly IBoardNotifier _notifier;
 
-        public UserRepository(KanbanDbContext context, IMemoryCache cache, IDBDateTimeProvider dbDate)
+        public UserRepository(KanbanDbContext context, IMemoryCache cache, TimeProvider time, IBoardNotifier notifier)
         {
             _context = context;
             _cache = cache;
-            _dbDate = dbDate;
+            _time = time;
+            _notifier = notifier;
+        }
+
+        private async Task InvalidateUserUpdates(long userId)
+        {
+            _cache.Remove($"User_HasUpdates_{userId}");
+            await _notifier.UserUpdatesChanged(userId);
         }
 
         public async Task<User?> GetByEmail(string email)
@@ -93,19 +102,25 @@ namespace Kanban.Repositories
             await SaveContext();
             return user;
         }
+        // Range comparisons (not CreatedAt.Date == ...) so SQL Server can use an index.
+        private (DateTime Start, DateTime End) Today()
+        {
+            var start = _time.LocalNow().Date;
+            return (start, start.AddDays(1));
+        }
         public async Task<int> VerifyCountToday(string email)
         {
-            var now = await _dbDate.Now();
-            return await _context.UserVerifications.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
+            var (start, end) = Today();
+            return await _context.UserVerifications.CountAsync(x => x.Email == email && x.CreatedAt >= start && x.CreatedAt < end);
         }
         public async Task<int> CheckInviteCountToday(string email)
         {
-            var now = await _dbDate.Now();
-            return await _context.UserInvites.CountAsync(x => x.Email == email && x.CreatedAt.Date == now.Date);
+            var (start, end) = Today();
+            return await _context.UserInvites.CountAsync(x => x.Email == email && x.CreatedAt >= start && x.CreatedAt < end);
         }
         public async Task SaveVerifyCode(string email, string code)
         {
-            var now = await _dbDate.Now();
+            var now = _time.LocalNow();
             var uv = new UserVerification
             {
                 ExpiresAt = now.AddMinutes(5),
@@ -133,10 +148,11 @@ namespace Kanban.Repositories
             _cache.Remove($"AVATAR:{userId}");
             _cache.Set($"AVATAR:{userId}", avatar, TimeSpan.FromHours(6));
         }
-        public async Task<bool> CheckInvite(long userId, long boardId, string email)
+        public async Task<bool> CheckInvite(long boardId, string email)
         {
-            return await _context.UserInvites.AsNoTracking()
-                .AnyAsync(i => i.BoardId == boardId && i.Email == email && !i.IsUsed);
+            var (start, end) = Today();
+            return await _context.UserInvites
+                .AnyAsync(i => i.BoardId == boardId && i.Email == email && !i.IsUsed && i.CreatedAt >= start && i.CreatedAt < end);
         }
         public async Task<List<InviteResultModel>> GetInvites(string email)
         {
@@ -172,13 +188,13 @@ namespace Kanban.Repositories
         {
             await _context.UserNotifications.Where(n => n.Id == id)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
-            _cache.Remove($"User_HasUpdates_{userId}");
+            await InvalidateUserUpdates(userId);
         }
         public async Task DeleteNotifications(long userId)
         {
             await _context.UserNotifications.Where(n => n.UserId == userId && !n.IsDeleted)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
-            _cache.Remove($"User_HasUpdates_{userId}");
+            await InvalidateUserUpdates(userId);
         }
         public async Task<UserInvite?> GetInvite(long id)
         {
@@ -188,11 +204,27 @@ namespace Kanban.Repositories
         {
             await _context.UserInvites.Where(bc => bc.Id == inviteId)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsAccepted, true));
-            _cache.Remove($"User_HasUpdates_{userId}");
+            await InvalidateUserUpdates(userId);
+        }
+        public async Task<int> GetSentInviteCountToday(long senderUserId)
+        {
+            var (start, end) = Today();
+            return await _context.UserInvites.CountAsync(x => x.SenderUserId == senderUserId && x.CreatedAt >= start && x.CreatedAt < end);
+        }
+        public async Task<int> GetEmailCountToday()
+        {
+            var (start, end) = Today();
+            var codes = await _context.UserVerifications.CountAsync(x => x.CreatedAt >= start && x.CreatedAt < end);
+            var invites = await _context.UserInvites.CountAsync(x => x.CreatedAt >= start && x.CreatedAt < end);
+            return codes + invites;
+        }
+        public async Task RemoveInvite(long inviteId)
+        {
+            await _context.UserInvites.Where(x => x.Id == inviteId).ExecuteDeleteAsync();
         }
         public async Task<UserInvite> AddInvite(long senderUserId, long boardId, string email, long userId)
         {
-            var now = await _dbDate.Now();
+            var now = _time.LocalNow();
             var invite = new UserInvite
             {
                 BoardId = boardId,
@@ -205,7 +237,7 @@ namespace Kanban.Repositories
             await _context.SaveChangesAsync();
             if (userId > 0)
             {
-                _cache.Remove($"User_HasUpdates_{userId}");
+                await InvalidateUserUpdates(userId);
             }
             return invite;
         }
@@ -313,9 +345,10 @@ namespace Kanban.Repositories
             return c.Count;
         }
 
-        public async Task<int> GetBoardsCount(long boardId)
+        // Boards the user created and still owns; used for the per-user board limit.
+        public async Task<int> GetBoardsCount(long userId)
         {
-            return await _context.Boards.CountAsync(b => b.Id == boardId && b.IsActive);
+            return await _context.Boards.CountAsync(b => b.UserId == userId && b.IsActive);
         }
 
         public async Task<int> GetBoardColumnsCount(long boardId)

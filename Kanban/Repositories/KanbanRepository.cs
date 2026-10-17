@@ -1,6 +1,7 @@
 ﻿using Kanban.Entities;
 using Kanban.Models;
 using Kanban.Security;
+using Kanban.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -9,16 +10,24 @@ namespace Kanban.Repositories
     public class KanbanRepository : IKanbanRepository
     {
         private readonly KanbanDbContext _context;
-        private readonly IDBDateTimeProvider _dbDate;
+        private readonly TimeProvider _time;
+        private readonly IBoardNotifier _notifier;
         private readonly IMemoryCache _cache;
-        public KanbanRepository(KanbanDbContext context, IMemoryCache cache, IDBDateTimeProvider dbDate)
+        public KanbanRepository(KanbanDbContext context, IMemoryCache cache, TimeProvider time, IBoardNotifier notifier)
         {
             _context = context;
             _cache = cache;
-            _dbDate = dbDate;
+            _time = time;
+            _notifier = notifier;
         }
 
         private const int NotificationMessageMaxLength = 500;
+
+        private async Task InvalidateUserUpdates(long userId)
+        {
+            _cache.Remove($"User_HasUpdates_{userId}");
+            await _notifier.UserUpdatesChanged(userId);
+        }
 
         private async Task SendNotification(long userId, string message)
         {
@@ -29,7 +38,7 @@ namespace Kanban.Repositories
             if (message.Length > NotificationMessageMaxLength)
                 message = message[..(NotificationMessageMaxLength - 3)] + "...";
 
-            var now = await _dbDate.Now();
+            var now = _time.LocalNow();
             var notification = new UserNotification
             {
                 UserId = userId,
@@ -41,7 +50,7 @@ namespace Kanban.Repositories
             await _context.UserNotifications.AddAsync(notification);
             await _context.SaveChangesAsync();
 
-            _cache.Remove($"User_HasUpdates_{userId}");
+            await InvalidateUserUpdates(userId);
         }
 
         public Task NotifyUser(long userId, string message) => SendNotification(userId, message);
@@ -56,7 +65,7 @@ namespace Kanban.Repositories
 
         public async Task<Board> AddBoard(long userId, string title)
         {
-            var now = await _dbDate.Now();
+            var now = _time.LocalNow();
             var b = new Board
             {
                 Title = title,
@@ -90,19 +99,7 @@ namespace Kanban.Repositories
 
             if (isAccepted)
             {
-                var alreadyMember = await _context.BoardMembers.AnyAsync(
-                    bm => bm.BoardId == boardId && bm.UserId == userId && bm.IsActive);
-                if (!alreadyMember)
-                {
-                    await _context.BoardMembers.AddAsync(new BoardMember
-                    {
-                        BoardId = boardId,
-                        IsActive = true,
-                        RoleCode = "MEMBER",
-                        UserId = userId
-                    });
-                    await _context.SaveChangesAsync();
-                }
+                await AddOrReactivateMember(userId, boardId, "MEMBER");
 
                 var invite = await _context.UserInvites.AsNoTracking()
                     .Where(x => x.Id == inviteId)
@@ -118,15 +115,11 @@ namespace Kanban.Repositories
                 await TouchBoard(boardId);
             }
 
-            _cache.Remove($"User_HasUpdates_{userId}");
+            await InvalidateUserUpdates(userId);
         }
 
         public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
-            var lastOrder = await _context.BoardCards
-                .Where(c => c.BoardColumnId == columnId && c.IsActive)
-                .MaxAsync(c => (int?)c.OrderNo) ?? 0;
-
             var b = new BoardCard
             {
                 Title = title,
@@ -134,7 +127,6 @@ namespace Kanban.Repositories
                 BoardColumnId = columnId,
                 IsActive = true,
                 CreatedBy = userId,
-                OrderNo = lastOrder + 1,
                 DueDate = dueDate,
                 WarningDays = warningDays,
                 HighlightColor = highlightColor,
@@ -143,8 +135,16 @@ namespace Kanban.Repositories
                 StartDate = startDate
             };
 
-            await _context.BoardCards.AddAsync(b);
-            await _context.SaveChangesAsync();
+            // Reading the last order and inserting must not interleave with another add/move.
+            await InSerializableTransaction(async () =>
+            {
+                b.OrderNo = (await _context.BoardCards
+                    .Where(c => c.BoardColumnId == columnId && c.IsActive)
+                    .MaxAsync(c => (int?)c.OrderNo) ?? 0) + 1;
+
+                await _context.BoardCards.AddAsync(b);
+                await _context.SaveChangesAsync();
+            });
 
             if (assigneeId > 0 && assigneeId != userId)
             {
@@ -186,19 +186,51 @@ namespace Kanban.Repositories
             return await _context.BoardMembers.AnyAsync(x => x.BoardId == boardId && x.UserId == userId && x.IsActive);
         }
 
+        public async Task<int> GetBoardMembersCount(long boardId)
+        {
+            return await _context.BoardMembers.CountAsync(x => x.BoardId == boardId && x.IsActive);
+        }
+
+        public async Task<int> GetInviteCountToday(long boardId)
+        {
+            var today = _time.LocalNow().Date;
+            return await _context.UserInvites.CountAsync(x => x.BoardId == boardId && x.CreatedAt >= today);
+        }
+
         public async Task AddUserToBoard(long userId, long boardId, string roleCode)
         {
-            var b = new BoardMember
-            {
-                BoardId = boardId,
-                IsActive = true,
-                RoleCode = roleCode,
-                UserId = userId
-            };
-            await _context.BoardMembers.AddAsync(b);
-            await _context.SaveChangesAsync();
-
+            await AddOrReactivateMember(userId, boardId, roleCode);
             await TouchBoard(boardId);
+        }
+
+        // BoardMembers is keyed by (BoardId, UserId) and removal only sets IsActive = false,
+        // so a former member already has a row: reactivate it instead of inserting a duplicate key.
+        private async Task AddOrReactivateMember(long userId, long boardId, string roleCode)
+        {
+            var member = await _context.BoardMembers
+                .FirstOrDefaultAsync(bm => bm.BoardId == boardId && bm.UserId == userId);
+
+            if (member == null)
+            {
+                await _context.BoardMembers.AddAsync(new BoardMember
+                {
+                    BoardId = boardId,
+                    IsActive = true,
+                    RoleCode = roleCode,
+                    UserId = userId
+                });
+            }
+            else if (!member.IsActive)
+            {
+                member.IsActive = true;
+                member.RoleCode = roleCode;
+            }
+            else
+            {
+                return;
+            }
+
+            await _context.SaveChangesAsync();
         }
 
         public async Task DeleteBoard(long userId, long boardId)
@@ -328,30 +360,36 @@ namespace Kanban.Repositories
                 .Select(x => new { x.BoardColumnId, x.BoardColumn.BoardId })
                 .FirstOrDefaultAsync();
 
-            var boardId = card.BoardId;
+            if (card == null) return;
 
-            var maxOrder = await _context.BoardCards
-                .Where(c => c.BoardColumnId == newColumnId && c.IsActive)
-                .MaxAsync(x => (int?)x.OrderNo) ?? 0;
+            // The max-order read, the shift and the final update form one step; concurrent
+            // moves into the same column would otherwise produce duplicate order numbers.
+            await InSerializableTransaction(async () =>
+            {
+                var maxOrder = await _context.BoardCards
+                    .Where(c => c.BoardColumnId == newColumnId && c.IsActive)
+                    .MaxAsync(x => (int?)x.OrderNo) ?? 0;
 
-            if (newOrder > maxOrder)
-            {
-                newOrder = maxOrder + 1;
-            }
-            else
-            {
+                var targetOrder = newOrder;
+                if (targetOrder > maxOrder)
+                {
+                    targetOrder = maxOrder + 1;
+                }
+                else
+                {
+                    await _context.BoardCards
+                        .Where(c => c.BoardColumnId == newColumnId && c.OrderNo >= targetOrder && c.IsActive)
+                        .ExecuteUpdateAsync(s => s.SetProperty(x => x.OrderNo, x => x.OrderNo + 1));
+                }
+
                 await _context.BoardCards
-                    .Where(c => c.BoardColumnId == newColumnId && c.OrderNo >= newOrder && c.IsActive)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.OrderNo, x => x.OrderNo + 1));
-            }
+                    .Where(c => c.Id == cardId)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.BoardColumnId, newColumnId)
+                        .SetProperty(x => x.OrderNo, targetOrder));
+            });
 
-            await _context.BoardCards
-                .Where(c => c.Id == cardId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(x => x.BoardColumnId, newColumnId)
-                    .SetProperty(x => x.OrderNo, newOrder));
-
-            await TouchBoard(boardId);
+            await TouchBoard(card.BoardId);
         }
 
         public async Task<bool> ValidateBoardWithBoardId(long userId, long boardId)
@@ -418,7 +456,7 @@ namespace Kanban.Repositories
 
         public async Task<BoardRefreshResultModel> GetBoardVersion(long boardId)
         {
-            var now = await _dbDate.Now();
+            var now = _time.LocalNow();
             string cacheKey = $"Board_{boardId}_Version";
 
             if (!_cache.TryGetValue(cacheKey, out DateTime lastActivity))
@@ -436,13 +474,28 @@ namespace Kanban.Repositories
 
         private async Task TouchBoard(long boardId)
         {
-            var now = await _dbDate.Now();
+            var now = _time.LocalNow();
             await _context.Boards
                 .Where(b => b.Id == boardId)
                 .ExecuteUpdateAsync(x => x.SetProperty(b => b.UpdatedAt, now));
 
             _cache.Remove($"Board_{boardId}_Version");
             _cache.Remove($"Board_{boardId}_Members");
+
+            await _notifier.BoardChanged(boardId);
+        }
+
+        // EnableRetryOnFailure forbids user transactions outside the execution strategy;
+        // running inside it also retries the whole unit on deadlocks.
+        private async Task InSerializableTransaction(Func<Task> work)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var tx = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+                await work();
+                await tx.CommitAsync();
+            });
         }
 
         private async Task<List<BoardMember>?> GetCachedBoardMembers(long boardId)
@@ -509,7 +562,7 @@ namespace Kanban.Repositories
 
         public async Task<BoardCardComment> AddComment(long userId, long cardId, string message)
         {
-            var now = await _dbDate.Now();
+            var now = _time.LocalNow();
             var comment = new BoardCardComment
             {
                 BoardCardId = cardId,

@@ -11,25 +11,26 @@ namespace Kanban.Services
     public class UserService : IUserService
     {
         private const int NoteMaxLength = 5000;
+        private const int MaxVerificationCodesPerDay = 3;
         public const int NoteMaxCount = 50;
-        public const int NoteTitleMaxLenght = 30;
+        public const int NoteTitleMaxLength = 30;
         private static string GenerateOtpCode() =>
             RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
 
         private readonly IUserRepository _userRepository;
         private readonly IEmailService _mailService;
-        private readonly IDBDateTimeProvider _dbDate;
+        private readonly TimeProvider _time;
         private readonly IMemoryCache _cache;
 
         public UserService(
             IUserRepository userRepository,
             IEmailService mailService,
-            IDBDateTimeProvider dbDate,
+            TimeProvider time,
             IMemoryCache cache)
         {
             _userRepository = userRepository;
             _mailService = mailService;
-            _dbDate = dbDate;
+            _time = time;
             _cache = cache;
         }
 
@@ -41,87 +42,69 @@ namespace Kanban.Services
                 return ServiceResult<User>.Fail("A user with this email already exists.");
             }
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
-            try
+            if (u != null)
             {
-                if (u != null)
-                {
-                    u.FullName = fullName;
-                    u.HashPassword = hashedPassword;
-                    u.IsActive = true;
-                    u.SecurityStamp = Guid.NewGuid().ToString();
-                    await _userRepository.SaveContext();
-                    UserSecurityCache.Invalidate(_cache, u.Id);
-                    return ServiceResult<User>.Ok(u);
-                }
-                return ServiceResult<User>.Ok(await _userRepository.Create(new User
-                {
-                    FullName = fullName,
-                    Email = email,
-                    IsActive = true,
-                    HashPassword = hashedPassword
-                }));
+                u.FullName = fullName;
+                u.HashPassword = hashedPassword;
+                u.IsActive = true;
+                u.SecurityStamp = Guid.NewGuid().ToString();
+                await _userRepository.SaveContext();
+                UserSecurityCache.Invalidate(_cache, u.Id);
+                return ServiceResult<User>.Ok(u);
             }
-            catch (Exception)
+            return ServiceResult<User>.Ok(await _userRepository.Create(new User
             {
-                return ServiceResult<User>.Fail("A database error occurred, please try again.");
-            }
+                FullName = fullName,
+                Email = email,
+                IsActive = true,
+                HashPassword = hashedPassword
+            }));
         }
 
         public async Task<ServiceResult<User>> Login(string email, string password)
         {
-            try
+            if (IsLoginLockedOut(email))
+                return ServiceResult<User>.Fail("Too many failed attempts. Please try again later.");
+
+            var user = await _userRepository.GetByEmail(email);
+            var hashToVerify = user?.HashPassword ?? LoginSecurity.DummyPasswordHash;
+            var passwordValid = BCrypt.Net.BCrypt.Verify(password, hashToVerify);
+
+            if (user == null || !user.IsActive || !passwordValid)
             {
-                if (IsLoginLockedOut(email))
-                    return ServiceResult<User>.Fail("Too many failed attempts. Please try again later.");
-
-                var user = await _userRepository.GetByEmail(email);
-                var hashToVerify = user?.HashPassword ?? LoginSecurity.DummyPasswordHash;
-                var passwordValid = BCrypt.Net.BCrypt.Verify(password, hashToVerify);
-
-                if (user == null || !user.IsActive || !passwordValid)
-                {
-                    RecordLoginFailure(email);
-                    return ServiceResult<User>.Fail("Incorrect email or password.");
-                }
-
-                ClearLoginFailures(email);
-                return ServiceResult<User>.Ok(user);
+                RecordLoginFailure(email);
+                return ServiceResult<User>.Fail("Incorrect email or password.");
             }
-            catch (Exception)
-            {
-                return ServiceResult<User>.Fail("An error occurred.");
-            }
+
+            ClearLoginFailures(email);
+            return ServiceResult<User>.Ok(user);
         }
 
         public async Task<ServiceResult> GenerateAndSaveVerifyCode(string email, string purpose = "register")
         {
-            try
+            var existing = await _userRepository.GetByEmail(email);
+            if (purpose == "register")
             {
-                var existing = await _userRepository.GetByEmail(email);
-                if (purpose == "register")
-                {
-                    if (existing != null && existing.IsActive)
-                        return ServiceResult.Fail("A user with this email already exists.");
-                }
-                else if (purpose == "reset")
-                {
-                    if (existing == null || !existing.IsActive)
-                        return ServiceResult.Fail("There is no account with this email address.");
-                }
-                if (await _userRepository.VerifyCountToday(email) > 3)
-                {
-                    return ServiceResult.Fail("Daily limit exceeded.");
-                }
-                string code = GenerateOtpCode();
-                await _mailService.SendVerificationCode(email, code);
-                await _userRepository.SaveVerifyCode(email, HashOtp(code));
-                ClearOtpFailures(email);
-                return ServiceResult.Ok();
+                if (existing != null && existing.IsActive)
+                    return ServiceResult.Fail("A user with this email already exists.");
             }
-            catch (Exception)
+            else if (purpose == "reset")
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                if (existing == null || !existing.IsActive)
+                    return ServiceResult.Ok();
             }
+            if (await _userRepository.VerifyCountToday(email) >= MaxVerificationCodesPerDay)
+            {
+                return ServiceResult.Fail("Daily limit exceeded.");
+            }
+            string code = GenerateOtpCode();
+            if (!await _mailService.SendVerificationCode(email, code))
+            {
+                return ServiceResult.Fail("We couldn't send the email right now. Please try again later.");
+            }
+            await _userRepository.SaveVerifyCode(email, HashOtp(code));
+            ClearOtpFailures(email);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> VerifyCodeAndUpdate(string email, string code)
@@ -161,28 +144,21 @@ namespace Kanban.Services
 
         private async Task<ServiceResult<long>> ValidateVerificationCode(string email, string code)
         {
-            try
+            if (IsOtpLockedOut(email))
+                return ServiceResult<long>.Fail("Too many failed attempts. Please request a new code.");
+            var now = _time.LocalNow();
+            var stored = await _userRepository.GetLastVerify(email);
+            if (stored == null || stored.ExpiresAt < now || string.IsNullOrEmpty(stored.Code))
             {
-                if (IsOtpLockedOut(email))
-                    return ServiceResult<long>.Fail("Too many failed attempts. Please request a new code.");
-                var now = await _dbDate.Now();
-                var stored = await _userRepository.GetLastVerify(email);
-                if (stored == null || stored.ExpiresAt < now || string.IsNullOrEmpty(stored.Code))
-                {
-                    RecordOtpFailure(email);
-                    return ServiceResult<long>.Fail("Invalid or expired code.");
-                }
-                if (!OtpSecurity.CodesMatch(stored.Code, HashOtp(code)))
-                {
-                    RecordOtpFailure(email);
-                    return ServiceResult<long>.Fail("Invalid or expired code.");
-                }
-                return ServiceResult<long>.Ok(stored.Id);
+                RecordOtpFailure(email);
+                return ServiceResult<long>.Fail("Invalid or expired code.");
             }
-            catch (Exception)
+            if (!OtpSecurity.CodesMatch(stored.Code, HashOtp(code)))
             {
-                return ServiceResult<long>.Fail("A database error occurred, please try again.");
+                RecordOtpFailure(email);
+                return ServiceResult<long>.Fail("Invalid or expired code.");
             }
+            return ServiceResult<long>.Ok(stored.Id);
         }
 
         private static string HashOtp(string code)
@@ -218,170 +194,107 @@ namespace Kanban.Services
         {
             if (!AvatarNames.IsAllowed(avatar))
                 return ServiceResult.Fail("Invalid avatar selection.");
-            try
-            {
-                await _userRepository.UpdateAvatar(userId, AvatarNames.Normalize(avatar));
-                return ServiceResult.Ok();
-            }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("A database error occurred, please try again.");
-            }
+            await _userRepository.UpdateAvatar(userId, AvatarNames.Normalize(avatar));
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> ChangePassword(long userId, string email, string currentPassword, string newPassword)
         {
-            try
-            {
-                var userPass = await _userRepository.GetHashPasswordByEmail(email);
-                if (string.IsNullOrEmpty(userPass) || !BCrypt.Net.BCrypt.Verify(currentPassword, userPass))
-                    return ServiceResult.Fail("Incorrect password.");
-                await _userRepository.ChangePassword(userId, BCrypt.Net.BCrypt.HashPassword(newPassword));
-                return ServiceResult.Ok();
-            }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("An error occurred.");
-            }
+            var userPass = await _userRepository.GetHashPasswordByEmail(email);
+            if (string.IsNullOrEmpty(userPass) || !BCrypt.Net.BCrypt.Verify(currentPassword, userPass))
+                return ServiceResult.Fail("Incorrect password.");
+            await _userRepository.ChangePassword(userId, BCrypt.Net.BCrypt.HashPassword(newPassword));
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult<string>> GetAvatar(long userId)
         {
-            try
-            {
-                return ServiceResult<string>.Ok(await _userRepository.GetAvatar(userId));
-            }
-            catch (Exception)
-            {
-                return ServiceResult<string>.Fail("An error occurred.");
-            }
+            return ServiceResult<string>.Ok(await _userRepository.GetAvatar(userId));
         }
 
         public async Task<ServiceResult> ResetPassword(string email, string password)
         {
-            try
+            var u = await _userRepository.GetUserIdByEmail(email);
+            if (u == null)
             {
-                var u = await _userRepository.GetUserIdByEmail(email);
-                if (u == null)
-                {
-                    return ServiceResult.Fail("There is no user with this email.");
-                }
-                await _userRepository.ChangePassword(u.Value, BCrypt.Net.BCrypt.HashPassword(password));
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("There is no user with this email.");
             }
-            catch (Exception)
-            {
-                return ServiceResult.Fail("An error occurred.");
-            }
+            await _userRepository.ChangePassword(u.Value, BCrypt.Net.BCrypt.HashPassword(password));
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult<List<QuickNoteResultModel>>> GetQuickNotes(long userId)
         {
-            try
+            var r = await _userRepository.GetQuickNotes(userId);
+            if (r.Count <= 0)
             {
-                var r = await _userRepository.GetQuickNotes(userId);
-                if (r.Count <= 0)
-                {
-                    var v = await _userRepository.AddQuickNote(userId, "Note 1", "");
-                    r.Add(new QuickNoteResultModel { Id = v.Id, Title = v.Title, Note = v.Note });
-                }
-                return ServiceResult<List<QuickNoteResultModel>>.Ok(r);
+                var v = await _userRepository.AddQuickNote(userId, "Note 1", "");
+                r.Add(new QuickNoteResultModel { Id = v.Id, Title = v.Title, Note = v.Note });
             }
-            catch (Exception)
-            {
-                return ServiceResult<List<QuickNoteResultModel>>.Fail("A database error occurred, please try again.");
-            }
+            return ServiceResult<List<QuickNoteResultModel>>.Ok(r);
         }
 
         public async Task<ServiceResult<UserNote>> AddQuickNote(long userId, string title, string note)
         {
-            try
+            if (await _userRepository.GetQuickNoteCount(userId) >= NoteMaxCount)
             {
-                if (await _userRepository.GetQuickNoteCount(userId) >= NoteMaxCount)
-                {
-                    return ServiceResult<UserNote>.Fail($"You can have at most {NoteMaxCount} notes.");
-                }
-                title = InputSanitizer.SanitizePlainText(title);
-                if (title.Length > NoteTitleMaxLenght)
-                {
-                    return ServiceResult<UserNote>.Fail($"Title must be less than {NoteTitleMaxLenght} characters.");
-                }
-                note = InputSanitizer.SanitizePlainText(note);
-                if (note.Length > NoteMaxLength)
-                {
-                    return ServiceResult<UserNote>.Fail($"Note must be less than {NoteMaxLength} characters.");
-                }
-                return ServiceResult<UserNote>.Ok(await _userRepository.AddQuickNote(userId, title, note));
+                return ServiceResult<UserNote>.Fail($"You can have at most {NoteMaxCount} notes.");
             }
-            catch (Exception)
+            title = InputSanitizer.SanitizePlainText(title);
+            if (title.Length > NoteTitleMaxLength)
             {
-                return ServiceResult<UserNote>.Fail("A database error occurred, please try again.");
+                return ServiceResult<UserNote>.Fail($"Title must be less than {NoteTitleMaxLength} characters.");
             }
+            note = InputSanitizer.SanitizePlainText(note);
+            if (note.Length > NoteMaxLength)
+            {
+                return ServiceResult<UserNote>.Fail($"Note must be less than {NoteMaxLength} characters.");
+            }
+            return ServiceResult<UserNote>.Ok(await _userRepository.AddQuickNote(userId, title, note));
         }
 
         public async Task<ServiceResult> RenameQuickNote(long userId, long noteId, string title)
         {
-            try
+            if (!await _userRepository.ValidateQuickNote(userId, noteId))
             {
-                if (!await _userRepository.ValidateQuickNote(userId, noteId))
-                {
-                    return ServiceResult.Fail("You do not have permission to manage this note.");
-                }
-                title = InputSanitizer.SanitizePlainText(title);
-                if (title.Length > NoteTitleMaxLenght)
-                {
-                    return ServiceResult<UserNote>.Fail($"Title must be less than {NoteTitleMaxLenght} characters.");
-                }
-                await _userRepository.RenameQuickNote(userId, noteId, title);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to manage this note.");
             }
-            catch (Exception)
+            title = InputSanitizer.SanitizePlainText(title);
+            if (title.Length > NoteTitleMaxLength)
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult<UserNote>.Fail($"Title must be less than {NoteTitleMaxLength} characters.");
             }
+            await _userRepository.RenameQuickNote(userId, noteId, title);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> DeleteQuickNote(long userId, long noteId)
         {
-            try
+            if (!await _userRepository.ValidateQuickNote(userId, noteId))
             {
-                if (!await _userRepository.ValidateQuickNote(userId, noteId))
-                {
-                    return ServiceResult.Fail("You do not have permission to manage this note.");
-                }
-                if (await _userRepository.GetQuickNoteCount(userId) <= 1)
-                {
-                    return ServiceResult.Fail("You must have at least one note.");
-                }
-                await _userRepository.DeleteQuickNote(userId, noteId);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to manage this note.");
             }
-            catch (Exception)
+            if (await _userRepository.GetQuickNoteCount(userId) <= 1)
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult.Fail("You must have at least one note.");
             }
+            await _userRepository.DeleteQuickNote(userId, noteId);
+            return ServiceResult.Ok();
         }
 
         public async Task<ServiceResult> UpdateQuickNote(long userId, long noteId, string note)
         {
-            try
+            if (!await _userRepository.ValidateQuickNote(userId, noteId))
             {
-                if (!await _userRepository.ValidateQuickNote(userId, noteId))
-                {
-                    return ServiceResult.Fail("You do not have permission to manage this note.");
-                }
-                note = InputSanitizer.SanitizePlainText(note);
-                if (note.Length > NoteMaxLength)
-                {
-                    return ServiceResult<BoardColumn>.Fail($"Note must be less than {NoteMaxLength} characters.");
-                }
-                await _userRepository.UpdateQuickNote(userId, noteId, note);
-                return ServiceResult.Ok();
+                return ServiceResult.Fail("You do not have permission to manage this note.");
             }
-            catch (Exception)
+            note = InputSanitizer.SanitizePlainText(note);
+            if (note.Length > NoteMaxLength)
             {
-                return ServiceResult.Fail("A database error occurred, please try again.");
+                return ServiceResult<BoardColumn>.Fail($"Note must be less than {NoteMaxLength} characters.");
             }
+            await _userRepository.UpdateQuickNote(userId, noteId, note);
+            return ServiceResult.Ok();
         }
     }
 }

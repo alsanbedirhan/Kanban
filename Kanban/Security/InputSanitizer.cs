@@ -7,6 +7,7 @@ namespace Kanban.Security
     {
         private static readonly HtmlSanitizer HtmlSanitizer = CreateSanitizer();
         private static readonly Regex HexColorRegex = new(@"^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
+        private static readonly Regex UnsafeCharsRegex = new(@"[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F‪-‮⁦-⁩]", RegexOptions.Compiled);
 
         private static HtmlSanitizer CreateSanitizer()
         {
@@ -31,7 +32,7 @@ namespace Kanban.Security
             if (string.IsNullOrWhiteSpace(text))
                 return string.Empty;
 
-            return HtmlSanitizer.Sanitize(text).Trim();
+            return UnsafeCharsRegex.Replace(text, string.Empty).Trim();
         }
 
         public static string NormalizeHexColor(string? color, string fallback = "#ffffff") =>

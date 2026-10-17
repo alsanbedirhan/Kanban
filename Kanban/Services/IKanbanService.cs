@@ -30,6 +30,7 @@ namespace Kanban.Services
         Task<ServiceResult> DeleteCard(long userId, long boardId, long cardId);
         Task<ServiceResult> InviteUserToBoard(long senderUserId, string senderFullName, string senderEmail, long boardId, string email);
         Task<ServiceResult<InviteStatus>> VerifyActivationToken(long activeUserId, string token);
+        Task<string?> GetInvitePreview(string token);
         Task<ServiceResult<List<InviteResultModel>>> GetInvites(string email);
         string GenerateJwt(string email, long inviteId, long boardId);
         Task<ServiceResult> WorkInvite(string email, long userId, long inviteId, bool isAccepted);

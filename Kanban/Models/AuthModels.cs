@@ -25,6 +25,7 @@ namespace Kanban.Models
     }
     public class EmailSettings
     {
+        public int DailyLimit { get; set; } = 250;
         public string ConnectionString { get; set; } = string.Empty;
         public string SenderEmail { get; set; } = string.Empty;
         public string Domain { get; set; } = string.Empty;
@@ -34,7 +35,13 @@ namespace Kanban.Models
         public string Key { get; set; } = string.Empty;
         public string Issuer { get; set; } = string.Empty;
         public string Audience { get; set; } = string.Empty;
-        public int ExpireMinutes { get; set; }
+        /// <summary>Lifetime of board invite links; email invites need days, not minutes.</summary>
+        public int InviteExpireHours { get; set; } = 72;
+    }
+    public class InviteTokenModel
+    {
+        [Required, MaxLength(2048)]
+        public string token { get; set; } = string.Empty;
     }
     public class AntiforgeryTokenResult
     {

@@ -11,23 +11,23 @@ namespace Kanban.Controllers
     public class KanbanController : Controller
     {
         private readonly IKanbanService _kanbanService;
-        private readonly IDBDateTimeProvider _dbDate;
-        public KanbanController(IKanbanService kanbanService, IDBDateTimeProvider dbDate)
+        private readonly TimeProvider _time;
+        public KanbanController(IKanbanService kanbanService, TimeProvider time)
         {
             _kanbanService = kanbanService;
-            _dbDate = dbDate;
+            _time = time;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetBoard(long boardId)
         {
             var userId = User.GetUserId();
+            var now = _time.LocalNow();
             var r = await _kanbanService.GetBoardDetail(userId, boardId);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));
             }
-            var now = await _dbDate.Now();
             return Ok(ServiceResult<Tuple<List<BoardColumnResultModel>, DateTime>>.Ok(Tuple.Create(r.Data, now)));
         }
 

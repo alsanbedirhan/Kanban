@@ -1,5 +1,6 @@
 using Kanban;
 using Kanban.Entities;
+using Kanban.Hubs;
 using Kanban.Repositories;
 using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
@@ -19,19 +20,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 static bool IsApiRequest(HttpRequest request) => AuthRecovery.WantsJsonResponse(request);
 
-static (int StatusCode, string Message) MapUnhandledException(Exception? error) => error switch
-{
-    AntiforgeryValidationException =>
-        (StatusCodes.Status400BadRequest, "Session validation failed. Please refresh the page and try again."),
-    BadHttpRequestException =>
-        (StatusCodes.Status400BadRequest, "Invalid request."),
-    _ =>
-        (StatusCodes.Status500InternalServerError, "An unexpected error occurred. Please try again.")
-};
-
-static bool IsClientDisconnect(Exception? error) =>
-    error is OperationCanceledException or TaskCanceledException;
-
 static async Task RejectPrincipalAsync(CookieValidatePrincipalContext context)
 {
     context.RejectPrincipal();
@@ -40,6 +28,12 @@ static async Task RejectPrincipalAsync(CookieValidatePrincipalContext context)
 
 static string GetClientPartitionKey(HttpContext context) =>
     context.Connection.RemoteIpAddress?.ToString() ?? context.TraceIdentifier;
+
+static string GetApiPartitionKey(HttpContext context)
+{
+    var userId = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    return string.IsNullOrEmpty(userId) ? $"ip:{GetClientPartitionKey(context)}" : $"user:{userId}";
+}
 
 builder.Services.AddDbContext<KanbanDbContext>(options =>
     options.UseSqlServer(
@@ -50,12 +44,17 @@ builder.Services.AddDbContext<KanbanDbContext>(options =>
             errorNumbersToAdd: null)));
 
 builder.Services.AddScoped<IUserSecurityService, UserSecurityService>();
-builder.Services.AddScoped<IDBDateTimeProvider, DBDateTimeProvider>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IKanbanRepository, KanbanRepository>();
 builder.Services.AddScoped<IKanbanService, KanbanService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IBoardNotifier, BoardNotifier>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSignalR();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 builder.Services.AddHttpClient<ITurnstileService, TurnstileService>();
 
@@ -76,8 +75,10 @@ var cookieSecurePolicy = builder.Environment.IsDevelopment()
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    foreach (var cidr in builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+    {
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(cidr));
+    }
 });
 
 builder.Services.AddDataProtection()
@@ -158,7 +159,17 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy("api", context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            GetClientPartitionKey(context),
+            GetApiPartitionKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    options.AddPolicy("page", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetApiPartitionKey(context),
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 120,
@@ -265,6 +276,9 @@ builder.Services.AddControllersWithViews(options =>
     options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
 });
 
+var appDomain = builder.Configuration["EmailSettings:Domain"];
+var websocketSource = string.IsNullOrWhiteSpace(appDomain) ? "" : $" wss://{appDomain}";
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -272,31 +286,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseExceptionHandler(errorApp =>
-{
-    errorApp.Run(async context =>
-    {
-        var feature = context.Features.Get<IExceptionHandlerPathFeature>();
-        var error = feature?.Error;
-        if (IsClientDisconnect(error))
-            return;
-
-        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
-        logger.LogError(error, "Unhandled error. Path: {Path}", feature?.Path);
-
-        if (IsApiRequest(context.Request))
-        {
-            var (statusCode, message) = MapUnhandledException(error);
-            context.Response.StatusCode = statusCode;
-            context.Response.ContentType = "application/json; charset=utf-8";
-            await context.Response.WriteAsJsonAsync(ServiceResult.Fail(message));
-            return;
-        }
-
-        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-        context.Response.Redirect("/Error/500");
-    });
-});
+app.UseExceptionHandler();
 
 app.UseRewriter(new RewriteOptions().AddRedirectToNonWwwPermanent());
 app.UseForwardedHeaders();
@@ -305,12 +295,12 @@ app.Use(async (context, next) =>
 {
     var csp = new StringBuilder();
     csp.Append("default-src 'self'; ");
-    csp.Append("script-src 'self' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.quilljs.com; ");
-    csp.Append("script-src-elem 'self' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.quilljs.com; ");
-    csp.Append("style-src 'self' 'unsafe-inline' https://cdn.quilljs.com https://cdn.jsdelivr.net; ");
-    csp.Append("style-src-elem 'self' 'unsafe-inline' https://cdn.quilljs.com https://cdn.jsdelivr.net; ");
+    csp.Append("script-src 'self' https://challenges.cloudflare.com; ");
+    csp.Append("script-src-elem 'self' https://challenges.cloudflare.com; ");
+    csp.Append("style-src 'self' 'unsafe-inline'; ");
+    csp.Append("style-src-elem 'self' 'unsafe-inline'; ");
     csp.Append("frame-src 'self' https://challenges.cloudflare.com; ");
-    csp.Append("connect-src 'self' https://challenges.cloudflare.com");
+    csp.Append($"connect-src 'self'{websocketSource} https://challenges.cloudflare.com");
     if (app.Environment.IsDevelopment())
     {
         csp.Append(" ws://localhost:* http://localhost:*");
@@ -354,6 +344,8 @@ app.UseWhen(
 
         context.Request.Path = $"/Error/{statusCode}";
         context.Request.QueryString = QueryString.Empty;
+        context.SetEndpoint(null);
+        context.Request.RouteValues.Clear();
 
         try
         {
@@ -367,7 +359,6 @@ app.UseWhen(
     }));
 app.UseRouting();
 
-app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();
 app.Use(async (context, next) =>
@@ -380,6 +371,7 @@ app.Use(async (context, next) =>
     if (!context.Response.HasStarted && AuthRecovery.HasStaleAuthCookie(context))
         await AuthRecovery.ClearSessionAsync(context);
 });
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapStaticAssets();
@@ -388,5 +380,7 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
+
+app.MapHub<BoardHub>("/hubs/board");
 
 app.Run();

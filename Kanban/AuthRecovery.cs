@@ -24,6 +24,7 @@ public static class AuthRecovery
         var path = request.Path.Value ?? string.Empty;
         return path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/lib/", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/icons/", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/favicon.ico", StringComparison.OrdinalIgnoreCase)

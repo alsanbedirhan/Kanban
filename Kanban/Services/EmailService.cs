@@ -1,18 +1,30 @@
 ﻿using Azure;
 using Azure.Communication.Email;
 using Kanban.Models;
+using Kanban.Repositories;
+using Microsoft.Extensions.Caching.Memory;
+using System.Net;
 
 namespace Kanban.Services
 {
     public class EmailService : IEmailService
     {
+        private static readonly SemaphoreSlim DailyCounterLock = new(1, 1);
+
         private readonly EmailSettings? _emailSettings;
         private readonly EmailClient? _client;
         private readonly ILogger<EmailService> _logger;
+        private readonly IMemoryCache _cache;
+        private readonly IUserRepository _userRepository;
+        private readonly TimeProvider _time;
 
-        public EmailService(IConfiguration config, ILogger<EmailService> logger)
+        public EmailService(IConfiguration config, ILogger<EmailService> logger, IMemoryCache cache,
+            IUserRepository userRepository, TimeProvider time)
         {
             _logger = logger;
+            _cache = cache;
+            _userRepository = userRepository;
+            _time = time;
             _emailSettings = config.GetSection("EmailSettings").Get<EmailSettings>();
 
             if (_emailSettings == null
@@ -33,12 +45,18 @@ namespace Kanban.Services
             }
         }
 
-        public async Task SendEmail(string to, string subject, string bodyHtml)
+        public async Task<bool> SendEmail(string to, string subject, string bodyHtml)
         {
             if (_client == null || _emailSettings == null)
             {
                 _logger.LogWarning("Email could not be sent (Azure configuration is missing). Recipient: {To}", to);
-                return;
+                return false;
+            }
+
+            if (!await TryReserveDailySlot())
+            {
+                _logger.LogWarning("Daily email limit reached ({Limit}). Recipient: {To}", _emailSettings.DailyLimit, to);
+                return false;
             }
 
             var emailMessage = new EmailMessage(
@@ -61,7 +79,7 @@ namespace Kanban.Services
                     {
                         throw new Exception($"Azure Email API Error. Status: {emailSendOperation.Value.Status}");
                     }
-                    return; // Başarılıysa döngüden çık
+                    return true;
                 }
                 catch (Exception ex)
                 {
@@ -77,9 +95,10 @@ namespace Kanban.Services
                     }
                 }
             }
+            return false;
         }
 
-        public async Task SendVerificationCode(string to, string code)
+        public async Task<bool> SendVerificationCode(string to, string code)
         {
             string html = $@"
 <!DOCTYPE html>
@@ -168,11 +187,17 @@ namespace Kanban.Services
 </body>
 </html>";
 
-            await SendEmail(to, "Account Verification Code", html);
+            return await SendEmail(to, "Account Verification Code", html);
         }
 
-        public async Task SendInvite(string to, string senderFullName, string senderEmail, string boardTitle, string token)
+        public async Task<bool> SendInvite(string to, string senderFullName, string senderEmail, string boardTitle, string token)
         {
+            // User-supplied values; encode before placing them in the HTML body.
+            var safeSenderName = WebUtility.HtmlEncode(senderFullName);
+            var safeSenderEmail = WebUtility.HtmlEncode(senderEmail);
+            var safeBoardTitle = WebUtility.HtmlEncode(boardTitle);
+            var safeToken = Uri.EscapeDataString(token);
+
             string html = $@"
 <!DOCTYPE html>
 <html>
@@ -248,11 +273,11 @@ namespace Kanban.Services
         </div>
         <div class='content'>
             <p>Hello,</p>
-            <p><b>{senderFullName}</b> ({senderEmail}) has invited you to collaborate on the board <b>""{boardTitle}""</b>.</p>
+            <p><b>{safeSenderName}</b> ({safeSenderEmail}) has invited you to collaborate on the board <b>""{safeBoardTitle}""</b>.</p>
             <p>Please log in to your Kanflow account to accept or decline this invitation.</p>
             
             <div class='button-container'>
-                <a href='https://www.{_emailSettings?.Domain}?token={token}' class='btn'>Open Board</a>
+                <a href='https://{_emailSettings?.Domain}/?token={safeToken}' class='btn'>Open Board</a>
             </div>
             
             <p style='color: #6b7280; font-size: 14px;'>If you did not expect this invitation, you can safely ignore this email.</p>
@@ -264,7 +289,36 @@ namespace Kanban.Services
 </body>
 </html>";
 
-            await SendEmail(to, $"Invitation to collaborate on {boardTitle}", html);
+            return await SendEmail(to, $"Invitation to collaborate on {boardTitle}", html);
+        }
+
+        private async Task<bool> TryReserveDailySlot()
+        {
+            var now = _time.GetLocalNow();
+            var cacheKey = $"EmailCount_{now:yyyyMMdd}";
+            var endOfDay = new DateTimeOffset(now.Date.AddDays(1), now.Offset);
+
+            await DailyCounterLock.WaitAsync();
+            try
+            {
+                // Seeded from the database so an app restart does not reset the day's count.
+                if (!_cache.TryGetValue(cacheKey, out int currentCount))
+                {
+                    currentCount = await _userRepository.GetEmailCountToday();
+                }
+
+                if (currentCount >= _emailSettings?.DailyLimit)
+                {
+                    return false;
+                }
+
+                _cache.Set(cacheKey, currentCount + 1, endOfDay);
+                return true;
+            }
+            finally
+            {
+                DailyCounterLock.Release();
+            }
         }
     }
 }

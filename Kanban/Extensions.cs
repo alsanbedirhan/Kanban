@@ -95,32 +95,10 @@ namespace Kanban
         ERROR,
         NONE,
         WRONG_ACC,
+        PENDING,
     }
-    public interface IDBDateTimeProvider
+    public static class TimeProviderExtensions
     {
-        Task<DateTime> Now();
-    }
-    public class DBDateTimeProvider : IDBDateTimeProvider
-    {
-        private readonly KanbanDbContext _context;
-
-        public DBDateTimeProvider(KanbanDbContext context)
-        {
-            _context = context;
-        }
-
-        public async Task<DateTime> Now()
-        {
-            var connection = _context.Database.GetDbConnection();
-
-            if (connection.State != System.Data.ConnectionState.Open)
-                await connection.OpenAsync();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = "SELECT GETDATE()";
-
-            var result = await command.ExecuteScalarAsync();
-            return (DateTime)result!;
-        }
+        public static DateTime LocalNow(this TimeProvider time) => time.GetLocalNow().DateTime;
     }
 }

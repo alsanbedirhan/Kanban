@@ -4,9 +4,11 @@ using Kanban.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Kanban.Controllers
 {
+    [EnableRateLimiting("page")]
     public class HomeController : Controller
     {
         private readonly IKanbanService _kanbanService;
@@ -25,13 +27,39 @@ namespace Kanban.Controllers
 
             if (!string.IsNullOrEmpty(token))
             {
-                var r = await _kanbanService.VerifyActivationToken(User.GetUserId(), token);
-                if (r != null)
+                var boardTitle = await _kanbanService.GetInvitePreview(token);
+                if (boardTitle == null)
                 {
-                    return View(r);
+                    return View(ServiceResult<InviteStatus>.Ok(InviteStatus.ERROR));
                 }
+
+                ViewData["InviteToken"] = token;
+                var pending = ServiceResult<InviteStatus>.Ok(InviteStatus.PENDING);
+                pending.ErrorMessage = boardTitle;
+                return View(pending);
             }
             return View(ServiceResult<InviteStatus>.Ok(InviteStatus.NONE));
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        [EnableRateLimiting("auth")]
+        public async Task<IActionResult> AcceptInvite([FromBody] InviteTokenModel model)
+        {
+            var status = InviteStatus.ERROR;
+            string? message = null;
+            if (ModelState.IsValid)
+            {
+                var r = await _kanbanService.VerifyActivationToken(User.GetUserId(), model.token);
+                status = r.Data;
+                message = status == InviteStatus.WRONG_ACC
+                    ? $"{User.GetEmail()}|{r.ErrorMessage}"
+                    : r.ErrorMessage;
+            }
+
+            var result = ServiceResult<string>.Ok(status.ToString());
+            result.ErrorMessage = message;
+            return Ok(result);
         }
 
         [HttpGet]
