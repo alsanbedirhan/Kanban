@@ -526,6 +526,14 @@ function setupOfflineDetection() {
     window.addEventListener('online', () => showToast('Back online', 'success', 2000));
 }
 
+function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .catch(err => console.warn('Service worker registration failed:', err));
+    });
+}
+
 function focusBoardSearch() {
     const wrap = document.getElementById('boardSearchWrap');
     const toggle = document.getElementById('boardSearchToggleBtn');
@@ -3736,6 +3744,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     setupModalsAndKeyboard();
     setupVisibilitySync();
     setupOfflineDetection();
+    registerServiceWorker();
 
     const searchInput = document.getElementById('boardSearchInput');
     if (searchInput) searchInput.addEventListener('input', handleBoardSearchInput);

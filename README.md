@@ -34,7 +34,8 @@ Kanflow is a Kanban task board built with ASP.NET Core and vanilla JavaScript. O
 
 ### UX & reliability
 - Responsive layout for desktop and mobile
-- Installable PWA (`manifest.json`, theme color, app icons)
+- Installable PWA (`manifest.json`, theme color, app icons incl. a padded maskable icon)
+- Service worker (`wwwroot/sw.js`): caches static assets (libraries, versioned CSS/JS, icons) and shows `offline.html` when the app is opened without a connection; pages, API calls, SignalR and auth are never cached. Bump `CACHE` in `sw.js` to clear old caches
 - Offline detection toasts (connection lost / back online)
 - Central exception handler (`ApiExceptionHandler`): errors are logged and API calls get a JSON `{ success, errorMessage }` response
 

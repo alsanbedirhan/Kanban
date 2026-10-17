@@ -30,6 +30,8 @@ public static class AuthRecovery
             || path.Equals("/favicon.ico", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/favicon.svg", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/manifest.json", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/sw.js", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/offline.html", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/logo.png", StringComparison.OrdinalIgnoreCase);
     }
 

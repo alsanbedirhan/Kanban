@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#289f51">
+    <title>kanflow · offline</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(90deg, #1a6b36 0%, #207d41 40%, #2b4e91 100%);
+            color: #2d3748;
+        }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .card {
+            width: 100%;
+            max-width: 380px;
+            padding: 32px 24px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
+            text-align: center;
+        }
+        .card img { width: 56px; height: 56px; }
+        h1 { margin: 16px 0 8px; font-size: 22px; }
+        p { margin: 0 0 24px; color: #718096; line-height: 1.5; }
+        a {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 10px;
+            background: #289f51;
+            color: #fff;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        a:hover { background: #124d26; }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <img src="/icons/icon-192.png" alt="">
+        <h1>You're offline</h1>
+        <p>Kanflow needs an internet connection to load your boards. Check your connection and try again.</p>
+        <a href="/">Try again</a>
+    </main>
+</body>
+</html>

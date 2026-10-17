@@ -1,12 +1,14 @@
 {
+  "id": "/",
   "name": "Kanflow",
   "short_name": "Kanflow",
   "description": "Manage projects with Kanban boards. Organize tasks and collaborate with your team.",
+  "lang": "en",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#ffffff",
+  "background_color": "#1a6b36",
   "theme_color": "#289f51",
   "icons": [
     {
@@ -22,7 +24,7 @@
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
