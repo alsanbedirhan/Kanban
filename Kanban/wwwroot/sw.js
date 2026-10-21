@@ -1,7 +1,7 @@
 'use strict';
 
 // Bump to drop every cached file on the next activation.
-const CACHE = 'kanflow-static-v1';
+const CACHE = 'kanflow-static-v2';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [OFFLINE_URL, '/icons/icon-192.png', '/favicon.svg'];
 

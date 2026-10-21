@@ -145,21 +145,27 @@ const SWAL_BTN = {
     neutral: 'btn btn-secondary'
 };
 
+const ICON_SPRITE = '/lib/lucide-1.51.0/sprite.svg';
+
+function icon(name, extraClass = '') {
+    return `<svg class="icon${extraClass ? ' ' + extraClass : ''}" aria-hidden="true" focusable="false"><use href="${ICON_SPRITE}#${name}"></use></svg>`;
+}
+
 // Action buttons carry an icon; dismissive buttons (Cancel/Close/OK) never do.
 const UI_ICON = {
-    create: '➕',
-    save: '💾',
-    delete: '🗑️',
-    send: '📨',
-    verify: '✅',
-    login: '🔐',
-    register: '📝',
-    logout: '🚪',
-    rename: '✏️',
-    members: '👥',
-    owner: '👑',
-    accept: '✔️',
-    decline: '✖️'
+    create: icon('plus'),
+    save: icon('save'),
+    delete: icon('trash-2'),
+    send: icon('send'),
+    verify: icon('check'),
+    login: icon('log-in'),
+    register: icon('user-plus'),
+    logout: icon('log-out'),
+    rename: icon('pencil'),
+    members: icon('users'),
+    owner: icon('crown'),
+    accept: icon('check'),
+    decline: icon('x')
 };
 
 function swalDialog(options = {}) {
@@ -193,6 +199,11 @@ function swalDialog(options = {}) {
             cancelButton: SWAL_BTN[cancelVariant] || SWAL_BTN.neutral
         }
     });
+}
+
+// SweetAlert2 also resolves a dialog as dismissed (without a reason) when another dialog replaces it.
+function closedByUser(result) {
+    return !!(result?.isConfirmed || result?.isDenied || result?.dismiss);
 }
 
 function swalAlert(icon, title, text, options = {}) {
@@ -236,24 +247,28 @@ function swalPasswordField(id, placeholder) {
     return `
         <div class="kf-password-field">
             <input id="${id}" type="password" class="kf-input" placeholder="${placeholder}">
-            <button type="button" class="kf-pass-toggle pass-toggle" tabindex="-1" data-target="${id}" aria-label="Show password">🙈</button>
+            <button type="button" class="kf-pass-toggle pass-toggle" tabindex="-1" data-target="${id}" aria-label="Show password">${icon('eye')}</button>
         </div>`;
+}
+
+function togglePasswordVisibility(input, toggle) {
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    toggle.innerHTML = icon(show ? 'eye-off' : 'eye');
+    toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
 }
 
 function bindSwalPasswordToggles(root = Swal.getPopup()) {
     root?.querySelectorAll('.pass-toggle').forEach(toggle => {
         toggle.addEventListener('click', () => {
             const input = root.querySelector(`#${toggle.getAttribute('data-target')}`);
-            if (!input) return;
-            const show = input.type === 'password';
-            input.type = show ? 'text' : 'password';
-            toggle.textContent = show ? '🙊' : '🙈';
+            if (input) togglePasswordVisibility(input, toggle);
         });
     });
 }
 
-function showToast(title, icon = 'info', timer = 2500) {
-    const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+function showToast(title, kind = 'info', timer = 2500) {
+    const icons = { success: 'circle-check', error: 'circle-x', warning: 'triangle-alert', info: 'info' };
 
     let host = document.getElementById('kf-toast-host');
     if (!host) {
@@ -264,9 +279,10 @@ function showToast(title, icon = 'info', timer = 2500) {
     }
 
     const el = document.createElement('div');
-    el.className = `kf-toast kf-toast--${icon}`;
+    const type = icons[kind] ? kind : 'info';
+    el.className = `kf-toast kf-toast--${type}`;
     el.innerHTML = `
-        <span class="kf-toast-icon" aria-hidden="true">${icons[icon] || icons.info}</span>
+        <span class="kf-toast-icon" aria-hidden="true">${icon(icons[type])}</span>
         <span class="kf-toast-text">${escapeHtml(title)}</span>`;
     host.appendChild(el);
 
@@ -994,7 +1010,7 @@ async function openNotifications() {
         const listItemsHtml = res.data.map(n => `
             <div id="notif-${n.id}" class="kf-notif">
                 <div class="kf-notif-main">
-                    <span class="kf-notif-icon" aria-hidden="true">📢</span>
+                    <span class="kf-notif-icon" aria-hidden="true">${icon('bell')}</span>
                     <div>
                         <div class="kf-notif-text">${escapeHtml(n.message)}</div>
                         <div class="kf-notif-time">
@@ -1031,7 +1047,9 @@ async function openNotifications() {
                     if (btn?.dataset.notifId) deleteNotification(Number(btn.dataset.notifId));
                 });
             }
-        }).then(() => openProfileMenu());
+        }).then(result => {
+            if (closedByUser(result)) openProfileMenu();
+        });
 
     } catch (e) {
         console.error(e);
@@ -1090,7 +1108,7 @@ async function deleteAllNotifications() {
             console.error(e);
             swalAlert('error', 'Error', 'Network error.');
         }
-    } else {
+    } else if (closedByUser(confirm)) {
         openNotifications();
     }
 }
@@ -1118,7 +1136,7 @@ async function openPendingInvites() {
 
         const invitesHtml = res.data.map(invite => `
             <div class="kf-invite">
-                <div class="kf-invite-board">📂 ${escapeHtml(invite.boardName)}</div>
+                <div class="kf-invite-board">${icon('folder')} ${escapeHtml(invite.boardName)}</div>
                 <div class="kf-invite-meta">Invited by: <b>${escapeHtml(invite.inviterName)}</b></div>
                 <div class="kf-invite-actions">
                     <button type="button" class="btn btn-sm btn-primary invite-accept-btn" data-invite-id="${invite.id}">
@@ -1146,7 +1164,9 @@ async function openPendingInvites() {
                     }
                 });
             }
-        }).then(() => openProfileMenu());
+        }).then(result => {
+            if (closedByUser(result)) openProfileMenu();
+        });
 
     } catch (e) {
         console.error(e);
@@ -1261,6 +1281,7 @@ function openProfileMenu() {
     swalPanel({
         width: swalWidth('400px'),
         padding: '20px',
+        customClass: { popup: 'kf-swal--tall' },
         html: `
             <div class="kf-profile">
                 <img src="${avatar}" alt="" class="kf-profile-avatar">
@@ -1269,17 +1290,19 @@ function openProfileMenu() {
             </div>
             <div id="profile-menu-buttons" class="kf-menu">
                 <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="notifications">
-                    <span class="kf-menu-icon" aria-hidden="true">🔔</span> Notifications
+                    <span class="kf-menu-icon" aria-hidden="true">${icon('bell')}</span> Notifications
                 </button>
                 <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="invites">
-                    <span class="kf-menu-icon" aria-hidden="true">📩</span> Invites
+                    <span class="kf-menu-icon" aria-hidden="true">${icon('mail')}</span> Invites
                 </button>
                 <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="avatar">
-                    <span class="kf-menu-icon" aria-hidden="true">🎨</span> Change Avatar
+                    <span class="kf-menu-icon" aria-hidden="true">${icon('palette')}</span> Change Avatar
                 </button>
                 <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="password">
-                    <span class="kf-menu-icon" aria-hidden="true">🔑</span> Change Password
+                    <span class="kf-menu-icon" aria-hidden="true">${icon('key-round')}</span> Change Password
                 </button>
+                <div class="kf-menu-label">Theme</div>
+                ${themeSwitchHtml()}
                 <div class="kf-menu-sep"></div>
                 <button type="button" class="kf-menu-btn kf-menu-btn--danger profile-menu-btn" data-menu-action="logout">
                     <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.logout}</span> Logout
@@ -1288,6 +1311,12 @@ function openProfileMenu() {
         `,
         didOpen: () => {
             document.getElementById('profile-menu-buttons')?.addEventListener('click', (e) => {
+                const themeBtn = e.target.closest('.kf-theme-option');
+                if (themeBtn) {
+                    applyTheme(themeBtn.dataset.theme);
+                    return;
+                }
+
                 const btn = e.target.closest('.profile-menu-btn');
                 if (!btn) return;
 
@@ -1302,6 +1331,42 @@ function openProfileMenu() {
             });
         }
     });
+}
+
+// The server renders <html data-theme> from this cookie, so the page never flashes the wrong theme.
+const THEME_COOKIE = 'kanflow-theme';
+const THEME_OPTIONS = [
+    { value: 'system', label: 'System', icon: 'monitor' },
+    { value: 'light', label: 'Light', icon: 'sun' },
+    { value: 'dark', label: 'Dark', icon: 'moon' }
+];
+
+function currentThemeChoice() {
+    const theme = document.documentElement.dataset.theme;
+    return theme === 'light' || theme === 'dark' ? theme : 'system';
+}
+
+function applyTheme(choice) {
+    if (!THEME_OPTIONS.some(o => o.value === choice)) return;
+
+    if (choice === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = choice;
+
+    const secure = location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${THEME_COOKIE}=${choice}; path=/; max-age=31536000; SameSite=Lax${secure}`;
+
+    document.querySelectorAll('.kf-theme-option').forEach(btn =>
+        btn.setAttribute('aria-pressed', btn.dataset.theme === choice ? 'true' : 'false'));
+}
+
+function themeSwitchHtml() {
+    const current = currentThemeChoice();
+    return `
+        <div class="kf-theme-switch" role="group" aria-label="Theme">
+            ${THEME_OPTIONS.map(o => `
+                <button type="button" class="kf-theme-option" data-theme="${o.value}"
+                        aria-pressed="${o.value === current}">${icon(o.icon)} ${o.label}</button>`).join('')}
+        </div>`;
 }
 
 function updateAuthUI() {
@@ -1331,8 +1396,8 @@ function updateAuthUI() {
                     <div class="sidebar-user-name">${safeName}</div>
                     <div class="sidebar-user-email">${escapeHtml(AppState.currentUser.email)}</div>
                 </div>
+                <button type="button" id="sidebar-menu-btn" class="sidebar-user-menu-btn" title="Menu" aria-label="Menu">${icon('settings')}</button>
             </div>
-            <button type="button" id="sidebar-menu-btn" class="btn btn-secondary btn-block">⚙️ Menu</button>
             <button type="button" id="sidebar-logout-btn" class="btn btn-danger btn-block">${UI_ICON.logout} Logout</button>
         `;
 
@@ -1822,9 +1887,9 @@ function renderBoardList() {
 
     const boardHtml = (b) => `
         <li class="board-item ${b.id === AppState.currentBoardId ? 'active' : ''}" data-board-id="${b.id}">
-            <span>📊 ${escapeHtml(b.title)}</span>
+            <span class="board-item-title">${icon('square-kanban')} ${escapeHtml(b.title)}</span>
             <button type="button" class="board-actions-btn" data-board-menu="${b.id}"
-                    title="Board options" aria-label="Board options">⋮</button>
+                    title="Board options" aria-label="Board options">${icon('ellipsis-vertical')}</button>
         </li>
     `;
 
@@ -1904,63 +1969,41 @@ function createCardHtml(card, colId, currentUserId, isResultColumn = false) {
         </div>`;
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    let cardBgColor = '#ffffff';
-    if (card.dueDate && card.warningDays && card.highlightColor) {
-        const dueDate = new Date(card.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
-        const diffTime = dueDate - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (diffDays <= card.warningDays && diffDays >= 0) {
-            cardBgColor = isSafeHexColor(card.highlightColor) ? card.highlightColor : '#ffffff';
-        } else if (diffDays < 0) {
-            cardBgColor = '#fee2e2';
-        }
-    }
-
     const isLocked = card.assigneeId && card.assigneeId !== currentUserId;
-    const cursorStyle = isLocked ? 'not-allowed' : 'grab';
-    const lockedClass = isLocked ? 'locked-card' : '';
-    const lockIcon = isLocked ? '<span title="Locked by another user">🔒</span>' : '';
-    const opacityStyle = isLocked ? 'opacity:0.8;' : '';
+    const lockIcon = isLocked
+        ? `<span class="card-lock" title="Assigned to someone else">${icon('lock')}</span>`
+        : '';
 
     const avatarHtml = card.assigneeAvatar
-        ? `<img src="${getAvatarPath(card.assigneeAvatar)}" title="${escapeHtml(card.assigneeName)}" class="card-avatar-small">`
-        : `<span class="card-avatar-empty" title="Unassigned">👤</span>`;
+        ? `<img src="${getAvatarPath(card.assigneeAvatar)}" title="${escapeHtml(card.assigneeName)}" alt="" class="card-avatar-small">`
+        : `<span class="card-avatar-empty" title="Unassigned">${icon('user')}</span>`;
 
     const descText = stripHtml(card.desc).trim();
 
     const moveButtonsHtml = isLocked ? '' : `
         <div class="card-move-buttons">
-            <button class="move-card-top-btn card-action-btn" data-card-id="${card.id}" data-col-id="${colId}" title="Move to Top" type="button">▲</button>
-            <button class="move-card-bottom-btn card-action-btn" data-card-id="${card.id}" data-col-id="${colId}" title="Move to Bottom" type="button">▼</button>
+            <button class="move-card-top-btn card-action-btn" data-card-id="${card.id}" data-col-id="${colId}" title="Move to top" aria-label="Move to top" type="button">${icon('arrow-up-to-line')}</button>
+            <button class="move-card-bottom-btn card-action-btn" data-card-id="${card.id}" data-col-id="${colId}" title="Move to bottom" aria-label="Move to bottom" type="button">${icon('arrow-down-to-line')}</button>
         </div>
     `;
 
     return `
-        <div class="card ${lockedClass}"
+        <div class="card${isLocked ? ' locked-card' : ''}"
              data-card-id="${card.id}"
-             data-col-id="${colId}"
-             style="background-color:${cardBgColor}; transition:background-color 0.3s; cursor:${cursorStyle}; ${opacityStyle}">
+             data-col-id="${colId}">
 
             <div class="card-head-row">
-                <div class="card-head-meta">
-                    ${lockIcon}
-                    ${card.dueDate ? `<span class="card-date">📅 ${new Date(card.dueDate).toLocaleDateString(UI_LOCALE)}</span>` : ''}
-                </div>
+                <h3 class="card-title">${escapeHtml(cardDisplayTitle(card))}</h3>
                 <button type="button" class="card-delete-btn" data-card-id="${card.id}"
-                        title="Delete card" aria-label="Delete card">×</button>
+                        title="Delete card" aria-label="Delete card">${icon('x')}</button>
             </div>
-
-            <h3 class="card-title">${escapeHtml(cardDisplayTitle(card))}</h3>
 
             ${descText ? `<p class="card-desc-truncate">${escapeHtml(descText)}</p>` : ''}
 
             <div class="card-footer">
-                <div class="card-owner-name">
-                    ${card.assigneeName ? escapeHtml(card.assigneeName.split(' ')[0]) : 'Unassigned'}
+                <div class="card-head-meta">
+                    ${dueChipHtml(card)}
+                    ${lockIcon}
                 </div>
                 <div class="card-footer-actions">
                     ${moveButtonsHtml}
@@ -1969,6 +2012,35 @@ function createCardHtml(card, colId, currentUserId, isResultColumn = false) {
             </div>
         </div>
     `;
+}
+
+function dueChipHtml(card) {
+    if (!card.dueDate) return '';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(card.dueDate);
+    due.setHours(0, 0, 0, 0);
+    const days = Math.round((due - today) / 86400000);
+
+    const fullDate = due.toLocaleDateString(UI_LOCALE, { day: 'numeric', month: 'long', year: 'numeric' });
+    let kind = '';
+    let name = 'calendar';
+    let label = due.toLocaleDateString(UI_LOCALE, { day: 'numeric', month: 'short' });
+    let style = '';
+
+    if (days < 0) {
+        kind = 'overdue';
+        name = 'calendar-x';
+        label = days === -1 ? '1 day overdue' : `${-days} days overdue`;
+    } else if (days === 0 || (card.warningDays > 0 && days <= card.warningDays)) {
+        kind = 'soon';
+        name = 'calendar-clock';
+        label = days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `${days} days left`;
+        if (isSafeHexColor(card.highlightColor)) style = ` style="--chip-color:${card.highlightColor}"`;
+    }
+
+    return `<span class="due-chip${kind ? ` due-chip--${kind}` : ''}"${style} title="Due ${escapeHtml(fullDate)}">${icon(name)}${escapeHtml(label)}</span>`;
 }
 
 // Returns true on success, false when the server refused, null on a network/HTTP failure.
@@ -2016,7 +2088,7 @@ async function handleLoadMore(colId, btnElement) {
     const skipCount = col.cards.length;
     const currentUserId = AppState.currentUser ? AppState.currentUser.userId : 0;
 
-    const originalText = btnElement.textContent;
+    const originalHtml = btnElement.innerHTML;
     btnElement.disabled = true;
     btnElement.textContent = "Loading...";
 
@@ -2024,10 +2096,12 @@ async function handleLoadMore(colId, btnElement) {
         const res = await apiRequest(`/Kanban/GetMoreCards?boardId=${AppState.currentBoardId}&columnId=${colId}&skipCount=${skipCount}`, {}, false);
         if (!res?.success) {
             btnElement.disabled = false;
-            btnElement.textContent = originalText;
+            btnElement.innerHTML = originalHtml;
+            btnElement.dataset.failed = '1';
             showToast(res?.errorMessage || 'Could not load more cards', 'error');
             return;
         }
+        delete btnElement.dataset.failed;
         const newCards = res.data;
 
         if (newCards && newCards.length > 0) {
@@ -2044,7 +2118,7 @@ async function handleLoadMore(colId, btnElement) {
                 btnElement.remove();
             } else {
                 btnElement.disabled = false;
-                btnElement.textContent = "Show More";
+                btnElement.innerHTML = loadMoreLabel(col.totalCards - col.cards.length);
             }
 
             initSortable();
@@ -2053,7 +2127,8 @@ async function handleLoadMore(colId, btnElement) {
         }
     } catch (e) {
         btnElement.disabled = false;
-        btnElement.textContent = originalText;
+        btnElement.innerHTML = originalHtml;
+        btnElement.dataset.failed = '1';
     }
 }
 
@@ -2098,7 +2173,7 @@ async function startRenameProcess(boardId) {
 
         renderBoardList();
         showToast('Board renamed', 'success');
-    } else if (result.isDismissed) {
+    } else if (closedByUser(result)) {
         showBoardMenu(boardId);
     }
 }
@@ -2166,7 +2241,7 @@ async function openManageUsersModal(boardId) {
 
             const roleBadge = isTargetOwner
                 ? `<span class="kf-badge kf-badge--owner">${UI_ICON.owner} Owner</span>`
-                : `<span class="kf-badge">👤 Member</span>`;
+                : `<span class="kf-badge">${icon('user')} Member</span>`;
 
             let actions = '';
             if (amIOwner && !isTargetOwner) {
@@ -2230,7 +2305,7 @@ async function openManageUsersModal(boardId) {
         }).then((result) => {
             if (result.isConfirmed) {
                 addUserToBoard(boardId);
-            } else {
+            } else if (closedByUser(result)) {
                 showBoardMenu(boardId);
             }
         });
@@ -2263,6 +2338,8 @@ async function promoteToOwner(boardId, userId) {
             await alertApiFailure(response, 'Failed to promote user.');
         }
         openManageUsersModal(boardId);
+    } else if (closedByUser(confirm)) {
+        openManageUsersModal(boardId);
     }
 }
 
@@ -2284,6 +2361,8 @@ async function removeMember(boardId, userId) {
         } else {
             await alertApiFailure(response, 'Failed to remove user.');
         }
+        openManageUsersModal(boardId);
+    } else if (closedByUser(confirm)) {
         openManageUsersModal(boardId);
     }
 }
@@ -2337,48 +2416,69 @@ async function deleteBoard(boardId) {
         if (AppState.currentBoardId === boardId) {
             AppState.currentBoardId = null;
             document.getElementById('board').innerHTML = '';
-            document.getElementById("boardHeader").style.display = "none";
+            const header = document.getElementById("boardHeader");
+            header.classList.add('u-hidden');
+            header.style.display = "none";
             joinCurrentBoard();
         }
         loadBoards();
         showToast(isOwner ? 'Board deleted' : 'You left the board', 'success');
-    } else {
+    } else if (closedByUser(result)) {
         showBoardMenu(boardId);
     }
 }
 
 let kanflowCalendar = null;
 
-function changeView(e) {
+function changeView() {
     const boardEl = document.getElementById('board');
     const calendarEl = document.getElementById('calendar');
-
-    let btn = null;
-    if (e && e.target) {
-        btn = e.target.closest('button');
-    }
 
     const isCalendarHidden = calendarEl.classList.contains('u-hidden') || calendarEl.style.display === 'none' || calendarEl.style.display === '';
 
     if (isCalendarHidden) {
         openCalendarView();
-
-        if (btn) {
-            btn.innerHTML = '📋';
-            btn.title = 'Board View';
-            btn.setAttribute('aria-label', 'Board view');
-        }
     } else {
         calendarEl.classList.add('u-hidden');
         calendarEl.style.display = 'none';
         boardEl.style.display = '';
-
-        if (btn) {
-            btn.innerHTML = '📅';
-            btn.title = 'Calendar View';
-            btn.setAttribute('aria-label', 'Calendar view');
-        }
     }
+
+    // The toolbar button and the mobile menu item both show the view you can switch to.
+    const label = isCalendarHidden ? 'Board view' : 'Calendar view';
+    const name = isCalendarHidden ? 'square-kanban' : 'calendar';
+    const toolbarBtn = document.getElementById('btnCalendarView');
+    if (toolbarBtn) {
+        toolbarBtn.innerHTML = icon(name);
+        toolbarBtn.title = label;
+        toolbarBtn.setAttribute('aria-label', label);
+    }
+    const menuItem = document.getElementById('menuCalendarView');
+    if (menuItem) {
+        menuItem.innerHTML = `<span class="col-menu-item-icon" aria-hidden="true">${icon(name)}</span><span>${label}</span>`;
+    }
+}
+
+function toggleBoardActionsMenu() {
+    const btn = document.getElementById('boardActionsBtn');
+    const menu = document.getElementById('boardActionsMenu');
+    if (!btn || !menu) return;
+    const willOpen = !menu.classList.contains('is-open');
+    closeAllColumnMenus();
+    if (willOpen) {
+        menu.classList.add('is-open');
+        btn.setAttribute('aria-expanded', 'true');
+    }
+}
+
+function setAddColumnAvailability(isOwner) {
+    const title = isOwner ? 'Add column' : 'Only the owner can add columns';
+    ['btnNewColumn', 'menuNewColumn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.disabled = !isOwner;
+        el.title = title;
+    });
 }
 
 function openCalendarView() {
@@ -2447,45 +2547,30 @@ function closeAllColumnMenus() {
 
 function ensureColumnMenuListener() {
     if (AppState.columnMenuListenerAttached) return;
-    document.addEventListener('click', closeAllColumnMenus);
+    document.addEventListener('click', (e) => {
+        // The toggle buttons open/close their own menu; any other click closes all menus.
+        if (e.target.closest('#boardActionsBtn')) return;
+        closeAllColumnMenus();
+    });
     AppState.columnMenuListenerAttached = true;
 }
 
 function renderColumnHeaderHtml(col, isOwner, cardCountLabel) {
-    const addCardBtn = `
-        <button type="button" class="col-add-card-btn btn btn-sm btn-square btn-primary" data-col-id="${col.id}"
-                title="Add card" aria-label="Add card">${UI_ICON.create}</button>`;
-
-    const editBtn = isOwner
-        ? `<button type="button" class="col-edit-btn btn btn-sm btn-square btn-info" data-col-id="${col.id}"
-                   title="Edit column" aria-label="Edit column">${UI_ICON.rename}</button>`
-        : '';
-
-    const deleteBtn = isOwner
-        ? `<button type="button" class="col-delete-btn btn btn-sm btn-square btn-secondary" data-col-id="${col.id}"
-                   title="Delete column" aria-label="Delete column">${UI_ICON.delete}</button>`
-        : `<button type="button" class="btn btn-sm btn-square btn-secondary" disabled
-                   title="Only the owner can delete columns" aria-label="Delete column">${UI_ICON.delete}</button>`;
-
-    const menuItems = [
-        `<button type="button" class="col-menu-item col-add-card-btn" data-col-id="${col.id}" role="menuitem">
-            <span class="col-menu-item-icon" aria-hidden="true">${UI_ICON.create}</span>
-            <span>Add card</span>
-        </button>`
-    ];
-
-    if (isOwner) {
-        menuItems.push(
-            `<button type="button" class="col-menu-item col-edit-btn" data-col-id="${col.id}" role="menuitem">
-                <span class="col-menu-item-icon" aria-hidden="true">${UI_ICON.rename}</span>
-                <span>Edit column</span>
-            </button>`,
-            `<button type="button" class="col-menu-item col-menu-item--danger col-delete-btn" data-col-id="${col.id}" role="menuitem">
-                <span class="col-menu-item-icon" aria-hidden="true">${UI_ICON.delete}</span>
-                <span>Delete column</span>
-            </button>`
-        );
-    }
+    const ownerMenu = isOwner ? `
+            <div class="column-header-menu">
+                <button type="button" class="col-menu-btn col-icon-btn"
+                        data-col-id="${col.id}" title="Column actions" aria-label="Column actions" aria-haspopup="menu" aria-expanded="false">${icon('ellipsis-vertical')}</button>
+                <div class="col-menu-dropdown" role="menu">
+                    <button type="button" class="col-menu-item col-edit-btn" data-col-id="${col.id}" role="menuitem">
+                        <span class="col-menu-item-icon" aria-hidden="true">${UI_ICON.rename}</span>
+                        <span>Edit column</span>
+                    </button>
+                    <button type="button" class="col-menu-item col-menu-item--danger col-delete-btn" data-col-id="${col.id}" role="menuitem">
+                        <span class="col-menu-item-icon" aria-hidden="true">${UI_ICON.delete}</span>
+                        <span>Delete column</span>
+                    </button>
+                </div>
+            </div>` : '';
 
     return `
         <div class="column-header-top">
@@ -2493,19 +2578,18 @@ function renderColumnHeaderHtml(col, isOwner, cardCountLabel) {
                 <h2 class="column-title" title="${escapeHtml(col.title)}">${escapeHtml(col.title)}</h2>
                 <span class="card-count">${cardCountLabel}</span>
             </div>
-            <div class="column-header-actions column-header-actions--desktop">
-                ${addCardBtn}
-                ${editBtn}
-                ${deleteBtn}
-            </div>
-            <div class="column-header-menu">
-                <button type="button" class="col-menu-btn btn btn-sm btn-square btn-secondary"
-                        data-col-id="${col.id}" aria-label="Column actions" aria-haspopup="menu" aria-expanded="false">⋮</button>
-                <div class="col-menu-dropdown" role="menu">
-                    ${menuItems.join('')}
-                </div>
-            </div>
+            <button type="button" class="col-add-card-btn col-icon-btn" data-col-id="${col.id}"
+                    title="Add card" aria-label="Add card">${icon('plus')}</button>
+            ${ownerMenu}
         </div>`;
+}
+
+function loadMoreLabel(remaining) {
+    return `${icon('arrow-down-to-line')} Show ${remaining} more`;
+}
+
+function emptyColumnLabelHtml() {
+    return `<div class="cards-empty-label">${icon('inbox')}<span>Drop cards here</span></div>`;
 }
 
 function bindColumnResultInfoToggle(root = document) {
@@ -2545,28 +2629,26 @@ function columnFormHtml(title = '', isResultColumn = false) {
 
 function renderColumns(columns, animate = false) {
     const boardDiv = document.getElementById('board');
+    const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
+    const isOwner = currentBoard && currentBoard.isOwner === true;
+    setAddColumnAvailability(isOwner);
+
     const displayColumns = filterColumnsForSearch(columns, AppState.searchQuery);
     if (!displayColumns || displayColumns.length === 0) {
         boardDiv.classList.remove('cards-animate');
         boardDiv.innerHTML = AppState.currentBoardId
             ? `<div class="board-empty">
-                    <div class="board-empty-icon">🗂️</div>
+                    <div class="board-empty-icon">${icon('folder-kanban')}</div>
                     <h2 class="board-empty-title">This board is empty</h2>
-                    <p class="board-empty-text">Create your first column with the ➕ button in the top bar to start organizing your tasks.</p>
+                    <p class="board-empty-text">${isOwner
+                        ? `Add your first column with ${icon('plus')} in the top bar to start organizing your tasks.`
+                        : 'The board owner has not added any columns yet.'}</p>
                </div>`
             : '';
         return;
     }
 
     const currentUserId = AppState.currentUser ? AppState.currentUser.userId : 0;
-    const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
-    const isOwner = currentBoard && currentBoard.isOwner === true;
-
-    const addColBtn = document.getElementById('btnNewColumn');
-    if (addColBtn) {
-        addColBtn.disabled = !isOwner;
-        addColBtn.title = isOwner ? 'Add column' : 'Only the owner can add columns';
-    }
 
     boardDiv.innerHTML = displayColumns.map(col => {
         const isSearching = !!AppState.searchQuery;
@@ -2575,7 +2657,7 @@ function renderColumns(columns, animate = false) {
         const cardCountLabel = isSearching ? col.cards.length : totalCards;
 
         const loadMoreHtml = showLoadMore
-            ? `<button type="button" class="load-more-btn btn btn-sm btn-secondary" data-col-id="${col.id}">Show More</button>`
+            ? `<button type="button" class="load-more-btn" data-col-id="${col.id}">${loadMoreLabel(totalCards - col.cards.length)}</button>`
             : '';
 
         return `
@@ -2585,7 +2667,7 @@ function renderColumns(columns, animate = false) {
             </div>
 
             <div class="cards-container${col.cards.length === 0 ? ' cards-container--empty' : ''}" data-column-id="${col.id}">
-                ${col.cards.length === 0 ? '<div class="cards-empty-label">Empty</div>' : ''}
+                ${col.cards.length === 0 ? emptyColumnLabelHtml() : ''}
                 ${col.cards.map((card) => createCardHtml(card, col.id, currentUserId, col.isResultColumn)).join('')}
             </div>
             
@@ -2605,25 +2687,15 @@ function renderColumns(columns, animate = false) {
         setTimeout(() => newBoardDiv.classList.remove('cards-animate'), 600);
     }
 
+    // Load the next page automatically as the column is scrolled near its end.
     newBoardDiv.querySelectorAll('.cards-container').forEach(container => {
-        const handleScroll = () => {
+        container.addEventListener('scroll', () => {
             const loadMoreBtn = container.parentElement.querySelector('.load-more-btn');
-            if (!loadMoreBtn) return;
-
-            const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 10;
-
-            if (isAtBottom) {
-                loadMoreBtn.style.opacity = '1';
-                loadMoreBtn.style.pointerEvents = 'auto';
-            } else {
-                loadMoreBtn.style.opacity = '0';
-                loadMoreBtn.style.pointerEvents = 'none';
+            if (!loadMoreBtn || loadMoreBtn.disabled || loadMoreBtn.dataset.failed) return;
+            if (container.scrollHeight - container.scrollTop <= container.clientHeight + 120) {
+                handleLoadMore(Number(loadMoreBtn.dataset.colId), loadMoreBtn);
             }
-        };
-
-        container.addEventListener('scroll', handleScroll);
-
-        setTimeout(handleScroll, 0);
+        });
     });
 
     newBoardDiv.addEventListener('click', (e) => {
@@ -2631,11 +2703,7 @@ function renderColumns(columns, animate = false) {
         if (loadMoreBtn) {
             e.stopPropagation();
             const colId = Number(loadMoreBtn.dataset.colId);
-            if (colId) {
-                handleLoadMore(colId, loadMoreBtn);
-                loadMoreBtn.style.opacity = '0';
-                loadMoreBtn.style.pointerEvents = 'none';
-            }
+            if (colId && !loadMoreBtn.disabled) handleLoadMore(colId, loadMoreBtn);
             return;
         }
 
@@ -2857,10 +2925,7 @@ function syncColumnEmptyState(container) {
     let label = container.querySelector('.cards-empty-label');
     if (!hasCards) {
         if (!label) {
-            label = document.createElement('div');
-            label.className = 'cards-empty-label';
-            label.textContent = 'Empty';
-            container.prepend(label);
+            container.insertAdjacentHTML('afterbegin', emptyColumnLabelHtml());
         }
     } else if (label) {
         label.remove();
@@ -3143,7 +3208,7 @@ async function deleteCard(id, reopenOnCancel = true) {
         }
         loadBoardData();
         showToast('Card deleted', 'success', 2000);
-    } else if (reopenOnCancel) {
+    } else if (reopenOnCancel && closedByUser(res)) {
         for (const col of AppState.currentColumns) {
             if (col.cards.some(c => c.id == id)) {
                 openCardModal(col.id, id);
@@ -3217,7 +3282,7 @@ async function openCardModal(columnId, cardId = null) {
     if (isEditMode) {
         commentsSection = `
             <div class="kf-comments">
-                <h4 class="kf-section-title">💬 Comments</h4>
+                <h4 class="kf-section-title">${icon('message-square')} Comments</h4>
                 <div id="comments-list" class="kf-comment-list">
                     <div class="kf-panel-empty">Loading comments...</div>
                 </div>
@@ -3299,7 +3364,7 @@ async function openCardModal(columnId, cardId = null) {
                 </div>
 
                 <div id="warning-area" class="kf-warning-box" style="display:${warningDisplay};">
-                    <p class="kf-warning-note"><b>⚠️ Note:</b> The card will be highlighted when the due date approaches.</p>
+                    <p class="kf-warning-note">${icon('triangle-alert')} <b>Note:</b> The card will be highlighted when the due date approaches.</p>
                     <div class="kf-warning-row">
                         <div style="flex:2;">
                             <label class="kf-label-sm" for="modal-days">Reminder days</label>
@@ -3486,7 +3551,11 @@ async function openCardModal(columnId, cardId = null) {
             return;
         }
 
-        loadBoardData();
+        await loadBoardData();
+        if (!isEditMode) {
+            document.querySelector(`.cards-container[data-column-id="${columnId}"]`)
+                ?.scrollTo({ top: 0, behavior: 'smooth' });
+        }
         showToast(isEditMode ? 'Card updated' : 'Card created', 'success', 2000);
     } else if (isDenied) {
         deleteCard(cardId);
@@ -3712,9 +3781,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll(".toggle-password").forEach(btn => {
         btn.addEventListener("click", () => {
             const input = document.getElementById(btn.dataset.target);
-            if (!input) return;
-            input.type = input.type === "password" ? "text" : "password";
-            btn.textContent = input.type === "password" ? "🙈" : "🙊";
+            if (input) togglePasswordVisibility(input, btn);
         });
     });
 
@@ -3742,6 +3809,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     setupModalsAndKeyboard();
+    ensureColumnMenuListener();
     setupVisibilitySync();
     setupOfflineDetection();
     registerServiceWorker();
@@ -3952,11 +4020,11 @@ async function flushNoteSave() {
     if (!res?.success) {
         // Re-queue unless newer text for the same note arrived meanwhile.
         if (!pendingNoteSave) pendingNoteSave = { noteId, text };
-        saveStatus.innerText = 'Error! ❌';
+        saveStatus.innerHTML = `${icon('circle-x')} Error`;
         return;
     }
     if (pendingNoteSave) return; // a newer edit is queued; let it report its own status
-    saveStatus.innerText = 'Saved ✅';
+    saveStatus.innerHTML = `${icon('circle-check')} Saved`;
     setTimeout(() => { saveStatus.style.opacity = '0'; }, 2000);
 }
 
@@ -4045,7 +4113,7 @@ function renderNoteTable() {
 
         const btnEdit = document.createElement('button');
         btnEdit.type = 'button';
-        btnEdit.textContent = UI_ICON.rename;
+        btnEdit.innerHTML = UI_ICON.rename;
         btnEdit.className = 'btn-edit-row';
         btnEdit.title = 'Rename note';
         btnEdit.setAttribute('aria-label', 'Rename note');
@@ -4055,7 +4123,7 @@ function renderNoteTable() {
 
         const btnDelete = document.createElement('button');
         btnDelete.type = 'button';
-        btnDelete.textContent = UI_ICON.delete;
+        btnDelete.innerHTML = UI_ICON.delete;
         btnDelete.className = 'btn-delete-row';
         btnDelete.title = 'Delete note';
         btnDelete.setAttribute('aria-label', 'Delete note');

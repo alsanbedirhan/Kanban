@@ -138,10 +138,11 @@ namespace Kanban.Repositories
             // Reading the last order and inserting must not interleave with another add/move.
             await InSerializableTransaction(async () =>
             {
-                b.OrderNo = (await _context.BoardCards
+                await _context.BoardCards
                     .Where(c => c.BoardColumnId == columnId && c.IsActive)
-                    .MaxAsync(c => (int?)c.OrderNo) ?? 0) + 1;
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.OrderNo, x => x.OrderNo + 1));
 
+                b.OrderNo = 1;
                 await _context.BoardCards.AddAsync(b);
                 await _context.SaveChangesAsync();
             });
@@ -298,7 +299,7 @@ namespace Kanban.Repositories
                         .Select(c => new BoardCardResultModel
                         {
                             Id = c.Id,
-                            Title = c.Title,
+                            Title = c.Title ?? "",
                             Desc = c.Desc,
                             Order = c.OrderNo,
                             DueDate = c.DueDate,
@@ -322,7 +323,7 @@ namespace Kanban.Repositories
                 .Select(c => new BoardCardResultModel
                 {
                     Id = c.Id,
-                    Title = c.Title,
+                    Title = c.Title ?? "",
                     Desc = c.Desc,
                     Order = c.OrderNo,
                     DueDate = c.DueDate,

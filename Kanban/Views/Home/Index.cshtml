@@ -3,10 +3,12 @@
 @{
     Layout = null;
     var turnstileSiteKey = Configuration["TurnstileSettings:SiteKey"] ?? "";
+    var savedTheme = Context.Request.Cookies["kanflow-theme"];
+    string? themeAttr = savedTheme is "light" or "dark" ? savedTheme : null;
 }
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="en" data-theme="@themeAttr">
 
 <head>
     <meta charset="UTF-8">
@@ -49,22 +51,22 @@
          data-server-message="@Model.ErrorMessage"
          data-invite-token="@(ViewData["InviteToken"] as string)">
     </div>
-    <button class="menu-toggle" data-action="toggleSidebar" aria-label="Open menu" aria-expanded="false">☰</button>
+    <button type="button" class="menu-toggle" data-action="toggleSidebar" aria-label="Open menu" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#menu"></use></svg></button>
     <div class="sidebar-overlay" id="sidebarOverlay" data-action="toggleSidebar" aria-hidden="true"></div>
     <aside class="sidebar" id="sidebar" aria-label="Board navigation">
         <div class="sidebar-header">
             <h2>kanflow.online</h2>
-            <button class="close-sidebar-btn" data-action="toggleSidebar" aria-label="Close menu">×</button>
+            <button class="close-sidebar-btn" data-action="toggleSidebar" aria-label="Close menu"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#x"></use></svg></button>
         </div>
         <div class="sidebar-content">
             <div class="sidebar-board-action">
                 <button type="button" class="add-board-btn" data-action="openNewBoardModal">
-                    ➕ New Board
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#plus"></use></svg> New Board
                 </button>
             </div>
-            <div class="sidebar-section-title">📋 My Boards</div>
+            <div class="sidebar-section-title"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#layout-dashboard"></use></svg> My Boards</div>
             <ul class="board-list" id="boardList"></ul>
-            <div class="sidebar-section-title">📋 Shared With Me</div>
+            <div class="sidebar-section-title"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#share-2"></use></svg> Shared With Me</div>
             <ul class="board-list" id="sharedBoardList"></ul>
         </div>
         <div class="sidebar-footer" id="authSection"></div>
@@ -73,32 +75,47 @@
         </div>
     </aside>
     <main class="container">
-        <div class="header" id="kanflowheader">
+        <header class="header topbar" id="kanflowheader">
             <h1 class="brand-title" id="kanflowheadertitle">
                 <img src="/favicon.svg" alt="Kanflow Logo" class="brand-logo">
-                kanflow
+                <span class="brand-name">kanflow</span>
             </h1>
-            <div class="header-actions" id="authHeaderArea"></div>
-        </div>
-        <div class="header secondary-header u-hidden" id="boardHeader">
-            <div class="board-header-row">
-                <h1 id="boardHeaderTitle"></h1>
+            <div class="topbar-board u-hidden" id="boardHeader">
+                <h2 id="boardHeaderTitle"></h2>
                 <div class="board-search-wrap" id="boardSearchWrap">
+                    <svg class="icon board-search-icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#search"></use></svg>
                     <input type="search" id="boardSearchInput" class="board-search-input"
                            placeholder="Search cards… (/)" aria-label="Search cards" autocomplete="off">
                     <button type="button" id="boardSearchClear" class="board-search-clear" data-action="clearBoardSearch"
-                            hidden aria-label="Clear search">×</button>
+                            hidden aria-label="Clear search"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#x"></use></svg></button>
                 </div>
                 <div class="board-toolbar">
-                    <button type="button" class="btn btn-secondary btn-icon board-search-toggle" id="boardSearchToggleBtn"
-                            data-action="toggleBoardSearch" title="Search cards" aria-label="Search cards" aria-expanded="false">🔍</button>
-                    <button type="button" class="btn btn-secondary btn-icon" data-action="changeView"
-                            title="Calendar view" aria-label="Calendar view">📅</button>
+                    <button type="button" class="btn btn-secondary btn-icon" id="btnCalendarView" data-action="changeView"
+                            title="Calendar view" aria-label="Calendar view"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#calendar"></use></svg></button>
                     <button type="button" class="btn btn-primary btn-icon" id="btnNewColumn" data-action="openNewColumnModal"
-                            title="Add column" aria-label="Add column">➕</button>
+                            title="Add column" aria-label="Add column"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#plus"></use></svg></button>
+                </div>
+                <div class="board-actions-menu">
+                    <button type="button" class="topbar-icon-btn" id="boardActionsBtn" data-action="toggleBoardActionsMenu"
+                            title="Board actions" aria-label="Board actions" aria-haspopup="menu" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#ellipsis-vertical"></use></svg></button>
+                    <div class="col-menu-dropdown" id="boardActionsMenu" role="menu">
+                        <button type="button" class="col-menu-item" data-action="toggleBoardSearch" role="menuitem">
+                            <span class="col-menu-item-icon" aria-hidden="true"><svg class="icon"><use href="/lib/lucide-1.51.0/sprite.svg#search"></use></svg></span>
+                            <span>Search cards</span>
+                        </button>
+                        <button type="button" class="col-menu-item" id="menuCalendarView" data-action="changeView" role="menuitem">
+                            <span class="col-menu-item-icon" aria-hidden="true"><svg class="icon"><use href="/lib/lucide-1.51.0/sprite.svg#calendar"></use></svg></span>
+                            <span>Calendar view</span>
+                        </button>
+                        <button type="button" class="col-menu-item" id="menuNewColumn" data-action="openNewColumnModal" role="menuitem">
+                            <span class="col-menu-item-icon" aria-hidden="true"><svg class="icon"><use href="/lib/lucide-1.51.0/sprite.svg#plus"></use></svg></span>
+                            <span>Add column</span>
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+            <div class="header-actions" id="authHeaderArea"></div>
+        </header>
         <div class="board" id="board"></div>
         <div id="calendar" class="calendar-panel u-hidden"></div>
     </main>
@@ -112,7 +129,7 @@
             <div class="form-group">
                 <label for="loginPassword">Password</label>
                 <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
-                <button type="button" tabindex="-1" class="toggle-password" data-target="loginPassword" aria-label="Show password">🙈</button>
+                <button type="button" tabindex="-1" class="toggle-password" data-target="loginPassword" aria-label="Show password"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#eye"></use></svg></button>
             </div>
             <div class="turnstile-wrap">
                 <div class="turnstile-stage">
@@ -123,12 +140,12 @@
                     <div class="turnstile-error" role="alert"></div>
                 </div>
                 <button type="button" class="turnstile-retry-btn" data-action="retryTurnstile" data-turnstile-target="turnstile-container-login">
-                    🔄 Retry verification
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#rotate-cw"></use></svg> Retry verification
                 </button>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" data-action="closeLoginModal">Cancel</button>
-                <button type="submit" class="btn btn-primary">🔐 Login</button>
+                <button type="submit" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#log-in"></use></svg> Login</button>
             </div>
             <div class="modal-footer-link login-modal-footer">
                 <button type="button" class="btn-link" data-action="handleForgotPassword">Forgot password?</button>
@@ -151,12 +168,12 @@
             <div class="form-group">
                 <label for="registerPassword">Password</label>
                 <input type="password" id="registerPassword" placeholder="••••••••" autocomplete="new-password">
-                <button type="button" tabindex="-1" class="toggle-password" data-target="registerPassword" aria-label="Show password">🙈</button>
+                <button type="button" tabindex="-1" class="toggle-password" data-target="registerPassword" aria-label="Show password"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#eye"></use></svg></button>
             </div>
             <div class="form-group">
                 <label for="registerConfirmPassword">Confirm Password</label>
                 <input type="password" id="registerConfirmPassword" placeholder="••••••••" autocomplete="new-password">
-                <button type="button" tabindex="-1" class="toggle-password" data-target="registerConfirmPassword" aria-label="Show password">🙈</button>
+                <button type="button" tabindex="-1" class="toggle-password" data-target="registerConfirmPassword" aria-label="Show password"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#eye"></use></svg></button>
             </div>
             <div class="agreement-row">
                 <input type="checkbox" id="registerAgreement">
@@ -175,12 +192,12 @@
                     <div class="turnstile-error" role="alert"></div>
                 </div>
                 <button type="button" class="turnstile-retry-btn" data-action="retryTurnstile" data-turnstile-target="turnstile-container-register">
-                    🔄 Retry verification
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#rotate-cw"></use></svg> Retry verification
                 </button>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" data-action="closeRegisterModal">Cancel</button>
-                <button type="submit" class="btn btn-primary">📝 Register</button>
+                <button type="submit" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#user-plus"></use></svg> Register</button>
             </div>
             <div class="modal-footer-link">
                 Already have an account?
@@ -194,7 +211,7 @@
             <p class="modal-subtitle">Choose an avatar to personalize your profile.</p>
             <div id="avatarSelectionArea" class="avatar-grid"></div>
             <button type="button" class="btn btn-primary btn-full" data-action="saveMyAvatar">
-                🚀 Let's Go!
+                <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#check"></use></svg> Let's Go!
             </button>
         </div>
     </div>
@@ -220,20 +237,20 @@
                 <div class="turnstile-error" role="alert"></div>
             </div>
             <button type="button" class="turnstile-retry-btn" data-action="retryTurnstile" data-turnstile-target="turnstile-container-otp">
-                🔄 Retry verification
+                <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#rotate-cw"></use></svg> Retry verification
             </button>
         </div>
     </template>
-    <button type="button" id="quickNoteBtn" class="quick-note-toggle" data-action="toggleQuickNote" aria-label="Quick notes">📝</button>
+    <button type="button" id="quickNoteBtn" class="quick-note-toggle" data-action="toggleQuickNote" aria-label="Quick notes"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#notebook-pen"></use></svg></button>
     <div id="quickNoteContainer" class="quick-note-wrapper">
         <div class="quick-note-header quick-note-header-lg">
             <div class="quick-note-header-left">
-                <button type="button" class="quick-note-icon-btn" id="btnOpenNoteTable" title="Note list" aria-label="Note list">☰</button>
+                <button type="button" class="quick-note-icon-btn" id="btnOpenNoteTable" title="Note list" aria-label="Note list"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#list"></use></svg></button>
                 <span>Quick Notes</span>
             </div>
             <div class="quick-note-header-right">
-                <button type="button" class="quick-note-icon-btn" id="btnAddNote" title="New note" aria-label="New note">➕</button>
-                <button type="button" class="quick-note-icon-btn" data-action="toggleQuickNote" title="Close notes" aria-label="Close notes">✕</button>
+                <button type="button" class="quick-note-icon-btn" id="btnAddNote" title="New note" aria-label="New note"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#plus"></use></svg></button>
+                <button type="button" class="quick-note-icon-btn" data-action="toggleQuickNote" title="Close notes" aria-label="Close notes"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#x"></use></svg></button>
             </div>
         </div>
         <div id="noteHeader" class="note-title-bar" title="Click for rename">
@@ -241,15 +258,15 @@
         </div>
         <textarea id="quickNoteArea" placeholder="Write here..." maxlength="5000"></textarea>
         <div class="quick-note-footer">
-            <span id="saveStatus" class="save-status">Saved ✅</span>
-            <button type="button" id="btnTrash" class="quick-note-icon-btn" title="Clear note">🧹 Clear</button>
+            <span id="saveStatus" class="save-status">Saved</span>
+            <button type="button" id="btnTrash" class="quick-note-icon-btn" title="Clear note"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#eraser"></use></svg> Clear</button>
         </div>
         <div id="noteListOverlay" class="note-list-overlay">
             <div class="quick-note-header quick-note-header-lg note-list-header">
                 <span>My Notes</span>
                 <div class="quick-note-header-right">
-                    <button type="button" class="quick-note-icon-btn" id="btnAddNote2" title="New note" aria-label="New note">➕</button>
-                    <button type="button" class="quick-note-icon-btn" id="btnCloseNoteTable" title="Close list" aria-label="Close list">✕</button>
+                    <button type="button" class="quick-note-icon-btn" id="btnAddNote2" title="New note" aria-label="New note"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#plus"></use></svg></button>
+                    <button type="button" class="quick-note-icon-btn" id="btnCloseNoteTable" title="Close list" aria-label="Close list"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#x"></use></svg></button>
                 </div>
             </div>
             <div class="note-list-body">

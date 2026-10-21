@@ -34,6 +34,9 @@ Kanflow is a Kanban task board built with ASP.NET Core and vanilla JavaScript. O
 
 ### UX & reliability
 - Responsive layout for desktop and mobile
+- Light and dark theme: System / Light / Dark switch in the profile menu; "System" follows `prefers-color-scheme`. The choice is stored in the `kanflow-theme` cookie and rendered on the server as `<html data-theme>`, so the page never flashes the wrong theme
+- SVG icons (Lucide sprite) instead of emoji, so icons look the same on every platform
+- Due-date chips on cards ("Due tomorrow", "2 days overdue"); columns load more cards automatically while scrolling
 - Installable PWA (`manifest.json`, theme color, app icons incl. a padded maskable icon)
 - Service worker (`wwwroot/sw.js`): caches static assets (libraries, versioned CSS/JS, icons) and shows `offline.html` when the app is opened without a connection; pages, API calls, SignalR and auth are never cached. Bump `CACHE` in `sw.js` to clear old caches
 - Offline detection toasts (connection lost / back online)
@@ -178,6 +181,7 @@ Third-party libraries are self-hosted with pinned versions under `wwwroot/lib` (
 | SortableJS | 1.15.0 | `lib/sortablejs-1.15.0/Sortable.min.js` |
 | DOMPurify | 3.1.6 | `lib/dompurify-3.1.6/purify.min.js` |
 | SignalR client | 10.0.11 | `lib/signalr-10.0.11/signalr.min.js` |
+| Lucide icons | 1.51.0 | `lib/lucide-1.51.0/sprite.svg` (only the icons the app uses; add a `<symbol>` from `lucide-static` to use another, then bump `CACHE` in `sw.js` because `/lib/` files are served cache-first) |
 
 ## Production deployment
 
