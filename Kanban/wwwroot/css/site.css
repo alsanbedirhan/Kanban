@@ -118,6 +118,7 @@
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
+        cursor: pointer;
     }
 
 .board-toolbar {
@@ -540,10 +541,15 @@
     }
 
         .topbar-board h2 {
-            /* Leaves room for logo, actions and avatar so the title shrinks instead of wrapping. */
-            max-width: calc(100% - 132px);
+            /* Zero basis: fills the free space and shrinks instead of wrapping. */
+            flex: 1 1 0;
             font-size: 0.95rem;
             letter-spacing: 0.04em;
+        }
+
+        .topbar-board h2.is-long {
+            font-size: 0.85rem;
+            letter-spacing: 0.02em;
         }
 
     .board-actions-menu {
@@ -1201,7 +1207,7 @@ input::-ms-reveal, input::-ms-clear {
     height: 100dvh;
     display: flex;
     flex-direction: column;
-    padding-top: 20px;
+    padding-top: 12px;
     padding-bottom: env(safe-area-inset-bottom);
     overflow: hidden;
 }
@@ -1331,6 +1337,57 @@ input::-ms-reveal, input::-ms-clear {
 #kanflowheader {
     margin: 0 60px 16px 60px;
     flex-shrink: 0;
+}
+
+.demo-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin: 0 60px 16px 60px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+    .demo-banner[hidden] {
+        display: none;
+    }
+
+    .demo-banner .icon {
+        flex-shrink: 0;
+    }
+
+body.is-demo .board-search-wrap,
+body.is-demo .board-search-toggle,
+body.is-demo .board-toolbar,
+body.is-demo .board-actions-menu,
+body.is-demo .col-add-card-btn,
+body.is-demo .col-add-card-bottom,
+body.is-demo .card-delete-btn,
+body.is-demo .card-move-buttons,
+body.is-demo .keyboard-hints {
+    display: none !important;
+}
+
+body.is-demo .card {
+    cursor: grab;
+}
+
+body.is-demo #kanflowheader .header-actions {
+    margin-left: auto;
+}
+
+@media (max-width: 768px) {
+    .demo-banner {
+        margin: 0 0 10px 0;
+        padding: 8px 12px;
+        font-size: 13px;
+    }
 }
 
 .board {
@@ -2287,7 +2344,7 @@ input::-ms-reveal, input::-ms-clear {
     }
 
     #kanflowheader {
-        margin: 0 0 10px 52px;
+        margin: 0 0 10px 50px;
         padding: 6px 8px 6px 12px;
         gap: 6px;
     }
@@ -3429,16 +3486,15 @@ input::-ms-reveal, input::-ms-clear {
         height: 15px;
     }
 
-.kf-menu-label {
-    margin: 6px 2px 0;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-subtle);
-    text-align: left;
+/* Theme switch in the sidebar (visible signed in or out) */
+.sidebar-theme {
+    flex-shrink: 0;
+    padding: 12px 16px 0;
+    border-top: 1px solid var(--border-color);
+    background: var(--surface-muted);
 }
 
-.kf-swal--tall > .swal2-html-container {
-    max-height: min(80vh, 80dvh);
-}
+    .sidebar-theme + .sidebar-footer {
+        border-top: none;
+        padding-top: 8px;
+    }

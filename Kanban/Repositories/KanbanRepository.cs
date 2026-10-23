@@ -23,11 +23,6 @@ namespace Kanban.Repositories
 
         private const int NotificationMessageMaxLength = 500;
 
-        private async Task InvalidateUserUpdates(long userId)
-        {
-            _cache.Remove($"User_HasUpdates_{userId}");
-            await _notifier.UserUpdatesChanged(userId);
-        }
 
         private async Task SendNotification(long userId, string message)
         {
@@ -50,7 +45,7 @@ namespace Kanban.Repositories
             await _context.UserNotifications.AddAsync(notification);
             await _context.SaveChangesAsync();
 
-            await InvalidateUserUpdates(userId);
+            await _notifier.UserUpdatesChanged(userId);
         }
 
         public Task NotifyUser(long userId, string message) => SendNotification(userId, message);
@@ -115,7 +110,7 @@ namespace Kanban.Repositories
                 await TouchBoard(boardId);
             }
 
-            await InvalidateUserUpdates(userId);
+            await _notifier.UserUpdatesChanged(userId);
         }
 
         public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
@@ -458,17 +453,10 @@ namespace Kanban.Repositories
         public async Task<BoardRefreshResultModel> GetBoardVersion(long boardId)
         {
             var now = _time.LocalNow();
-            string cacheKey = $"Board_{boardId}_Version";
-
-            if (!_cache.TryGetValue(cacheKey, out DateTime lastActivity))
-            {
-                lastActivity = await _context.Boards
-                    .Where(b => b.Id == boardId)
-                    .Select(b => b.UpdatedAt)
-                    .FirstOrDefaultAsync();
-
-                _cache.Set(cacheKey, lastActivity, TimeSpan.FromHours(1));
-            }
+            var lastActivity = await _context.Boards
+                .Where(b => b.Id == boardId)
+                .Select(b => b.UpdatedAt)
+                .FirstOrDefaultAsync();
 
             return new BoardRefreshResultModel { LastUpdate = lastActivity, Now = now };
         }
@@ -480,7 +468,6 @@ namespace Kanban.Repositories
                 .Where(b => b.Id == boardId)
                 .ExecuteUpdateAsync(x => x.SetProperty(b => b.UpdatedAt, now));
 
-            _cache.Remove($"Board_{boardId}_Version");
             _cache.Remove($"Board_{boardId}_Members");
 
             await _notifier.BoardChanged(boardId);

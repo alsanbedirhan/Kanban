@@ -33,8 +33,9 @@ Kanflow is a Kanban task board built with ASP.NET Core and vanilla JavaScript. O
 - Sample board created automatically on first registration
 
 ### UX & reliability
+- Demo board for signed-out visitors: four sample columns whose cards can be dragged; it runs only in the browser, sends nothing to the server and resets on reload
 - Responsive layout for desktop and mobile
-- Light and dark theme: System / Light / Dark switch in the profile menu; "System" follows `prefers-color-scheme`. The choice is stored in the `kanflow-theme` cookie and rendered on the server as `<html data-theme>`, so the page never flashes the wrong theme
+- Light and dark theme: System / Light / Dark switch at the bottom of the sidebar (available signed in or out); "System" follows `prefers-color-scheme`. The choice is stored in the `kanflow-theme` cookie and rendered on the server as `<html data-theme>`, so the page never flashes the wrong theme
 - SVG icons (Lucide sprite) instead of emoji, so icons look the same on every platform
 - Due-date chips on cards ("Due tomorrow", "2 days overdue"); columns load more cards automatically while scrolling
 - Installable PWA (`manifest.json`, theme color, app icons incl. a padded maskable icon)

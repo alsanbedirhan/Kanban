@@ -26,11 +26,6 @@ namespace Kanban.Repositories
             _notifier = notifier;
         }
 
-        private async Task InvalidateUserUpdates(long userId)
-        {
-            _cache.Remove($"User_HasUpdates_{userId}");
-            await _notifier.UserUpdatesChanged(userId);
-        }
 
         public async Task<User?> GetByEmail(string email)
         {
@@ -188,13 +183,13 @@ namespace Kanban.Repositories
         {
             await _context.UserNotifications.Where(n => n.Id == id)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
-            await InvalidateUserUpdates(userId);
+            await _notifier.UserUpdatesChanged(userId);
         }
         public async Task DeleteNotifications(long userId)
         {
             await _context.UserNotifications.Where(n => n.UserId == userId && !n.IsDeleted)
                 .ExecuteUpdateAsync(n => n.SetProperty(x => x.IsDeleted, true));
-            await InvalidateUserUpdates(userId);
+            await _notifier.UserUpdatesChanged(userId);
         }
         public async Task<UserInvite?> GetInvite(long id)
         {
@@ -204,7 +199,7 @@ namespace Kanban.Repositories
         {
             await _context.UserInvites.Where(bc => bc.Id == inviteId)
                 .ExecuteUpdateAsync(bc => bc.SetProperty(b => b.IsAccepted, true));
-            await InvalidateUserUpdates(userId);
+            await _notifier.UserUpdatesChanged(userId);
         }
         public async Task<int> GetSentInviteCountToday(long senderUserId)
         {
@@ -237,30 +232,14 @@ namespace Kanban.Repositories
             await _context.SaveChangesAsync();
             if (userId > 0)
             {
-                await InvalidateUserUpdates(userId);
+                await _notifier.UserUpdatesChanged(userId);
             }
             return invite;
         }
         public async Task<bool> CheckUpdates(long userId, string email)
         {
-            string cacheKey = $"User_HasUpdates_{userId}";
-
-            if (!_cache.TryGetValue(cacheKey, out bool hasUpdates))
-            {
-                bool hasNotif = await _context.UserNotifications.AnyAsync(x => x.UserId == userId && !x.IsDeleted);
-                if (!hasNotif)
-                {
-                    hasUpdates = await _context.UserInvites.AnyAsync(x => x.Email == email && !x.IsUsed && !x.IsAccepted);
-                }
-                else
-                {
-                    hasUpdates = true;
-                }
-
-                _cache.Set(cacheKey, hasUpdates, TimeSpan.FromHours(1));
-            }
-
-            return hasUpdates;
+            return await _context.UserNotifications.AnyAsync(x => x.UserId == userId && !x.IsDeleted)
+                || await _context.UserInvites.AnyAsync(x => x.Email == email && !x.IsUsed && !x.IsAccepted);
         }
         public async Task<string> GetHashPasswordByEmail(string email)
         {

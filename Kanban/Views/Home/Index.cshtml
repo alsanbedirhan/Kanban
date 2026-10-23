@@ -69,6 +69,7 @@
             <div class="sidebar-section-title"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#share-2"></use></svg> Shared With Me</div>
             <ul class="board-list" id="sharedBoardList"></ul>
         </div>
+        <div class="sidebar-theme" id="sidebarTheme"></div>
         <div class="sidebar-footer" id="authSection"></div>
         <div class="developer-footer">
             Developed by <a href="https://bedirhanalsan.com" target="_blank" rel="noopener">Bedirhan Alşan</a>
@@ -81,7 +82,7 @@
                 <span class="brand-name">kanflow</span>
             </h1>
             <div class="topbar-board u-hidden" id="boardHeader">
-                <h2 id="boardHeaderTitle"></h2>
+                <h2 id="boardHeaderTitle" data-action="toggleSidebar"></h2>
                 <div class="board-search-wrap" id="boardSearchWrap">
                     <svg class="icon board-search-icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#search"></use></svg>
                     <input type="search" id="boardSearchInput" class="board-search-input"
@@ -116,6 +117,10 @@
             </div>
             <div class="header-actions" id="authHeaderArea"></div>
         </header>
+        <div class="demo-banner" id="demoBanner" hidden>
+            <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#info"></use></svg>
+            <span>This is a demo board. Drag the cards around, then log in to create your own boards.</span>
+        </div>
         <div class="board" id="board"></div>
         <div id="calendar" class="calendar-panel u-hidden"></div>
     </main>

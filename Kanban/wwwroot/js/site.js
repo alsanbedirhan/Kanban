@@ -21,6 +21,7 @@ const AppState = {
     searchQuery: '',
     authFailureCount: 0,
     columnMenuListenerAttached: false,
+    isDemo: false,
 
     reset() {
         clearSessionState();
@@ -28,6 +29,7 @@ const AppState = {
 };
 
 function clearSessionState() {
+    hideDemoBoard();
     AppState.isAuthenticated = false;
     AppState.currentUser = null;
     AppState.currentBoardId = null;
@@ -1281,7 +1283,6 @@ function openProfileMenu() {
     swalPanel({
         width: swalWidth('400px'),
         padding: '20px',
-        customClass: { popup: 'kf-swal--tall' },
         html: `
             <div class="kf-profile">
                 <img src="${avatar}" alt="" class="kf-profile-avatar">
@@ -1301,8 +1302,6 @@ function openProfileMenu() {
                 <button type="button" class="kf-menu-btn profile-menu-btn" data-menu-action="password">
                     <span class="kf-menu-icon" aria-hidden="true">${icon('key-round')}</span> Change Password
                 </button>
-                <div class="kf-menu-label">Theme</div>
-                ${themeSwitchHtml()}
                 <div class="kf-menu-sep"></div>
                 <button type="button" class="kf-menu-btn kf-menu-btn--danger profile-menu-btn" data-menu-action="logout">
                     <span class="kf-menu-icon" aria-hidden="true">${UI_ICON.logout}</span> Logout
@@ -1311,12 +1310,6 @@ function openProfileMenu() {
         `,
         didOpen: () => {
             document.getElementById('profile-menu-buttons')?.addEventListener('click', (e) => {
-                const themeBtn = e.target.closest('.kf-theme-option');
-                if (themeBtn) {
-                    applyTheme(themeBtn.dataset.theme);
-                    return;
-                }
-
                 const btn = e.target.closest('.profile-menu-btn');
                 if (!btn) return;
 
@@ -1359,6 +1352,17 @@ function applyTheme(choice) {
         btn.setAttribute('aria-pressed', btn.dataset.theme === choice ? 'true' : 'false'));
 }
 
+// Lives in the sidebar so signed-out visitors can switch too.
+function setupThemeSwitch() {
+    const host = document.getElementById('sidebarTheme');
+    if (!host) return;
+    host.innerHTML = themeSwitchHtml();
+    host.addEventListener('click', (e) => {
+        const btn = e.target.closest('.kf-theme-option');
+        if (btn) applyTheme(btn.dataset.theme);
+    });
+}
+
 function themeSwitchHtml() {
     const current = currentThemeChoice();
     return `
@@ -1369,12 +1373,12 @@ function themeSwitchHtml() {
         </div>`;
 }
 
-function updateAuthUI() {
+function updateAuthUI(showDemo = true) {
     const authSection = document.getElementById('authSection');
     const area = document.getElementById("authHeaderArea");
-    const boardHeader = document.getElementById("boardHeader");
 
     if (AppState.isAuthenticated && AppState.currentUser) {
+        hideDemoBoard();
         const safeName = escapeHtml(AppState.currentUser.fullName);
         const avatarPath = getAvatarPath(AppState.currentUser.avatar || 'def');
 
@@ -1409,12 +1413,7 @@ function updateAuthUI() {
         }, 0);
 
     } else {
-        if (boardHeader) {
-            boardHeader.classList.add('u-hidden');
-            boardHeader.style.display = 'none';
-        }
-        document.getElementById("boardHeaderTitle").textContent = "";
-        document.getElementById("board").innerHTML = "";
+        if (showDemo) showDemoBoard();
 
         area.innerHTML = `<button id="header-login-btn" class="btn btn-primary btn-login-header" type="button" title="Login" aria-label="Login">${UI_ICON.login}</button>`;
         authSection.innerHTML = `
@@ -1811,7 +1810,8 @@ async function handleLogout(refresh = true, message = '') {
 
     clearSessionState();
     deleteAppCookies();
-    updateAuthUI();
+    // The page reloads into the demo anyway; showing it here first would play it twice.
+    updateAuthUI(!refresh);
 
     if (refresh) {
         sessionRecoveryStarted = true;
@@ -1871,12 +1871,12 @@ async function loadBoards() {
 
 function renderBoardList() {
     const boardHeader = document.getElementById('boardHeader');
-    if (!AppState.isAuthenticated) {
+    if (!AppState.isAuthenticated && !AppState.isDemo) {
         if (boardHeader) {
             boardHeader.classList.add('u-hidden');
             boardHeader.style.display = 'none';
         }
-        document.getElementById('boardHeaderTitle').textContent = '';
+        setBoardHeaderTitle('');
     }
 
     const list = document.getElementById('boardList');
@@ -1893,7 +1893,13 @@ function renderBoardList() {
         </li>
     `;
 
-    if (list) list.innerHTML = myBoards.map(boardHtml).join('');
+    const demoBoardHtml = `
+        <li class="board-item active" data-demo-board="true">
+            <span class="board-item-title">${icon('square-kanban')} ${escapeHtml(DEMO_BOARD_TITLE)}</span>
+        </li>
+    `;
+
+    if (list) list.innerHTML = AppState.isDemo ? demoBoardHtml : myBoards.map(boardHtml).join('');
     if (sharedList) sharedList.innerHTML = sharedBoards.map(boardHtml).join('');
 
     [list, sharedList].forEach(container => {
@@ -1910,6 +1916,10 @@ function renderBoardList() {
                 return;
             }
             const item = e.target.closest('.board-item');
+            if (item?.dataset.demoBoard) {
+                toggleSidebar();
+                return;
+            }
             if (item) {
                 const boardId = Number(item.dataset.boardId);
                 if (boardId) selectBoard(boardId);
@@ -2067,7 +2077,7 @@ async function loadBoardData(showLoad = true, animate = false) {
                 header.classList.remove('u-hidden');
                 header.style.display = "flex";
             }
-            document.getElementById("boardHeaderTitle").textContent = currentBoard.title;
+            setBoardHeaderTitle(currentBoard.title);
         }
         if (kanflowCalendar && !document.getElementById('calendar')?.classList.contains('u-hidden')) {
             kanflowCalendar.refetchEvents();
@@ -2167,8 +2177,7 @@ async function startRenameProcess(boardId) {
         if (b) b.title = finalTitle;
 
         if (AppState.currentBoardId === boardId) {
-            const headerTitle = document.getElementById('boardHeaderTitle');
-            if (headerTitle) headerTitle.innerText = finalTitle;
+            setBoardHeaderTitle(finalTitle);
         }
 
         renderBoardList();
@@ -2627,6 +2636,89 @@ function columnFormHtml(title = '', isResultColumn = false) {
         </div>`;
 }
 
+// Anonymous visitors get a local sample board: cards can be dragged, nothing is sent to the server.
+const DEMO_BOARD_TITLE = 'NE MUTLU TÜRKÜM DİYENE';
+
+function demoColumns() {
+    const dueIn = (days) => {
+        const d = new Date();
+        d.setHours(12, 0, 0, 0);
+        d.setDate(d.getDate() + days);
+        return d.toISOString();
+    };
+    const card = (id, title, extra = {}) => ({ id, title, desc: '', assigneeId: null, ...extra });
+
+    return [
+        {
+            id: 1, title: 'To Do', isResultColumn: false, cards: [
+                card(101, 'Drag me to In Progress', { desc: 'On touch screens, press and hold a card to pick it up.' }),
+                card(102, 'Plan the next sprint', { desc: 'Cards hold rich descriptions, due dates and an assignee.', dueDate: dueIn(9), assigneeAvatar: 'Luna', assigneeName: 'Luna' }),
+                card(103, 'Write release notes')
+            ]
+        },
+        {
+            id: 2, title: 'In Progress', isResultColumn: false, cards: [
+                card(201, 'Design the landing page', { desc: 'Cards turn yellow as the due date gets close.', dueDate: dueIn(1), warningDays: 3, highlightColor: '#f59e0b', assigneeAvatar: 'Felix', assigneeName: 'Felix' }),
+                card(202, 'Fix the login bug', { desc: 'Overdue cards are marked in red.', dueDate: dueIn(-2), assigneeAvatar: 'Jasper', assigneeName: 'Jasper' })
+            ]
+        },
+        {
+            id: 3, title: 'Review', isResultColumn: false, cards: [
+                card(301, 'Review the pull request', { dueDate: dueIn(0), warningDays: 1, assigneeAvatar: 'Maya', assigneeName: 'Maya' }),
+                card(302, 'Invite your team', { desc: 'Share a board and see each other\'s changes live.' })
+            ]
+        },
+        {
+            id: 4, title: 'Done', isResultColumn: true, cards: [
+                card(401, 'Set up the project'),
+                card(402, 'Create the first board')
+            ]
+        }
+    ];
+}
+
+function showDemoBoard() {
+    if (AppState.isDemo) return;
+    AppState.isDemo = true;
+    AppState.currentColumns = demoColumns();
+    document.body.classList.add('is-demo');
+    document.getElementById('demoBanner')?.removeAttribute('hidden');
+
+    const header = document.getElementById('boardHeader');
+    if (header) {
+        header.classList.remove('u-hidden');
+        header.style.display = 'flex';
+    }
+    setBoardHeaderTitle(DEMO_BOARD_TITLE);
+    renderBoardList();
+    renderColumns(AppState.currentColumns, true);
+}
+
+function hideDemoBoard() {
+    if (!AppState.isDemo) return;
+    AppState.isDemo = false;
+    AppState.currentColumns = [];
+    document.body.classList.remove('is-demo');
+    document.getElementById('demoBanner')?.setAttribute('hidden', '');
+
+    const header = document.getElementById('boardHeader');
+    if (header) {
+        header.classList.add('u-hidden');
+        header.style.display = 'none';
+    }
+    setBoardHeaderTitle('');
+    document.getElementById('board').innerHTML = '';
+    renderBoardList();
+}
+
+function setBoardHeaderTitle(text) {
+    const el = document.getElementById('boardHeaderTitle');
+    if (!el) return;
+    el.textContent = text || '';
+    el.title = text || '';
+    el.classList.toggle('is-long', (text || '').length > 16);
+}
+
 function renderColumns(columns, animate = false) {
     const boardDiv = document.getElementById('board');
     const currentBoard = AppState.boards.find(b => b.id === AppState.currentBoardId);
@@ -2699,6 +2791,11 @@ function renderColumns(columns, animate = false) {
     });
 
     newBoardDiv.addEventListener('click', (e) => {
+        if (AppState.isDemo) {
+            if (e.target.closest('.card')) showToast('Log in to open and edit cards', 'info');
+            return;
+        }
+
         const loadMoreBtn = e.target.closest('.load-more-btn');
         if (loadMoreBtn) {
             e.stopPropagation();
@@ -3046,6 +3143,7 @@ function initSortable() {
 
                 syncColumnEmptyState(evt.from);
                 syncColumnEmptyState(evt.to);
+                if (AppState.isDemo) return;
 
                 try {
                     const res = await apiRequest('/Kanban/MoveCard', {
@@ -3719,6 +3817,7 @@ function setupModalsAndKeyboard() {
         }
 
         if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+            if (AppState.isDemo) return;
             e.preventDefault();
             focusBoardSearch();
             return;
@@ -3810,6 +3909,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     setupModalsAndKeyboard();
     ensureColumnMenuListener();
+    setupThemeSwitch();
     setupVisibilitySync();
     setupOfflineDetection();
     registerServiceWorker();
@@ -3827,8 +3927,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     if (AppState.isAuthenticated && AppState.currentUser) {
         loadBoards();
-    } else {
-        toggleSidebar();
     }
 
     handleInviteStatus(invite.status, invite.message, invite.token);
@@ -3947,6 +4045,10 @@ const QuickNoteState = {
 };
 
 function toggleQuickNote() {
+    if (AppState.isDemo) {
+        showToast('Log in to use quick notes', 'info');
+        return;
+    }
     if (!checkAuth()) return;
 
     const container = document.getElementById('quickNoteContainer');
