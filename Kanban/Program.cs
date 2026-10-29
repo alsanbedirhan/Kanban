@@ -176,6 +176,16 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+
+    options.AddPolicy("health", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 2,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 
 builder.Services.AddAntiforgery(options =>
@@ -375,6 +385,14 @@ app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapStaticAssets();
+
+app.MapGet("/health", (HttpContext context) =>
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        return Results.NoContent();
+    })
+    .AllowAnonymous()
+    .RequireRateLimiting("health");
 
 app.MapControllerRoute(
     name: "default",
