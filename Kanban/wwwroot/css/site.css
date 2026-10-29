@@ -1457,9 +1457,8 @@ body.is-demo #kanflowheader .header-actions {
 .column {
     background: var(--surface-muted);
     border-radius: 12px;
+    flex: 1 0 300px;
     min-width: 300px;
-    width: 300px;
-    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     max-height: 100%;

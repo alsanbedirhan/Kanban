@@ -19,6 +19,7 @@ namespace Kanban.Services
         private const int MaxBoardCard = 200;
         private const int MaxBoardMembersCount = 10;
         private const int MaxDailyInvitesPerUser = 20;
+        private const int MaxWarningDays = 7;
 
         private readonly JwtSettings _jwtSettings;
         private readonly IKanbanRepository _kanbanRepository;
@@ -40,9 +41,17 @@ namespace Kanban.Services
             int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
         {
             var now = _time.LocalNow();
+            if (dueDate == default)
+            {
+                return ServiceResult<BoardCard>.Fail("Due date is required.");
+            }
             if (dueDate < DateOnly.FromDateTime(now.Date))
             {
                 return ServiceResult<BoardCard>.Fail("Due date cannot be in the past.");
+            }
+            if (warningDays < 0 || warningDays > MaxWarningDays)
+            {
+                return ServiceResult<BoardCard>.Fail("Invalid reminder days.");
             }
             if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardColumn(boardId, columnId))
             {
@@ -454,6 +463,14 @@ namespace Kanban.Services
                 return ServiceResult.Fail("Assignee must be a member of this board.");
             }
 
+            if (dueDate == default)
+            {
+                return ServiceResult.Fail("Due date is required.");
+            }
+            if (warningDays < 0 || warningDays > MaxWarningDays)
+            {
+                return ServiceResult.Fail("Invalid reminder days.");
+            }
             if (startDate > dueDate)
             {
                 return ServiceResult.Fail("Start Date cannot be after the Due Date.");

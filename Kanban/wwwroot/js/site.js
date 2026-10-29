@@ -3520,6 +3520,18 @@ async function openCardModal(columnId, cardId = null) {
                 }, 100);
             }
 
+            const startInput = document.getElementById('modal-start-date');
+            const dueInput = document.getElementById('modal-date');
+            if (canEdit && startInput && dueInput) {
+                startInput.addEventListener('change', () => {
+                    const start = startInput.value;
+                    if (!start) return;
+                    const earliestDue = start > minDate ? start : minDate;
+                    dueInput.min = earliestDue;
+                    if (!dueInput.value || dueInput.value < start) dueInput.value = earliestDue;
+                });
+            }
+
             const warningCheckbox = document.getElementById('modal-reminder-check');
             const warningArea = document.getElementById('warning-area');
             if (warningCheckbox && warningArea) {
