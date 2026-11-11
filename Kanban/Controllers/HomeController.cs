@@ -27,6 +27,7 @@ namespace Kanban.Controllers
 
             if (!string.IsNullOrEmpty(token))
             {
+                Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
                 var boardTitle = await _kanbanService.GetInvitePreview(token);
                 if (boardTitle == null)
                 {

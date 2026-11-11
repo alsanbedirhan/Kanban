@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /Auth/
+Disallow: /Kanban/
+Disallow: /hubs/
+
+Sitemap: https://kanflow.online/sitemap.xml
