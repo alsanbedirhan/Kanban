@@ -1345,7 +1345,7 @@ input::-ms-reveal, input::-ms-clear {
     gap: 8px;
     flex-shrink: 0;
     margin: 0 60px 16px 60px;
-    padding: 10px 16px;
+    padding: 6px 12px 6px 6px;
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.16);
     border: 1px solid rgba(255, 255, 255, 0.25);
@@ -1361,6 +1361,45 @@ input::-ms-reveal, input::-ms-clear {
     .demo-banner .icon {
         flex-shrink: 0;
     }
+
+.demo-tabs {
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.demo-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #ffffff;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+    .demo-tab:hover {
+        background: rgba(255, 255, 255, 0.14);
+    }
+
+    /* The banner sits on the green gradient in both themes, so the active tab stays light in dark mode too. */
+    .demo-tab[aria-selected="true"] {
+        background: #ffffff;
+        color: #124d26;
+    }
+
+.demo-banner-text {
+    min-width: 0;
+    margin-left: 6px;
+}
 
 body.is-demo .board-search-wrap,
 body.is-demo .board-search-toggle,
@@ -1382,11 +1421,194 @@ body.is-demo #kanflowheader .header-actions {
     margin-left: auto;
 }
 
+/* Signed-out visitors switch between the demo board and the feature list with the tabs in the demo banner. */
+.landing {
+    display: none;
+}
+
+body.is-demo.demo-tab-features .board {
+    display: none !important;
+}
+
+body.is-demo.demo-tab-features .landing {
+    display: block;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    padding: 28px 24px;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    color: var(--text-dark);
+}
+
+.landing-title {
+    margin: 0 0 8px;
+    font-size: 1.5rem;
+    background: var(--brand-text-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.landing-lead {
+    margin: 0 0 24px;
+    color: var(--text-muted);
+    max-width: 640px;
+    line-height: 1.5;
+}
+
+.landing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+@media (max-width: 900px) {
+    .landing-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 560px) {
+    .landing-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.landing-item {
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--surface-muted);
+    border: 1px solid var(--border-color);
+}
+
+    .landing-item .icon {
+        width: 22px;
+        height: 22px;
+        color: var(--primary-text);
+    }
+
+    .landing-item h3 {
+        margin: 8px 0 4px;
+        font-size: 1rem;
+    }
+
+    .landing-item p {
+        margin: 0;
+        font-size: 0.9rem;
+        line-height: 1.45;
+        color: var(--text-muted);
+    }
+
+.landing-links {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+    .landing-links a {
+        color: var(--primary-text);
+    }
+
+html:has(body.legal-body),
+body.legal-body {
+    height: auto;
+    min-height: 100dvh;
+    overflow: auto;
+}
+
+.legal-page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 16px 48px;
+}
+
+.legal-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 12px 24px;
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    background: var(--surface);
+}
+
+    .legal-brand .brand-name {
+        font-size: 1.4rem;
+        font-weight: 700;
+        background: var(--brand-text-gradient);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+.legal-card {
+    padding: 28px 24px;
+    border-radius: 16px;
+    background: var(--surface);
+    color: var(--text-dark);
+    border: 1px solid var(--border-color);
+}
+
+    .legal-card h1 {
+        margin: 0 0 16px;
+        font-size: 1.6rem;
+    }
+
+.legal-brand-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.legal-back {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: var(--primary-text);
+    text-decoration: none;
+}
+
+    .legal-back:hover {
+        text-decoration: underline;
+    }
+
+@media (max-width: 768px) {
+    body.is-demo.demo-tab-features .landing {
+        padding: 20px 16px;
+    }
+
+    .landing-title {
+        font-size: 1.25rem;
+    }
+}
+
 @media (max-width: 768px) {
     .demo-banner {
         margin: 0 0 10px 0;
-        padding: 8px 12px;
+        padding: 4px;
         font-size: 13px;
+    }
+
+    .demo-banner-text {
+        display: none;
+    }
+
+    .demo-tabs {
+        flex: 1;
+    }
+
+    .demo-tab {
+        flex: 1;
+        justify-content: center;
     }
 }
 
@@ -2940,7 +3162,6 @@ body.is-demo #kanflowheader .header-actions {
         flex: 1;
     }
 
-/* Legal / long-text dialogs */
 /* Avatar picker */
 .avatar-grid {
     display: grid;

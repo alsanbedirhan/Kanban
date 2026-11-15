@@ -141,11 +141,57 @@
             <div class="header-actions" id="authHeaderArea"></div>
         </header>
         <div class="demo-banner" id="demoBanner" hidden>
-            <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#info"></use></svg>
-            <span>Kanflow is a free Kanban board for teams. Drag the cards to try it, then log in to create your own boards.</span>
+            <div class="demo-tabs" role="tablist" aria-label="Demo">
+                <button type="button" class="demo-tab" role="tab" id="demoTabBoard" data-action="showDemoTab" data-tab="board"
+                        aria-controls="board" aria-selected="true"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#square-kanban"></use></svg> Try the board</button>
+                <button type="button" class="demo-tab" role="tab" id="demoTabFeatures" data-action="showDemoTab" data-tab="features"
+                        aria-controls="landing" aria-selected="false"><svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#info"></use></svg> Features</button>
+            </div>
+            <span class="demo-banner-text">Kanflow is a free Kanban board for teams. Drag the cards to try it, then log in to create your own boards.</span>
         </div>
         <div class="board" id="board"></div>
         <div id="calendar" class="calendar-panel u-hidden"></div>
+        <section class="landing" id="landing" role="tabpanel" aria-labelledby="landingTitle">
+            <h2 class="landing-title" id="landingTitle">A simple Kanban board for you and your team</h2>
+            <p class="landing-lead">Kanflow helps you plan tasks, track deadlines and work together on shared boards. It is free and runs in any browser.</p>
+            <div class="landing-grid">
+                <div class="landing-item">
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#square-kanban"></use></svg>
+                    <h3>Drag and drop</h3>
+                    <p>Move cards between columns and reorder them with a drag, on desktop or on your phone.</p>
+                </div>
+                <div class="landing-item">
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#share-2"></use></svg>
+                    <h3>Work together</h3>
+                    <p>Invite teammates to a board by email and see their changes appear live.</p>
+                </div>
+                <div class="landing-item">
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#calendar-clock"></use></svg>
+                    <h3>Due dates that stand out</h3>
+                    <p>Cards show how many days are left and are marked in red once they are overdue.</p>
+                </div>
+                <div class="landing-item">
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#calendar"></use></svg>
+                    <h3>Calendar view</h3>
+                    <p>See every card with a due date on a monthly or weekly calendar.</p>
+                </div>
+                <div class="landing-item">
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#lock"></use></svg>
+                    <h3>Private cards</h3>
+                    <p>Mark a card as private so only its creator and assignee can change it.</p>
+                </div>
+                <div class="landing-item">
+                    <svg class="icon" aria-hidden="true"><use href="/lib/lucide-1.51.0/sprite.svg#notebook-pen"></use></svg>
+                    <h3>Quick notes and an app</h3>
+                    <p>Keep personal notes next to your boards and install Kanflow on your phone or desktop.</p>
+                </div>
+            </div>
+            <nav class="landing-links" aria-label="Legal">
+                <a href="/privacy">Privacy Policy</a>
+                <span aria-hidden="true">·</span>
+                <a href="/terms">User Agreement</a>
+            </nav>
+        </section>
     </main>
     <form class="modal" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
         <div class="modal-content">
@@ -207,8 +253,8 @@
                 <input type="checkbox" id="registerAgreement">
                 <label for="registerAgreement" class="agreement-label">
                     I have read and agree to the
-                    <a href="#" data-action="showPrivacyPolicy" class="text-link">Privacy Policy</a> and
-                    <a href="#" data-action="showUserAgreement" class="text-link">User Agreement</a>.
+                    <a href="/privacy" target="_blank" rel="noopener" class="text-link">Privacy Policy</a> and
+                    <a href="/terms" target="_blank" rel="noopener" class="text-link">User Agreement</a>.
                 </label>
             </div>
             <div class="turnstile-wrap">

@@ -42,6 +42,14 @@ namespace Kanban.Controllers
             return View(ServiceResult<InviteStatus>.Ok(InviteStatus.NONE));
         }
 
+        [HttpGet("/privacy")]
+        [AllowAnonymous]
+        public IActionResult Privacy() => View();
+
+        [HttpGet("/terms")]
+        [AllowAnonymous]
+        public IActionResult Terms() => View();
+
         [HttpPost]
         [AllowAnonymous]
         [EnableRateLimiting("auth")]

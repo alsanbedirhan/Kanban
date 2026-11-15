@@ -1516,39 +1516,6 @@ async function handleLogin() {
     }
 }
 
-function showPrivacyPolicy(e) {
-    if (e) e.preventDefault();
-    swalDialog({
-        title: 'Privacy Policy',
-        framed: true,
-        html: `
-            <div class="kf-prose">
-                <p><strong>Data Controller:</strong> Bedirhan Alşan (Kanflow Project)</p>
-                <p>Your personal data (Name, Surname, Email) is processed solely for the purpose of membership registration and service provision.</p>
-                <p>Your data is not shared with third parties (except for legal obligations).</p>
-            </div>
-        `,
-        confirmButtonText: 'Close'
-    });
-}
-
-function showUserAgreement(e) {
-    if (e) e.preventDefault();
-    swalDialog({
-        title: 'User Agreement',
-        framed: true,
-        html: `
-            <div class="kf-prose">
-                <p><b>1</b>. The user agrees to remain loyal to <b>Atatürk</b>'s principles and reforms.</p>
-                <p><b>2</b>. This application is developed as a portfolio project.</p>
-                <p><b>3</b>. The permanence of data uploaded to the system (cards, boards) is not guaranteed.</p>
-                <p><b>4</b>. The user agrees not to upload harmful, offensive, or illegal content to the system.</p>
-            </div>
-        `,
-        confirmButtonText: 'Close'
-    });
-}
-
 async function handleRegister() {
     const agreementCheckbox = document.getElementById('registerAgreement');
     if (!agreementCheckbox || !agreementCheckbox.checked) {
@@ -2703,6 +2670,7 @@ function showDemoBoard() {
     if (AppState.isDemo) return;
     AppState.isDemo = true;
     AppState.currentColumns = demoColumns();
+    setDemoTab('board');
     document.body.classList.add('is-demo');
     document.getElementById('demoBanner')?.removeAttribute('hidden');
 
@@ -2720,6 +2688,7 @@ function hideDemoBoard() {
     if (!AppState.isDemo) return;
     AppState.isDemo = false;
     AppState.currentColumns = [];
+    setDemoTab('board');
     document.body.classList.remove('is-demo');
     document.getElementById('demoBanner')?.setAttribute('hidden', '');
 
@@ -2731,6 +2700,19 @@ function hideDemoBoard() {
     setBoardHeaderTitle('');
     document.getElementById('board').innerHTML = '';
     renderBoardList();
+}
+
+function showDemoTab(e) {
+    setDemoTab(e?.target?.closest('[data-tab]')?.dataset.tab);
+}
+
+function setDemoTab(tab) {
+    const showFeatures = tab === 'features';
+    document.body.classList.toggle('demo-tab-features', showFeatures);
+    document.querySelectorAll('.demo-tab').forEach(btn => {
+        btn.setAttribute('aria-selected', String((btn.dataset.tab === 'features') === showFeatures));
+    });
+    if (showFeatures) document.getElementById('landing')?.scrollTo({ top: 0 });
 }
 
 function setBoardHeaderTitle(text) {
@@ -4451,8 +4433,6 @@ Object.assign(window, {
     handleForgotPassword,
     closeLoginModal,
     switchToRegister,
-    showPrivacyPolicy,
-    showUserAgreement,
     closeRegisterModal,
     switchToLogin,
     saveMyAvatar,

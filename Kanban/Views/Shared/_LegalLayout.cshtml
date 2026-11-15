@@ -1,0 +1,42 @@
+@{
+    var savedTheme = Context.Request.Cookies["kanflow-theme"];
+    string? themeAttr = savedTheme is "light" or "dark" ? savedTheme : null;
+    var title = ViewData["Title"] as string ?? "Kanflow";
+    var description = ViewData["Description"] as string ?? "";
+    var path = ViewData["CanonicalPath"] as string ?? "/";
+}
+<!DOCTYPE html>
+<html lang="en" data-theme="@themeAttr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>@title – Kanflow</title>
+    <meta name="description" content="@description" />
+    <link rel="canonical" href="https://kanflow.online@(path)" />
+    <meta name="theme-color" content="#289f51">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="legal-body">
+    <main class="legal-page">
+        <header class="legal-brand">
+            <a class="legal-brand-link" href="/">
+                <img src="/favicon.svg" alt="" class="brand-logo">
+                <span class="brand-name">kanflow</span>
+            </a>
+            <a class="legal-back" href="/">&larr; Back to Kanflow</a>
+        </header>
+        <article class="legal-card">
+            <h1>@title</h1>
+            <div class="kf-prose">
+                @RenderBody()
+            </div>
+            <nav class="landing-links" aria-label="Legal">
+                <a href="/privacy">Privacy Policy</a>
+                <span aria-hidden="true">·</span>
+                <a href="/terms">User Agreement</a>
+            </nav>
+        </article>
+    </main>
+</body>
+</html>
