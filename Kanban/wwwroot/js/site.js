@@ -642,9 +642,19 @@ function isAuthEntryEndpoint(endpoint) {
     return /^\/Auth\/(Login|VerifyWork|Register|ResetPassword)/i.test(endpoint || '');
 }
 
+// If the server (or the email service behind it) stops answering, the loading screen must not stay up forever.
+const API_TIMEOUT_MS = 45_000;
+
+function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal })
+        .finally(() => clearTimeout(timer));
+}
+
 async function refreshXsrfToken() {
     try {
-        const response = await fetch('/Home/GetToken', {
+        const response = await fetchWithTimeout('/Home/GetToken', {
             credentials: 'same-origin',
             cache: 'no-store',
             headers: {
@@ -692,7 +702,7 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
                 headers['X-Board-Connection'] = connectionId;
             }
 
-            return fetch(endpoint, {
+            return fetchWithTimeout(endpoint, {
                 ...options,
                 headers: headers,
                 credentials: 'same-origin'
@@ -755,6 +765,11 @@ async function apiRequest(endpoint, options = {}, showload = true, isPooling = f
         return await response.text();
 
     } catch (error) {
+        if (error?.name === 'AbortError') {
+            error = new Error('The server is not responding right now. Please try again in a few minutes.');
+        } else if (error instanceof TypeError) {
+            error = new Error('Could not connect. Please check your internet connection and try again.');
+        }
         const expired = error.message === 'Session expired or unauthorized.';
         if (!expired) {
             console.error('API Error:', error);
@@ -1969,6 +1984,13 @@ async function openNewBoardModal() {
     }
 }
 
+// Mirrors KanbanRepository.ValidateBoardCard: private cards belong to their creator and assignee.
+function canModifyCard(card) {
+    if (!card || !card.isPrivate) return true;
+    const userId = AppState.currentUser?.userId;
+    return !!userId && (card.createdBy === userId || card.assigneeId === userId);
+}
+
 function createCardHtml(card, colId, currentUserId, isResultColumn = false) {
     if (isResultColumn) {
         return `
@@ -1979,9 +2001,9 @@ function createCardHtml(card, colId, currentUserId, isResultColumn = false) {
         </div>`;
     }
 
-    const isLocked = card.assigneeId && card.assigneeId !== currentUserId;
-    const lockIcon = isLocked
-        ? `<span class="card-lock" title="Assigned to someone else">${icon('lock')}</span>`
+    const isLocked = !canModifyCard(card);
+    const lockIcon = card.isPrivate
+        ? `<span class="card-lock" title="${isLocked ? 'Private card: only the creator and assignee can edit' : 'Private card'}">${icon('lock')}</span>`
         : '';
 
     const avatarHtml = card.assigneeAvatar
@@ -2004,8 +2026,8 @@ function createCardHtml(card, colId, currentUserId, isResultColumn = false) {
 
             <div class="card-head-row">
                 <h3 class="card-title">${escapeHtml(cardDisplayTitle(card))}</h3>
-                <button type="button" class="card-delete-btn" data-card-id="${card.id}"
-                        title="Delete card" aria-label="Delete card">${icon('x')}</button>
+                ${isLocked ? '' : `<button type="button" class="card-delete-btn" data-card-id="${card.id}"
+                        title="Delete card" aria-label="Delete card">${icon('x')}</button>`}
             </div>
 
             ${descText ? `<p class="card-desc-truncate">${escapeHtml(descText)}</p>` : ''}
@@ -3061,11 +3083,7 @@ function initSortable() {
                         if (c.id == cardId) { card = c; break outerLoop; }
                     }
                 }
-                if (card) {
-                    const isAssigned = card.assigneeId && card.assigneeId !== 0;
-                    const isMe = AppState.currentUser && card.assigneeId === AppState.currentUser.userId;
-                    if (isAssigned && !isMe) return false;
-                }
+                if (card && !canModifyCard(card)) return false;
             },
 
             onStart: function () {
@@ -3341,7 +3359,8 @@ async function openCardModal(columnId, cardId = null) {
     }
 
     const currentUserId = AppState.currentUser.userId;
-    const canEdit = !isEditMode || !card.assigneeId || card.assigneeId === currentUserId;
+    const canEdit = !isEditMode || canModifyCard(card);
+    const canChangePrivacy = canEdit && (!isEditMode || card.createdBy === currentUserId);
 
     const disabledAttr = canEdit ? '' : 'disabled';
 
@@ -3454,6 +3473,11 @@ async function openCardModal(columnId, cardId = null) {
                         <input type="color" id="modal-calendar-color" class="kf-color" ${disabledAttr}
                                value="${escapeHtml(defaults.calendarColor)}">
                     </div>
+                </div>
+
+                <div class="kf-check-row">
+                    <input type="checkbox" id="modal-private-check" ${isEditMode && card.isPrivate ? 'checked' : ''} ${canChangePrivacy ? '' : 'disabled'}>
+                    <label for="modal-private-check">Private card: only the creator and assignee can edit</label>
                 </div>
 
                 <div class="kf-check-row">
@@ -3582,6 +3606,7 @@ async function openCardModal(columnId, cardId = null) {
             const highlightColor = hasWarning ? document.getElementById('modal-color').value : null;
 
             const startDate = document.getElementById('modal-start-date').value || null;
+            const isPrivate = document.getElementById('modal-private-check').checked;
             const calendarColor = document.getElementById('modal-calendar-color').value;
             const columnSelect = document.getElementById('modal-column');
             const targetColumnId = columnSelect ? parseInt(columnSelect.value, 10) : columnId;
@@ -3598,7 +3623,7 @@ async function openCardModal(columnId, cardId = null) {
 
             return {
                 title, description, assigneeId, dueDate, warningDays, highlightColor,
-                startDate, calendarColor, targetColumnId
+                startDate, calendarColor, targetColumnId, isPrivate
             };
         }
     });
@@ -3623,6 +3648,7 @@ async function openCardModal(columnId, cardId = null) {
             startDate,
             calendarColor: formValues.calendarColor,
             assigneeId: formValues.assigneeId ? parseInt(formValues.assigneeId) : 0,
+            isPrivate: formValues.isPrivate,
             boardId: AppState.currentBoardId
         };
 

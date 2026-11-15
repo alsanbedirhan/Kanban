@@ -12,7 +12,7 @@ Kanflow is a Kanban task board built with ASP.NET Core and vanilla JavaScript. O
 - Calendar view for cards with due dates (FullCalendar)
 - Card search (`/`) and quick new-card shortcut (`N`)
 - Optimistic drag-and-drop with rollback on failure
-- A card can be moved, edited, or deleted only by its assignee (or by its creator while unassigned)
+- Any board member can move, edit, or delete a card; a **private** card can be changed only by its creator and its assignee. Only the creator can make a card private or public again
 - Board owners manage columns, the board title, and members; other members can leave the board
 - Last opened board remembered in `localStorage`
 - Live board and notification updates over SignalR (`/hubs/board`), with polling as a fallback while disconnected

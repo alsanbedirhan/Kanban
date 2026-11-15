@@ -21,8 +21,8 @@ namespace Kanban.Repositories
         Task<string> GetBoardTitle(long boardId);
         Task<Board?> GetBoard(long boardId);
         Task<Board> AddBoard(long userId, string title);
-        Task<BoardCard> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
-        Task UpdateCard(long userId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor);
+        Task<BoardCard> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor, bool isPrivate);
+        Task UpdateCard(long userId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor, bool isPrivate);
         Task AddUserToBoard(long userId, long boardId, string roleCode);
         Task MoveCard(long userId, long cardId, long newColumnId, int newOrder);
         Task<bool> ValidateManageBoard(long userId, long boardId);

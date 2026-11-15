@@ -38,7 +38,7 @@ namespace Kanban.Services
         }
 
         public async Task<ServiceResult<BoardCard>> AddCard(long userId, long boardId, long columnId, string? title, string desc, DateOnly dueDate,
-            int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
+            int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor, bool isPrivate)
         {
             var now = _time.LocalNow();
             if (dueDate == default)
@@ -80,7 +80,7 @@ namespace Kanban.Services
             highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
             calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
 
-            return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor));
+            return ServiceResult<BoardCard>.Ok(await _kanbanRepository.AddCard(userId, boardId, columnId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor, isPrivate));
         }
 
         public async Task<ServiceResult<BoardColumn>> AddColumn(long userId, long boardId, string title, bool isResultColumn)
@@ -451,7 +451,7 @@ namespace Kanban.Services
         }
 
         public async Task<ServiceResult> UpdateCard(long userId, long boardId, long cardId, string? title, string desc, DateOnly dueDate, int warningDays, string highlightColor,
-            long assigneeId, DateOnly startDate, string calendarColor)
+            long assigneeId, DateOnly startDate, string calendarColor, bool isPrivate)
         {
             if (!await _kanbanRepository.ValidateBoardWithBoardId(userId, boardId) || !await _kanbanRepository.ValidateBoardCard(boardId, cardId, userId))
             {
@@ -486,7 +486,7 @@ namespace Kanban.Services
             highlightColor = InputSanitizer.NormalizeHexColor(highlightColor, "#ff0000");
             calendarColor = InputSanitizer.NormalizeHexColor(calendarColor, "#3b82f6");
 
-            await _kanbanRepository.UpdateCard(userId, cardId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor);
+            await _kanbanRepository.UpdateCard(userId, cardId, title, desc, dueDate, warningDays, highlightColor, assigneeId, startDate, calendarColor, isPrivate);
             return ServiceResult.Ok();
         }
 

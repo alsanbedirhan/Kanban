@@ -19,6 +19,7 @@ public partial class BoardCard
     public long? AssigneeUserId { get; set; }
     public DateOnly? StartDate { get; set; }
     public string? CalendarColor { get; set; }
+    public bool IsPrivate { get; set; }
     public virtual User? AssigneeUser { get; set; }
     public virtual ICollection<BoardCardComment> BoardCardComments { get; set; } = new List<BoardCardComment>();
     public virtual BoardColumn BoardColumn { get; set; } = null!;

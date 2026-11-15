@@ -83,6 +83,7 @@ namespace Kanban.Models
         public long AssigneeId { get; set; }
         public DateOnly StartDate { get; set; }
         public string CalendarColor { get; set; }
+        public bool IsPrivate { get; set; }
     }
     public class BoardDeleteModel
     {
@@ -177,6 +178,8 @@ namespace Kanban.Models
         public string AssigneeName { get; set; }
         public string AssigneeAvatar { get; set; }
         public long AssigneeId { get; set; }
+        public long CreatedBy { get; set; }
+        public bool IsPrivate { get; set; }
     }
     public class QuickNoteResultModel : QuickNoteInputModel
     {

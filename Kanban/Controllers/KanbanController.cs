@@ -46,7 +46,7 @@ namespace Kanban.Controllers
         public async Task<IActionResult> UpdateCard([FromBody] BoardCardUpdateModel model)
         {
             var r = await _kanbanService.UpdateCard(User.GetUserId(), model.BoardId, model.CardId, model.Title, model.Description,
-                model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId, model.StartDate, model.CalendarColor);
+                model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId, model.StartDate, model.CalendarColor, model.IsPrivate);
 
             if (!r.Success)
             {
@@ -164,7 +164,7 @@ namespace Kanban.Controllers
         public async Task<IActionResult> AddCard([FromBody] BoardCardInsertModel model)
         {
             var r = await _kanbanService.AddCard(User.GetUserId(), model.BoardId, model.ColumnId, model.Title, model.Description,
-                model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId, model.StartDate, model.CalendarColor);
+                model.DueDate, model.WarningDays, model.HighlightColor, model.AssigneeId, model.StartDate, model.CalendarColor, model.IsPrivate);
             if (!r.Success)
             {
                 return Ok(ServiceResult.Fail(r.ErrorMessage));

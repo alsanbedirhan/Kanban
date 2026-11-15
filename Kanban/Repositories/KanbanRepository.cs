@@ -113,7 +113,7 @@ namespace Kanban.Repositories
             await _notifier.UserUpdatesChanged(userId);
         }
 
-        public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
+        public async Task<BoardCard> AddCard(long userId, long boardId, long columnId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor, bool isPrivate)
         {
             var b = new BoardCard
             {
@@ -127,7 +127,8 @@ namespace Kanban.Repositories
                 HighlightColor = highlightColor,
                 AssigneeUserId = assigneeId > 0 ? assigneeId : null,
                 CalendarColor = calendarColor,
-                StartDate = startDate
+                StartDate = startDate,
+                IsPrivate = isPrivate
             };
 
             // Reading the last order and inserting must not interleave with another add/move.
@@ -304,7 +305,9 @@ namespace Kanban.Repositories
                             CalendarColor = c.CalendarColor ?? "",
                             AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
                             AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
-                            AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
+                            AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0,
+                            CreatedBy = c.CreatedBy,
+                            IsPrivate = c.IsPrivate
                         }).ToList()
                 }).ToListAsync();
         }
@@ -328,7 +331,9 @@ namespace Kanban.Repositories
                     CalendarColor = c.CalendarColor ?? "",
                     AssigneeAvatar = c.AssigneeUser != null ? c.AssigneeUser.Avatar : "",
                     AssigneeName = c.AssigneeUser != null ? c.AssigneeUser.FullName : "",
-                    AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0
+                    AssigneeId = c.AssigneeUser != null ? c.AssigneeUser.Id : 0,
+                    CreatedBy = c.CreatedBy,
+                    IsPrivate = c.IsPrivate
                 }).ToListAsync();
         }
 
@@ -502,7 +507,7 @@ namespace Kanban.Repositories
             return members;
         }
 
-        public async Task UpdateCard(long userId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor)
+        public async Task UpdateCard(long userId, long cardId, string title, string desc, DateOnly dueDate, int warningDays, string highlightColor, long assigneeId, DateOnly startDate, string calendarColor, bool isPrivate)
         {
             var cardInfo = await _context.BoardCards.Where(x => x.Id == cardId)
                 .Select(c => new { c.AssigneeUserId, c.BoardColumn.BoardId })
@@ -521,6 +526,7 @@ namespace Kanban.Repositories
                 .SetProperty(x => x.HighlightColor, highlightColor)
                 .SetProperty(x => x.StartDate, startDate)
                 .SetProperty(x => x.CalendarColor, calendarColor)
+                .SetProperty(x => x.IsPrivate, x => x.CreatedBy == userId ? isPrivate : x.IsPrivate)
             );
 
             if (newAssigneeId.HasValue
@@ -604,7 +610,7 @@ namespace Kanban.Repositories
         public async Task<bool> ValidateBoardCard(long boardId, long cardId, long userId)
         {
             return await _context.BoardCards.AnyAsync(c => c.Id == cardId && c.BoardColumn.BoardId == boardId && c.IsActive &&
-            (c.AssigneeUserId > 0 ? c.AssigneeUserId == userId : c.CreatedBy == userId));
+            (!c.IsPrivate || c.CreatedBy == userId || c.AssigneeUserId == userId));
         }
 
         public async Task<bool> ValidateBoardComment(long boardId, long commentId)

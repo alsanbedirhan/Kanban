@@ -10,6 +10,8 @@ namespace Kanban.Services
     public class EmailService : IEmailService
     {
         private static readonly SemaphoreSlim DailyCounterLock = new(1, 1);
+        private static readonly TimeSpan DefaultAttemptTimeout = TimeSpan.FromSeconds(60);
+        private static readonly TimeSpan InteractiveAttemptTimeout = TimeSpan.FromSeconds(15);
 
         private readonly EmailSettings? _emailSettings;
         private readonly EmailClient? _client;
@@ -45,8 +47,11 @@ namespace Kanban.Services
             }
         }
 
-        public async Task<bool> SendEmail(string to, string subject, string bodyHtml)
+        public async Task<bool> SendEmail(string to, string subject, string bodyHtml,
+            int maxAttempts = 3, bool waitForDelivery = true, TimeSpan? attemptTimeout = null)
         {
+            // A slow Azure endpoint must not hold the request (and the user's loading screen) open indefinitely.
+            var perAttemptTimeout = attemptTimeout ?? DefaultAttemptTimeout;
             if (_client == null || _emailSettings == null)
             {
                 _logger.LogWarning("Email could not be sent (Azure configuration is missing). Recipient: {To}", to);
@@ -68,14 +73,18 @@ namespace Kanban.Services
                 }
             );
 
-            const int maxRetries = 3;
+            var maxRetries = Math.Max(1, maxAttempts);
             for (int attempt = 0; attempt < maxRetries; attempt++)
             {
                 try
                 {
-                    var emailSendOperation = await _client.SendAsync(WaitUntil.Completed, emailMessage);
+                    using var timeout = new CancellationTokenSource(perAttemptTimeout);
 
-                    if (!emailSendOperation.HasCompleted || emailSendOperation.Value.Status != EmailSendStatus.Succeeded)
+                    var emailSendOperation = await _client.SendAsync(
+                        waitForDelivery ? WaitUntil.Completed : WaitUntil.Started, emailMessage, timeout.Token);
+
+                    if (waitForDelivery
+                        && (!emailSendOperation.HasCompleted || emailSendOperation.Value.Status != EmailSendStatus.Succeeded))
                     {
                         throw new Exception($"Azure Email API Error. Status: {emailSendOperation.Value.Status}");
                     }
@@ -187,7 +196,8 @@ namespace Kanban.Services
 </body>
 </html>";
 
-            return await SendEmail(to, "Account Verification Code", html);
+            return await SendEmail(to, "Account Verification Code", html,
+                maxAttempts: 2, waitForDelivery: false, attemptTimeout: InteractiveAttemptTimeout);
         }
 
         public async Task<bool> SendInvite(string to, string senderFullName, string senderEmail, string boardTitle, string token)
@@ -289,7 +299,8 @@ namespace Kanban.Services
 </body>
 </html>";
 
-            return await SendEmail(to, $"Invitation to collaborate on {boardTitle}", html);
+            return await SendEmail(to, $"Invitation to collaborate on {boardTitle}", html,
+                maxAttempts: 2, waitForDelivery: false, attemptTimeout: InteractiveAttemptTimeout);
         }
 
         private async Task<bool> TryReserveDailySlot()
